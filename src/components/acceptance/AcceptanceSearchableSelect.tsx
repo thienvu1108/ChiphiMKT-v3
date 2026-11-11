@@ -24,6 +24,7 @@ interface AcceptanceSearchableSelectProps {
   contentClassName?: string;
   disabled?: boolean;
   sortItems?: boolean;
+  testId?: string;
 }
 
 export const AcceptanceSearchableSelect: React.FC<AcceptanceSearchableSelectProps> = React.memo(({
@@ -37,7 +38,8 @@ export const AcceptanceSearchableSelect: React.FC<AcceptanceSearchableSelectProp
   triggerDisplay,
   contentClassName = 'max-h-72 w-[280px] sm:w-[320px]',
   disabled = false,
-  sortItems = true
+  sortItems = true,
+  testId,
 }) => {
   const [searchTerm, setSearchTerm] = useState('');
   const [isOpen, setIsOpen] = useState(false);
@@ -96,7 +98,7 @@ export const AcceptanceSearchableSelect: React.FC<AcceptanceSearchableSelectProp
       disabled={disabled}
       items={selectItemsMap}
     >
-      <SelectTrigger className={`w-full overflow-hidden flex items-center justify-between text-left ${triggerClassName}`}>
+      <SelectTrigger data-testid={testId} className={`w-full overflow-hidden flex items-center justify-between text-left ${triggerClassName}`}>
         <SelectValue placeholder={placeholder}>
           <span className="truncate block text-left flex-1 font-bold text-[var(--mh-text)]">
             {displayNode || placeholder}

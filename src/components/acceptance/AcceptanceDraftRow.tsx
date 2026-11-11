@@ -12,6 +12,8 @@ import { ManualAssigneeDialog } from './ManualAssigneeDialog';
 import { suppMonths } from '../../../lib/vnext/ntSupplement';
 import { normalizeMonth } from '../../../lib/vnext/ntReport';
 import { NT_MANUAL_LABEL, NT_MANUAL_VALUE, ntManualAllowed, isManualImplementer, implementerLabel } from '../../../lib/vnext/ntManual';
+import { acceptanceAssigneeUids, acceptanceChoicesFor, clearStaleProject, filterAssigneeOptions, ntUsesBudgetProjects, type NtBudgetLine } from '../../../lib/vnext/ntBudgetProjects';
+import type { Support } from '../../../lib/vnext/support';
 
 interface DraftRowProps {
   draftRow: any;
@@ -33,6 +35,8 @@ interface DraftRowProps {
   canManualAssignee?: boolean;
   /** Kỳ NT của tháng đang chọn đang MỞ → hiện ô «Bổ sung cho T{M-1}». */
   suppAllowed?: boolean;
+  nsLines?: NtBudgetLine[];
+  nsSupport?: Record<string, Partial<Support> | undefined>;
 }
 
 export const AcceptanceDraftRow: React.FC<DraftRowProps> = React.memo(({
@@ -53,6 +57,8 @@ export const AcceptanceDraftRow: React.FC<DraftRowProps> = React.memo(({
   onRemoveDraft,
   onOpenCalculator,
   canManualAssignee = false,
+  nsLines = [],
+  nsSupport,
 }) => {
   const [manualOpen, setManualOpen] = useState(false);
   // Local state keeps typing 100% fluid without triggering parent table re-renders
@@ -62,6 +68,13 @@ export const AcceptanceDraftRow: React.FC<DraftRowProps> = React.memo(({
   useEffect(() => {
     setLocalDraft(draftRow);
   }, [draftRow.id]);
+
+  useEffect(() => {
+    setLocalDraft((prev: any) => {
+      const next = clearStaleProject(prev, acceptanceChoicesFor(prev, nsLines, nsSupport, allUsers));
+      return next.projectId === prev.projectId && next.projectName === prev.projectName ? prev : next;
+    });
+  }, [nsLines, nsSupport, allUsers]);
 
   const handleSave = async () => {
     if (isSaving) return;
@@ -115,7 +128,31 @@ export const AcceptanceDraftRow: React.FC<DraftRowProps> = React.memo(({
     });
   }, [propTeamItems, teams]);
 
+  const budgetChoices = useMemo(() => acceptanceChoicesFor(localDraft, nsLines, nsSupport, allUsers), [localDraft.month, localDraft.teamId, localDraft.implementerUid, localDraft.implementerManual, nsLines, nsSupport, allUsers]);
+
+  // Kỳ ≥ 2026-11: Người phụ trách chỉ còn user đã đăng ký NS cho Phòng + kỳ này.
+  const assigneeUids = useMemo(() => acceptanceAssigneeUids({ month: localDraft.month, teamId: localDraft.teamId, lines: nsLines, support: nsSupport }), [localDraft.month, localDraft.teamId, nsLines, nsSupport]);
+
   const projectItems = useMemo(() => {
+    const catalog = (list: any[]) => list.map((p: any) => {
+      const code = p.projectCode || '';
+      const name = p.name || p.projectName || p.id;
+      const label = code ? `[${code}] ${name}` : name;
+      return {
+        value: p.id || p.projectId,
+        label,
+        code,
+        subLabel: p.region ? `Khu vực: ${p.region}` : '',
+        searchString: `${code} ${name} ${p.id || p.projectId}`.toLowerCase(),
+        rawItem: p.rawItem || p,
+      };
+    });
+    if (budgetChoices) {
+      return budgetChoices.map((c) => {
+        const p = (projects || []).find((pr: any) => pr.id === c.projectId);
+        return catalog([{ ...(p || {}), id: c.projectId, name: p?.name || c.projectName || c.projectId, rawItem: p }])[0];
+      });
+    }
     if (propProjectItems) return propProjectItems;
     return (projects || []).map((p: any) => {
       const code = p.projectCode || '';
@@ -130,7 +167,7 @@ export const AcceptanceDraftRow: React.FC<DraftRowProps> = React.memo(({
         rawItem: p
       };
     });
-  }, [propProjectItems, projects]);
+  }, [propProjectItems, projects, budgetChoices]);
 
   const handleUpdateLocalField = (fieldKey: string, val: any) => {
     setLocalDraft((prev: any) => ({
@@ -187,7 +224,7 @@ export const AcceptanceDraftRow: React.FC<DraftRowProps> = React.memo(({
       <TableCell className="p-1 min-w-[110px] sticky left-0 z-10 bg-amber-50 shadow-[2px_0_6px_rgba(15,23,42,0.08)] md:left-16">
         <Select
           value={formatAcceptanceMonth(localDraft.month) || (monthsList && monthsList.length > 0 ? monthsList[0] : '')}
-          onValueChange={(val) => handleUpdateLocalField('month', val)}
+          onValueChange={(val) => setLocalDraft((prev: any) => clearStaleProject({ ...prev, month: val }, acceptanceChoicesFor({ ...prev, month: val }, nsLines, nsSupport, allUsers)))}
         >
           <SelectTrigger className="h-7 text-[11px] font-bold border-[var(--mh-border)] bg-[var(--mh-surface)] rounded">
             <SelectValue placeholder="Chọn kỳ / tháng" />
@@ -252,15 +289,21 @@ export const AcceptanceDraftRow: React.FC<DraftRowProps> = React.memo(({
                 gdkd = tmName.substring(code.length).trim();
               }
               const resolvedBlk = resolveBlockForTeam(tm, blocks, teams, findTeam);
-              handleUpdateLocalFields({
+              handleUpdateLocalFields(clearStaleProject({
                 teamId: tm.id,
                 teamCode: tm.teamCode || tm.name || '',
                 teamName: tm.name || tm.teamCode || '',
                 blockId: resolvedBlk.blockId || tm.blockId || '',
                 blockCode: resolvedBlk.blockCode || tm.blockCode || '',
                 blockName: resolvedBlk.blockName || tm.blockName || '',
-                gdkdName: gdkd
-              });
+                gdkdName: gdkd,
+                implementerUid: '',
+                implementerName: '',
+                implementerManual: false,
+                projectId: '',
+                projectName: '',
+                projectCode: '',
+              }, []));
             } else {
               handleUpdateLocalField('teamId', teamId);
             }
@@ -287,28 +330,34 @@ export const AcceptanceDraftRow: React.FC<DraftRowProps> = React.memo(({
             value={localDraft.implementerUid || ''}
             items={[
               ...(canManualAssignee && ntManualAllowed(localDraft.month) ? [{ value: NT_MANUAL_VALUE, label: NT_MANUAL_LABEL, searchString: 'khac tu nhap' }] : []),
-              ...implementerOptions(allUsers, currentDraftTeamId, (teams||[]).find((t:any)=>t.id===currentDraftTeamId)).map((o)=>({ value:o.uid, label:o.name+(o.role==='gdkd'?' · GĐKD':''), searchString:o.name })),
+              ...filterAssigneeOptions(
+                implementerOptions(allUsers, currentDraftTeamId, (teams||[]).find((t:any)=>t.id===currentDraftTeamId)),
+                assigneeUids,
+                allUsers,
+              ).map((o)=>({ value:o.uid, label:o.name+(o.role==='gdkd'?' · GĐKD':''), searchString:o.name })),
             ]}
-            placeholder={isManualImplementer(localDraft) ? implementerLabel(localDraft) : 'Chọn người phụ trách'}
+            placeholder={isManualImplementer(localDraft) ? implementerLabel(localDraft) : (assigneeUids && assigneeUids.size === 0 ? 'Chưa có đăng ký NS kỳ này' : 'Chọn người phụ trách')}
             searchPlaceholder="Tìm tên (không cần dấu)…"
             triggerClassName="h-7 text-[11px] font-semibold border-[var(--mh-border)] bg-[var(--mh-surface)] rounded"
             onValueChange={(uid)=>{
               if (uid === NT_MANUAL_VALUE) { setManualOpen(true); return; }
               const u=allUsers.find((x:any)=>(x.uid||x.id)===uid);
-              handleUpdateLocalFields({ implementerUid: uid, implementerName: u?.fullName||u?.displayName||u?.email||uid, implementerManual: false });
+              setLocalDraft((prev: any) => clearStaleProject({ ...prev, implementerUid: uid, implementerName: u?.fullName||u?.displayName||u?.email||uid, implementerManual: false }, acceptanceChoicesFor({ ...prev, implementerUid: uid, implementerManual: false }, nsLines, nsSupport, allUsers)));
             }}
           />
         )}
         <ManualAssigneeDialog open={manualOpen} initial={isManualImplementer(localDraft) ? localDraft.implementerName : ''} onClose={() => setManualOpen(false)}
-          onSave={(n) => { handleUpdateLocalFields({ implementerUid: '', implementerName: n, implementerManual: true }); }} />
+          onSave={(n) => { setLocalDraft((prev: any) => clearStaleProject({ ...prev, implementerUid: '', implementerName: n, implementerManual: true }, acceptanceChoicesFor({ ...prev, implementerUid: '', implementerManual: true }, nsLines, nsSupport, allUsers))); }} />
       </TableCell>
 
       {/* Col E: DỰ ÁN */}
       <TableCell className="p-1 min-w-[190px]">
         <AcceptanceSearchableSelect
-          value={currentDraftProjId || ''}
+          testId="nt-project-select"
+          value={budgetChoices && !budgetChoices.some((c) => c.projectId === currentDraftProjId) ? '' : (currentDraftProjId || '')}
           items={projectItems}
-          placeholder="Chọn Dự án"
+          disabled={!!budgetChoices && (!localDraft.implementerUid || projectItems.length === 0)}
+          placeholder={!currentDraftTeamId ? 'Chọn Phòng trước' : !localDraft.implementerUid ? 'Chọn người phụ trách trước' : budgetChoices && projectItems.length === 0 ? 'Chưa có đăng ký NS kỳ này' : 'Chọn Dự án'}
           searchPlaceholder="Tìm kiếm dự án, mã dự án..."
           triggerDisplay={
             selectedProj ? (

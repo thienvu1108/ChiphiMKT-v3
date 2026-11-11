@@ -20,6 +20,8 @@ import { AcceptanceSearchableSelect, SearchableItem } from './AcceptanceSearchab
 import { ManualAssigneeDialog } from './ManualAssigneeDialog';
 import { suppBadge, suppStatus, SUPP_STATUS_LABEL } from '../../../lib/vnext/ntSupplement';
 import { NT_MANUAL_LABEL, NT_MANUAL_VALUE, ntManualAllowed, isManualImplementer, implementerLabel } from '../../../lib/vnext/ntManual';
+import { acceptanceAssigneeUids, acceptanceChoicesFor, clearStaleProject, filterAssigneeOptions, type NtBudgetLine } from '../../../lib/vnext/ntBudgetProjects';
+import type { Support } from '../../../lib/vnext/support';
 
 interface RowProps {
   item: any;
@@ -60,6 +62,8 @@ interface RowProps {
   onAssignTeam?: (item: any, teamId: string) => Promise<void> | void;
   /** Tự nhập Người phụ trách (chỉ Tháng 10/2026; undefined = không có quyền). */
   onAssignManual?: (item: any, name: string) => Promise<void> | void;
+  nsLines?: NtBudgetLine[];
+  nsSupport?: Record<string, Partial<Support> | undefined>;
 }
 
 export const AcceptanceRow: React.FC<RowProps> = React.memo(({
@@ -99,6 +103,8 @@ export const AcceptanceRow: React.FC<RowProps> = React.memo(({
   onAssignImplementer,
   onAssignTeam,
   onAssignManual,
+  nsLines = [],
+  nsSupport,
 }) => {
   const [manualOpen, setManualOpen] = useState<'' | 'view' | 'edit'>('');
   // Local edit state to ensure typing inside edit row is 100% instant and doesn't re-render parent/other rows
@@ -180,7 +186,35 @@ export const AcceptanceRow: React.FC<RowProps> = React.memo(({
     });
   }, [propTeamItems, teams]);
 
+  const budgetChoices = useMemo(() => acceptanceChoicesFor(localEditState || item, nsLines, nsSupport, allUsers), [localEditState?.month, localEditState?.teamId, localEditState?.implementerUid, localEditState?.implementerManual, item.month, item.teamId, item.implementerUid, nsLines, nsSupport, allUsers]);
+
+  // Kỳ ≥ 2026-11: lọc Người phụ trách theo đăng ký NS của Phòng + kỳ.
+  const assigneeUids = useMemo(() => acceptanceAssigneeUids({ month: localEditState?.month ?? item.month, teamId: localEditState?.teamId ?? item.teamId, lines: nsLines, support: nsSupport }), [localEditState?.month, localEditState?.teamId, item.month, item.teamId, nsLines, nsSupport]);
+
+  useEffect(() => {
+    if (!isEditing) return;
+    setLocalEditState((prev: any) => {
+      if (!prev) return prev;
+      const next = clearStaleProject(prev, acceptanceChoicesFor(prev, nsLines, nsSupport, allUsers));
+      return next.projectId === prev.projectId ? prev : next;
+    });
+  }, [isEditing, nsLines, nsSupport, allUsers]);
+
   const projectItems = useMemo(() => {
+    if (budgetChoices) {
+      return budgetChoices.map((c) => {
+        const p = (projects || []).find((pr: any) => pr.id === c.projectId);
+        const name = p?.name || c.projectName || c.projectId;
+        const code = p?.projectCode || '';
+        return {
+          value: c.projectId,
+          label: code ? `[${code}] ${name}` : name,
+          code,
+          searchString: `${code} ${name} ${c.projectId}`.toLowerCase(),
+          rawItem: p,
+        };
+      });
+    }
     if (propProjectItems) return propProjectItems;
     return (projects || []).map((p: any) => {
       const code = p.projectCode || '';
@@ -195,7 +229,7 @@ export const AcceptanceRow: React.FC<RowProps> = React.memo(({
         rawItem: p
       };
     });
-  }, [propProjectItems, projects]);
+  }, [propProjectItems, projects, budgetChoices]);
 
   const handleUpdateEditField = (fieldKey: string, val: any) => {
     setLocalEditState((prev: any) => ({
@@ -266,7 +300,7 @@ export const AcceptanceRow: React.FC<RowProps> = React.memo(({
         <TableCell className="p-1 min-w-[110px] sticky left-0 z-10 bg-[#E8EEF8] shadow-[inset_-1px_0_0_#C9D4E5,2px_0_6px_rgba(15,23,42,0.08)] md:left-16">
           <Select
             value={localEditState.month || (monthsList && monthsList.length > 0 ? monthsList[0] : '')}
-            onValueChange={(val) => handleUpdateEditField('month', val)}
+            onValueChange={(val) => setLocalEditState((prev: any) => clearStaleProject({ ...prev, month: val }, acceptanceChoicesFor({ ...prev, month: val }, nsLines, nsSupport, allUsers)))}
           >
             <SelectTrigger className="h-7 text-[11px] font-bold border-indigo-200 bg-[var(--mh-surface)] rounded">
               <SelectValue />
@@ -325,7 +359,13 @@ export const AcceptanceRow: React.FC<RowProps> = React.memo(({
                   blockId: resolvedBlk.blockId || tm.blockId || '',
                   blockCode: resolvedBlk.blockCode || tm.blockCode || '',
                   blockName: resolvedBlk.blockName || tm.blockName || '',
-                  gdkdName: (!localEditState.gdkdName || localEditState.gdkdName === '-') ? gdkd : localEditState.gdkdName
+                  gdkdName: (!localEditState.gdkdName || localEditState.gdkdName === '-') ? gdkd : localEditState.gdkdName,
+                  implementerUid: '',
+                  implementerName: '',
+                  implementerManual: false,
+                  projectId: '',
+                  projectName: '',
+                  projectCode: '',
                 });
               } else {
                 handleUpdateEditField('teamId', teamId);
@@ -352,7 +392,7 @@ export const AcceptanceRow: React.FC<RowProps> = React.memo(({
               value={localEditState.implementerUid || ''}
               items={(() => {
                 const tm = currentEditTeam || (teams || []).find((t: any) => t.id === currentEditTeamId);
-                const opts = implementerOptions(allUsers, currentEditTeamId, tm);
+                const opts = filterAssigneeOptions(implementerOptions(allUsers, currentEditTeamId, tm), assigneeUids, allUsers);
                 const items = opts.map((o) => ({ value: o.uid, label: o.name + (o.role === 'gdkd' ? ' · GĐKD' : ''), searchString: o.name }));
                 if (localEditState.implementerUid && !items.some((i) => i.value === localEditState.implementerUid)) {
                   items.unshift({ value: localEditState.implementerUid, label: (localEditState.implementerName || localEditState.implementerUid) + ' (ngoài Phòng)', searchString: localEditState.implementerName || '' });
@@ -362,7 +402,7 @@ export const AcceptanceRow: React.FC<RowProps> = React.memo(({
                 if (onAssignManual && ntManualAllowed(localEditState.month || item.month)) items.unshift({ value: NT_MANUAL_VALUE, label: NT_MANUAL_LABEL, searchString: 'khac tu nhap' });
                 return items;
               })()}
-              placeholder={implementerOptions(allUsers, currentEditTeamId).length ? 'Chọn người phụ trách' : 'Phòng chưa có thành viên'}
+              placeholder={assigneeUids && assigneeUids.size === 0 ? 'Chưa có đăng ký NS kỳ này' : (filterAssigneeOptions(implementerOptions(allUsers, currentEditTeamId), assigneeUids, allUsers).length ? 'Chọn người phụ trách' : 'Phòng chưa có thành viên')}
               searchPlaceholder="Tìm tên (không cần dấu)…"
               triggerClassName="h-7 text-[11px] font-bold border-indigo-200 bg-[var(--mh-surface)] rounded"
               contentClassName="max-h-72 w-[280px] sm:w-[320px] z-[2000]"
@@ -370,11 +410,12 @@ export const AcceptanceRow: React.FC<RowProps> = React.memo(({
                 if (uid === NT_MANUAL_VALUE) { setManualOpen('edit'); return; }
                 const name = raw?.label?.replace(/ · GĐKD$/, '') || (allUsers.find((u: any) => (u.uid || u.id) === uid)?.fullName) || uid;
                 const u = allUsers.find((x: any) => (x.uid || x.id) === uid);
-                handleUpdateEditFields({
+                setLocalEditState((prev: any) => clearStaleProject({
+                  ...prev,
                   implementerUid: uid,
                   implementerName: (u?.fullName || u?.displayName || u?.email || name || '').replace(/ · GĐKD$/, ''),
                   implementerManual: false,
-                });
+                }, acceptanceChoicesFor({ ...prev, implementerUid: uid, implementerManual: false }, nsLines, nsSupport, allUsers)));
               }}
             />
           )}
@@ -385,9 +426,11 @@ export const AcceptanceRow: React.FC<RowProps> = React.memo(({
         {/* Col E: DỰ ÁN */}
         <TableCell className="p-1 min-w-[180px]">
           <AcceptanceSearchableSelect
-            value={currentEditProjId}
+            testId="nt-project-select"
+            value={budgetChoices && !budgetChoices.some((c) => c.projectId === currentEditProjId) ? '' : currentEditProjId}
             items={projectItems}
-            placeholder="Chọn Dự án"
+            disabled={!!budgetChoices && (!(localEditState?.implementerUid) || projectItems.length === 0)}
+            placeholder={!currentEditTeamId ? 'Chọn Phòng trước' : !(localEditState?.implementerUid) ? 'Chọn người phụ trách trước' : budgetChoices && projectItems.length === 0 ? 'Chưa có đăng ký NS kỳ này' : 'Chọn Dự án'}
             searchPlaceholder="Tìm kiếm dự án, mã dự án..."
             triggerClassName="h-7 text-[11px] font-bold border-indigo-200 bg-[var(--mh-surface)] rounded"
             triggerDisplay={
@@ -661,7 +704,8 @@ export const AcceptanceRow: React.FC<RowProps> = React.memo(({
               value={item.implementerUid || ''}
               items={(() => {
                 const tid = matchedTeam?.id || item.teamId;
-                const opts = implementerOptions(allUsers, tid, matchedTeam);
+                const assignUids = acceptanceAssigneeUids({ month: item.month, teamId: tid, lines: nsLines, support: nsSupport });
+                const opts = filterAssigneeOptions(implementerOptions(allUsers, tid, matchedTeam), assignUids, allUsers);
                 const items: any[] = opts.map((o) => ({ value: o.uid, label: o.name + (o.role === 'gdkd' ? ' · GĐKD' : ''), searchString: o.name }));
                 if (item.implementerUid && !items.some((i) => i.value === item.implementerUid)) items.unshift({ value: item.implementerUid, label: `${item.implementerName || item.implementerUid} (ngoài Phòng)`, searchString: item.implementerName || '' });
                 if (onAssignManual && ntManualAllowed(item.month)) items.unshift({ value: NT_MANUAL_VALUE, label: NT_MANUAL_LABEL, searchString: 'khac tu nhap' });
