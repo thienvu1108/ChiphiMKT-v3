@@ -1,0 +1,106 @@
+/**
+ * ChiphiMKT — Tailwind CSS v4 theme bridge
+ * Import sau tokens.css trong src/index.css
+ *
+ * @import "./tokens.css";
+ * @import "./tailwind.theme.css";  (hoặc gộp nội dung này vào @theme inline hiện có)
+ */
+
+@theme inline {
+  --font-sans: 'Be Vietnam Pro', 'Geist Variable', system-ui, sans-serif;
+  --font-heading: 'Be Vietnam Pro', 'Geist Variable', system-ui, sans-serif;
+  --font-mono: 'Geist Variable', ui-monospace, SFMono-Regular, Menlo, monospace;
+
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --color-card: var(--card);
+  --color-card-foreground: var(--card-foreground);
+  --color-popover: var(--popover);
+  --color-popover-foreground: var(--popover-foreground);
+  --color-primary: var(--primary);
+  --color-primary-foreground: var(--primary-foreground);
+  --color-secondary: var(--secondary);
+  --color-secondary-foreground: var(--secondary-foreground);
+  --color-muted: var(--muted);
+  --color-muted-foreground: var(--muted-foreground);
+  --color-accent: var(--accent);
+  --color-accent-foreground: var(--accent-foreground);
+  --color-destructive: var(--destructive);
+  --color-border: var(--border);
+  --color-input: var(--input);
+  --color-ring: var(--ring);
+  --color-chart-1: var(--chart-1);
+  --color-chart-2: var(--chart-2);
+  --color-chart-3: var(--chart-3);
+  --color-chart-4: var(--chart-4);
+  --color-chart-5: var(--chart-5);
+
+  --color-mh-navy: var(--mh-navy);
+  --color-mh-navy-hover: var(--mh-navy-hover);
+  --color-mh-navy-50: var(--mh-navy-50);
+  --color-mh-navy-100: var(--mh-navy-100);
+  --color-mh-accent: var(--mh-accent);
+  --color-mh-bg: var(--mh-bg);
+  --color-mh-surface: var(--mh-surface);
+  --color-mh-border: var(--mh-border);
+  --color-mh-text: var(--mh-text);
+  --color-mh-text-2: var(--mh-text-2);
+  --color-mh-text-3: var(--mh-text-3);
+  --color-mh-ok: var(--mh-ok);
+  --color-mh-ok-soft: var(--mh-ok-soft);
+  --color-mh-warn: var(--mh-warn);
+  --color-mh-warn-soft: var(--mh-warn-soft);
+  --color-mh-err: var(--mh-err);
+  --color-mh-err-soft: var(--mh-err-soft);
+  --color-mh-info: var(--mh-info);
+  --color-mh-info-soft: var(--mh-info-soft);
+  --color-mh-pending: var(--mh-pending);
+  --color-mh-pending-soft: var(--mh-pending-soft);
+  --color-mh-draft: var(--mh-draft);
+  --color-mh-draft-soft: var(--mh-draft-soft);
+  --color-mh-sticky: var(--mh-sticky);
+
+  --color-sidebar: var(--sidebar);
+  --color-sidebar-foreground: var(--sidebar-foreground);
+  --color-sidebar-primary: var(--sidebar-primary);
+  --color-sidebar-primary-foreground: var(--sidebar-primary-foreground);
+  --color-sidebar-accent: var(--sidebar-accent);
+  --color-sidebar-accent-foreground: var(--sidebar-accent-foreground);
+  --color-sidebar-border: var(--sidebar-border);
+  --color-sidebar-ring: var(--sidebar-ring);
+
+  --radius-sm: calc(var(--radius) * 0.6);
+  --radius-md: calc(var(--radius) * 0.8);
+  --radius-lg: var(--radius);
+  --radius-xl: calc(var(--radius) * 1.4);
+  --radius-2xl: calc(var(--radius) * 1.8);
+
+  --shadow-xs: var(--shadow-xs);
+  --shadow-sm: var(--shadow-sm);
+  --shadow-md: var(--shadow-md);
+  --shadow-lg: var(--shadow-lg);
+
+  --spacing-mh-1: var(--space-1);
+  --spacing-mh-2: var(--space-2);
+  --spacing-mh-3: var(--space-3);
+  --spacing-mh-4: var(--space-4);
+  --spacing-mh-5: var(--space-5);
+  --spacing-mh-6: var(--space-6);
+  --spacing-mh-8: var(--space-8);
+}
+
+/* Utility helpers khớp design system */
+@layer utilities {
+  .mh-num { font-variant-numeric: tabular-nums; letter-spacing: -0.01em; }
+  .mh-focus-ring { outline: none; box-shadow: var(--shadow-focus); }
+  .mh-card {
+    background: var(--card);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    box-shadow: var(--shadow-xs);
+  }
+  .mh-sticky-col {
+    background: var(--mh-sticky) !important;
+    box-shadow: inset -1px 0 var(--mh-border-strong);
+  }
+}

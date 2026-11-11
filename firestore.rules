@@ -1,0 +1,2071 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    
+    // ===============================================================
+    // Global Safety Net
+    // ===============================================================
+    match /{document=**} {
+      allow read, write: if false;
+    }
+
+    // ===============================================================
+    // Primitive Definition Helpers
+    // ===============================================================
+    function isSignedIn() {
+      return request.auth != null && request.auth.uid != null;
+    }
+
+    // Canonical app owner (email). Requires verified email. Keep in sync with src/lib/appOwner.ts.
+    function isAppOwner() {
+      return isSignedIn()
+        && request.auth.token.get('email', '').lower() == "thienvu1108@gmail.com"
+        && request.auth.token.get('email_verified', false) == true;
+    }
+
+    function isEmailVerified() {
+      return isSignedIn() && (
+        request.auth.token.get('email_verified', false) == true
+        || isAppOwner()
+      );
+    }
+
+    function hasUserData() {
+      return exists(/databases/$(database)/documents/users/$(request.auth.uid));
+    }
+
+    function getUserData() {
+      return get(/databases/$(database)/documents/users/$(request.auth.uid)).data;
+    }
+
+    function isAdmin() {
+      return isSignedIn() && (
+        isAppOwner() ||
+        (hasUserData() && getUserData().get('role', 'user') in ['admin', 'super_admin', 'Admin', 'Super Admin'])
+      );
+    }
+
+    function isSuperAdmin() {
+      return isSignedIn() && (
+        isAppOwner() ||
+        (hasUserData() && getUserData().get('role', 'user') in ['super_admin', 'Super Admin'])
+      );
+    }
+
+    function isMod() {
+      return isSignedIn() && hasUserData() && getUserData().get('role', 'user') in ['mod', 'moderator', 'Mod', 'Moderator', 'điều phối', 'ĐIỀU PHỐI'];
+    }
+
+    function isAccountant() {
+      return isSignedIn() && hasUserData() && getUserData().get('role', 'user') in ['accountant', 'Accountant', 'Kế toán', 'KẾ TOÁN'];
+    }
+
+    function isGDDA() {
+      return isSignedIn() && hasUserData() && getUserData().get('role', 'user') in ['gdda', 'GDDA'];
+    }
+
+    function isGDKhoi() {
+      return isSignedIn() && hasUserData() && (
+        getUserData().get('role', 'user') in [
+          'gd_khoi', 'gdkhoi', 'gđ khối', 'GĐ Khối', 'Giám đốc Khối', 'giám đốc khối', 
+          'Giám đốc liên khối', 'giám đốc liên khối', 'gdk', 
+          'tro_ly_khoi', 'tro ly khoi', 'trợ lý khối', 'tro_ly_gdkhoi', 'assistant_block', 
+          'assistant', 'trợ lý', 'tro ly'
+        ] ||
+        (getUserData().get('assignedBlock', '') != '')
+      );
+    }
+
+    function isGDKD() {
+      return isSignedIn() && hasUserData() && getUserData().get('role', 'user') in ['gdkd', 'GĐKD', 'Giám đốc Kinh doanh', 'giám đốc kinh doanh'];
+    }
+
+    // ---------------------------------------------------------------
+    // Khối scope. users.assignedBlock usually stores the block CODE (e.g. 'E19'),
+    // sometimes the block doc id; users.assignedBlocks mixes codes and doc ids.
+    // block_budgets.blockId / teams.blockId store the blocks/{docId}.
+    // blocks/{id}.directorUid / assistantUids also grant membership.
+    // ---------------------------------------------------------------
+    function myBlockKeys() {
+      let u = getUserData();
+      return [u.get('assignedBlock', '')].concat(u.get('assignedBlocks', []));
+    }
+
+    function blockDocPath(blockId) {
+      return /databases/$(database)/documents/blocks/$(blockId);
+    }
+
+    // Caller is named on blocks/{blockId}: directorUid / assistantUids (current UID or migrated UID cũ).
+    function namedInBlock(blockId) {
+      let b = get(blockDocPath(blockId)).data;
+      let old = getUserData().get('migratedFromUid', '_NO_OLD_');
+      return b.get('directorUid', '_NONE_') == request.auth.uid
+          || request.auth.uid in b.get('assistantUids', [])
+          || b.get('directorUid', '_NONE_') == old
+          || old in b.get('assistantUids', []);
+    }
+    // Duyệt qua đăng ký mới (vnOnboarding do người duyệt ghi, user không tự sửa được) làm GĐ Khối / Trợ lý của đúng Khối này.
+    function approvedKhoiManagerOf(blockId) {
+      let o = getUserData().get('vnOnboarding', {});
+      return o.get('status', '') == 'approved' && o.get('blockId', '') == blockId
+          && o.get('position', '') in ['gd_khoi', 'tro_ly_khoi'];
+    }
+    function blockHasDirector(blockId) {
+      return get(blockDocPath(blockId)).data.get('directorUid', '') is string
+          && get(blockDocPath(blockId)).data.get('directorUid', '') != '';
+    }
+
+    // True when blocks/{blockId} belongs to the caller's Khối.
+    // Khối đã có GĐ (directorUid): chỉ người có tên ở directorUid / assistantUids.
+    // hoặc người được duyệt GĐ Khối / Trợ lý đúng Khối này qua đăng ký mới (vnOnboarding).
+    // users.assignedBlock(s) cũ chỉ còn hiệu lực với Khối CHƯA có GĐ.
+    function blockInMyKhoi(blockId) {
+      return isSignedIn() && hasUserData()
+        && blockId is string && blockId != '' && blockId != 'unassigned' && isValidId(blockId)
+        && exists(blockDocPath(blockId))
+        && (
+          namedInBlock(blockId)
+          || approvedKhoiManagerOf(blockId)
+          || (!blockHasDirector(blockId) && (
+                blockId in myBlockKeys()
+                || get(blockDocPath(blockId)).data.get('blockCode', '_NONE_') in myBlockKeys()
+             ))
+        );
+    }
+
+    function blockCodeOf(blockId) {
+      return get(blockDocPath(blockId)).data.get('blockCode', '');
+    }
+
+    // Team (teams/{teamId}) belongs to the caller's Khối (by team.blockId or team.blockCode).
+    function isMatchBlockPrefix(teamId) {
+      return teamId is string && teamId != '' && isValidId(teamId) &&
+             exists(/databases/$(database)/documents/teams/$(teamId)) &&
+             (
+               blockInMyKhoi(get(/databases/$(database)/documents/teams/$(teamId)).data.get('blockId', '')) ||
+               // Phòng cũ chưa có blockId: so blockCode (chỉ khi Phòng không gắn blockId)
+               (get(/databases/$(database)/documents/teams/$(teamId)).data.get('blockId', '') == ''
+                 && get(/databases/$(database)/documents/teams/$(teamId)).data.get('blockCode', '_NONE_') in myBlockKeys())
+             );
+    }
+
+    // GĐKD (role gdkd): dữ liệu cũ (users/budgets/costs/acceptances/efficiencyReports) chỉ trong Phòng mình quản lý
+    // (teamId của bản ghi ∈ Phòng có GĐKD = mình) + dữ liệu cá nhân của mình. Không xem danh sách toàn hệ thống.
+    function gdkdTeamDocOk(d) {
+      return d.get('teamId', '') is string && d.get('teamId', '') != '' && isGdkdOfTeam(d.get('teamId', ''));
+    }
+
+    function isInternalStaff() {
+      return isAdmin() || isMod() || isAccountant() || isGDDA() || isGDKhoi() || isGDKD();
+    }
+
+
+    // ===============================================================
+    // Settings role-permissions enforcement (mirrors UI hasPermission)
+    // ===============================================================
+    function rawUserRole() {
+      return hasUserData() ? getUserData().get('role', 'user') : 'user';
+    }
+
+    function normalizedUserRole() {
+      let r = rawUserRole().lower();
+      // Nhanh: vai trò đã chuẩn (hầu hết dữ liệu live) → 1 phép so khớp, tránh chuỗi ternary dài (giới hạn 1000 biểu thức).
+      return r in ['super_admin', 'admin', 'mod', 'accountant', 'gdda', 'gd_khoi', 'tro_ly_khoi', 'truong_ban_kd', 'pho_ban_kd', 'gdkd', 'assistant', 'user'] ? r
+        : r == 'super_admin' || r == 'super admin' ? 'super_admin'
+        : (r == 'admin' || r == 'quản trị' || r == 'quan tri') ? 'admin'
+        : (r == 'mod' || r == 'moderator' || r == 'điều phối' || r == 'dieu phoi') ? 'mod'
+        : (r == 'accountant' || r == 'kế toán' || r == 'ke toan') ? 'accountant'
+        : (r == 'gdda' || r == 'gđda' || r == 'giám đốc dự án') ? 'gdda'
+        : (r == 'gd_khoi' || r == 'gdkhoi' || r == 'gđ khối' || r == 'giám đốc khối'
+            || r == 'giám đốc liên khối' || r == 'gdk' || r == 'gd khối' || r == 'trưởng khối') ? 'gd_khoi'
+        : (r == 'tro_ly_khoi' || r == 'trợ lý khối' || r == 'tro ly khoi' || r == 'tro_ly_gdkhoi'
+            || r == 'assistant_block') ? 'tro_ly_khoi'
+        : (r == 'truong_ban_kd' || r == 'trưởng ban kd' || r == 'truong ban kd' || r == 'trưởng ban'
+            || r == 'truong_ban' || r == 'trưởng ban kinh doanh') ? 'truong_ban_kd'
+        : (r == 'pho_ban_kd' || r == 'phó ban kd' || r == 'pho ban kd' || r == 'phó ban'
+            || r == 'pho_ban' || r == 'phó ban kinh doanh') ? 'pho_ban_kd'
+        : (r == 'gdkd' || r == 'gđkd' || r == 'giám đốc kinh doanh' || r == 'gđ kinh doanh') ? 'gdkd'
+        : (r == 'assistant' || r == 'trợ lý' || r == 'tro ly') ? 'assistant'
+        : (r == 'user' || r == 'người dùng' || r == 'nguoi dung') ? 'user'
+        : 'user';
+    }
+
+    // GĐ Khối / Trợ lý Khối by normalized role only (an assignedBlock alone is NOT a role).
+    function isKhoiManagerRole() {
+      return hasUserData() && normalizedUserRole() in ['gd_khoi', 'tro_ly_khoi'];
+    }
+
+    function isGDKDRole() {
+      return hasUserData() && normalizedUserRole() == 'gdkd';
+    }
+
+    // Trưởng ban KD (explicit role). Scope = the ban_kd doc(s) they lead
+    // (leaderUid / legacy leaderId == uid, or leaderEmail == verified token email).
+    function isTruongBanKdRole() {
+      return hasUserData() && normalizedUserRole() == 'truong_ban_kd';
+    }
+
+    function isPhoBanKdRole() {
+      return hasUserData() && normalizedUserRole() == 'pho_ban_kd';
+    }
+
+    // Role locked to Quản lý Ban KD (Trưởng hoặc Phó) — list ban_kd scoped via truongBanLeadsBan (includes deputyUids).
+    function isBanKdLockedRole() {
+      return isTruongBanKdRole() || isPhoBanKdRole();
+    }
+
+    // Fallback when rolePermissions/{role} does not exist (mirrors DEFAULT perms in UI src/lib/rolePermissions.ts).
+    function defaultPermsFor(role) {
+      return {
+        'super_admin': ['home.view', 'history.view', 'actual.view', 'actual.create', 'actual.edit', 'register.view', 'register.create', 'register.edit', 'admin.costs.view', 'admin.costs.create', 'admin.costs.edit', 'admin.budgets.view', 'admin.budgets.create', 'admin.budgets.edit', 'mkt_efficiency.view', 'report_nt.view', 'block.view', 'block_budget.view', 'block_budget.create', 'block_budget.edit', 'block_budget.delete', 'reciprocal_budget.view', 'reciprocal_budget.create', 'reciprocal_budget.edit', 'reciprocal_budget.delete', 'admin.users.view', 'admin.permissions.edit'],
+        'admin': ['home.view', 'history.view', 'actual.view', 'actual.create', 'actual.edit', 'register.view', 'register.create', 'register.edit', 'admin.costs.view', 'admin.costs.create', 'admin.costs.edit', 'admin.budgets.view', 'admin.budgets.create', 'admin.budgets.edit', 'mkt_efficiency.view', 'report_nt.view', 'block.view', 'block_budget.view', 'block_budget.create', 'block_budget.edit', 'block_budget.delete', 'reciprocal_budget.view', 'reciprocal_budget.create', 'reciprocal_budget.edit', 'reciprocal_budget.delete', 'admin.users.view', 'admin.permissions.edit'],
+        'mod': ['home.view', 'history.view', 'actual.view', 'actual.create', 'actual.edit', 'register.view', 'register.create', 'register.edit', 'admin.costs.view', 'admin.budgets.view', 'mkt_efficiency.view', 'report_nt.view', 'block.view', 'block_budget.view', 'reciprocal_budget.view'],
+        'accountant': ['home.view', 'history.view', 'actual.view', 'register.view', 'admin.costs.view', 'admin.costs.edit', 'admin.budgets.view', 'admin.budgets.edit', 'mkt_efficiency.view', 'report_nt.view', 'block.view', 'block_budget.view', 'reciprocal_budget.view', 'reciprocal_budget.create', 'reciprocal_budget.edit', 'reciprocal_budget.delete'],
+        'gdda': ['home.view', 'history.view', 'actual.view', 'actual.create', 'actual.edit', 'register.view', 'register.create', 'register.edit', 'mkt_efficiency.view', 'report_nt.view', 'block.view', 'block_budget.view', 'reciprocal_budget.view'],
+        'gd_khoi': ['home.view', 'history.view', 'actual.view', 'register.view', 'mkt_efficiency.view', 'report_nt.view', 'block.view', 'block_budget.view', 'block_budget.create', 'block_budget.edit', 'block_budget.delete', 'reciprocal_budget.view', 'reciprocal_budget.create', 'reciprocal_budget.edit', 'reciprocal_budget.delete'],
+        'tro_ly_khoi': ['home.view', 'history.view', 'actual.view', 'register.view', 'mkt_efficiency.view', 'report_nt.view', 'block.view', 'block_budget.view', 'block_budget.create', 'block_budget.edit', 'block_budget.delete', 'reciprocal_budget.view', 'reciprocal_budget.create', 'reciprocal_budget.edit', 'reciprocal_budget.delete'],
+        'truong_ban_kd': ['report_nt.view', 'block_budget.view'],
+        'pho_ban_kd': ['report_nt.view', 'block_budget.view'],
+        'gdkd': ['home.view', 'history.view', 'actual.view', 'register.view', 'mkt_efficiency.view', 'report_nt.view'],
+        'assistant': ['home.view', 'history.view', 'actual.view', 'actual.create', 'actual.edit', 'register.view', 'register.create', 'register.edit', 'mkt_efficiency.view', 'report_nt.view', 'block.view', 'block_budget.view', 'block_budget.create', 'block_budget.edit', 'block_budget.delete', 'reciprocal_budget.view', 'reciprocal_budget.create', 'reciprocal_budget.edit', 'reciprocal_budget.delete']
+      }.get(role, []);
+    }
+
+    function defaultHasPerm(role, key) {
+      return key in defaultPermsFor(role);
+    }
+
+    // One rolePermissions read + one role normalization per call (keeps rules under the
+    // 1000-expression evaluation limit). Mirrors UI hasPermission for rule-enforced keys.
+    function hasAnyPerm(keys) {
+      let role = normalizedUserRole();
+      let path = /databases/$(database)/documents/rolePermissions/$(role);
+      return isAppOwner() || (hasUserData() && (
+        role == 'super_admin'
+        || (exists(path)
+              ? get(path).data.get('permissions', []).hasAny(keys)
+              : defaultPermsFor(role).hasAny(keys))
+      ));
+    }
+
+    function hasPerm(key) {
+      return hasAnyPerm([key]);
+    }
+
+    function canReadCosts() {
+      return hasAnyPerm(['actual.view', 'admin.costs.view', 'home.view', 'history.view']);
+    }
+    function canWriteCostCreate() {
+      return hasAnyPerm(['actual.create', 'admin.costs.create']);
+    }
+    function canWriteCostUpdate() {
+      return hasAnyPerm(['actual.edit', 'admin.costs.edit']);
+    }
+
+    function canReadBudgets() {
+      return hasAnyPerm(['register.view', 'admin.budgets.view', 'home.view', 'history.view']);
+    }
+    function canWriteBudgetCreate() {
+      return hasAnyPerm(['register.create', 'admin.budgets.create']);
+    }
+    function canWriteBudgetUpdate() {
+      return hasAnyPerm(['register.edit', 'admin.budgets.edit']);
+    }
+
+    function canReadBlockBudgets() {
+      return hasAnyPerm(['block_budget.view', 'block.view']);
+    }
+    function canReadReciprocal() {
+      return hasPerm('reciprocal_budget.view');
+    }
+    function canReadEfficiency() {
+      return hasAnyPerm(['mkt_efficiency.view', 'home.view']);
+    }
+    function canReadAcceptances() {
+      return hasAnyPerm(['report_nt.view', 'home.view']);
+    }
+    function canReadDocProcessing() {
+      return !isGDKD() && (isInternalStaff() || hasPerm('report_nt.view'));
+    }
+
+
+    function isOwner(userId) {
+      return isSignedIn() && request.auth.uid == userId;
+    }
+
+    // Return the incoming document fields map
+    function incoming() {
+      return request.resource.data;
+    }
+
+    // Return the existing document fields map
+    function existing() {
+      return resource.data;
+    }
+
+    function isValidId(id) {
+      return id is string && id.size() <= 128 && id.matches('^[a-zA-Z0-9_\\-]+$');
+    }
+
+    // Return true if the given string is a valid email
+    function isValidEmail(email) {
+      return email is string && email.size() <= 200 && email.matches('^[^@]+@[^@]+\\.[^@]+$');
+    }
+
+    // ===============================================================
+    // Internal / Connection Test
+    // ===============================================================
+    match /_internal_/connection_test {
+      allow read: if isSignedIn();
+    }
+
+    match /test/connection {
+      allow read: if isSignedIn();
+    }
+
+    // ===============================================================
+    // Users
+    // ===============================================================
+    function isValidUser(data) {
+      return (!('email' in data) || data.email == null || data.email == '' || isValidEmail(data.email)) &&
+             (!('role' in data) || data.role is string);
+    }
+
+    // Fields a self-service first-sign-in / profile edit may touch.
+    // Scope/privilege fields are admin-managed only.
+    function selfProfileKeys() {
+      return ['uid', 'email', 'displayName', 'fullName', 'teamName', 'teamId', 'teamCode',
+              'role', 'assignedProjects', 'createdAt', 'updatedAt'];
+    }
+
+    function selfCreateRoleOk(data) {
+      return isAppOwner()
+        ? data.get('role', '') == 'super_admin'
+        : data.get('role', '') == 'user';
+    }
+
+    function vnApprovalOnlyKeys() {
+      return ['teamId', 'teamName', 'teamCode', 'vnOnboarding'];
+    }
+
+    function selfCreateScopeOk(data) {
+      return data.get('assignedProjects', []) == []
+        && data.get('teamId', '') == '' && data.get('teamName', '') == '' && data.get('teamCode', '') == ''
+        && !('vnOnboarding' in data)
+        && !('assignedBlock' in data)
+        && !('assignedBlocks' in data)
+        && !('assignedBanKd' in data)
+        && !('assignedBanKds' in data)
+        && !('block' in data)
+        && !('blockName' in data);
+    }
+
+    function selfCreateKeysOk(data) {
+      return data.keys().hasOnly(selfProfileKeys());
+    }
+
+    // Role / scope / permission fields: only admin & super_admin may change them.
+    function privilegedUserKeys() {
+      return ['role', 'assignedProjects', 'assignedBlock', 'assignedBlocks',
+              'assignedBanKd', 'assignedBanKds', 'block', 'blockName',
+              'blockIds', 'blocks', 'managedBlocks', 'banKdIds', 'managedBanKds',
+              'assignedTeam', 'assignedTeams', 'managedTeams', 'teamScopes', 'teamIds',
+              'permissions', 'customPermissions', 'extraPermissions', 'scopes',
+              'isAdmin', 'isSuperAdmin', 'migratedFromUid', 'emailIndexId',
+              'linkedToUid', 'linkedAt'];
+    }
+
+    function userChangedKeys() {
+      return incoming().diff(existing()).affectedKeys();
+    }
+
+    function selfUpdateDoesNotEscalate() {
+      return userChangedKeys().hasAny(privilegedUserKeys()) == false
+        // Đổi họ tên đã có: chỉ qua selfRenameOk (có nhật ký). Lần đầu điền tên (fullName rỗng) vẫn được.
+        && (!userChangedKeys().hasAny(['fullName', 'displayName', 'nameUpdatedBy', 'nameUpdatedAt', 'nameAuditId']) || existing().get('fullName', '') == '')
+        // v-next: Phòng / chức vụ chỉ được ghi khi được duyệt (accessRequests)
+        && userChangedKeys().hasAny(vnApprovalOnlyKeys()) == false
+        && (!userChangedKeys().hasAny(['uid']) || incoming().get('uid', '') == request.auth.uid)
+        && (!userChangedKeys().hasAny(['email'])
+            || incoming().get('email', '') == null || incoming().get('email', '') == ''
+            || (incoming().get('email', '') is string && incoming().get('email', '').lower() == tokenEmailLower()));
+    }
+
+    // Đổi tên người khác chỉ qua renameUserOk (có phạm vi + nhật ký). Đổi Phòng người khác: chỉ Admin.
+
+    // ---- v-next: Đổi tên người dùng (vn.users.rename) ----
+    function renameShapeOk() {
+      let n = incoming().get('fullName', '');
+      return userChangedKeys().hasOnly(['fullName', 'displayName', 'updatedAt', 'nameUpdatedBy', 'nameUpdatedAt', 'nameAuditId'])
+        && userChangedKeys().hasAny(['fullName'])
+        && n is string && n.size() > 0 && n.size() <= 120
+        && incoming().get('displayName', '') == n
+        && incoming().get('nameUpdatedBy', '') == request.auth.uid;
+    }
+    // Nhật ký bắt buộc trong cùng batch: auditLogs/{nameAuditId} mới, RENAME_USER, ai đổi / đổi ai / tên cũ → mới.
+    function renameAuditOk(userId) {
+      let aid = incoming().get('nameAuditId', '');
+      let ap = /databases/$(database)/documents/auditLogs/$(aid);
+      return aid is string && aid != '' && isValidId(aid) && !exists(ap) && existsAfter(ap)
+        && getAfter(ap).data.get('action', '') == 'RENAME_USER'
+        && getAfter(ap).data.get('userId', '') == request.auth.uid
+        && getAfter(ap).data.get('targetUid', '') == userId
+        && getAfter(ap).data.get('oldName', '_X_') == existing().get('fullName', '')
+        && getAfter(ap).data.get('newName', '_X_') == incoming().get('fullName', '');
+    }
+    function renameScopeOk(role) {
+      let tr = existing().get('role', 'user');
+      let tid = existing().get('teamId', '');
+      return !targetIsAdminLevel() && (
+        role in ['mod', 'accountant']
+        || (role in ['gd_khoi', 'tro_ly_khoi'] && !(tr in ['mod', 'accountant'])
+            && renameKhoiOk(tid, existing().get('vnOnboarding', {}).get('blockId', '')))
+        || (role in ['gdkd', 'gd_khoi'] && tr in ['user', 'gdkd', ''] && renameGdkdTeamOk(role, tid))
+      );
+    }
+    // Khối của target (Phòng.blockId, hoặc vnOnboarding.blockId) thuộc Khối mình — bản gọn của isMatchBlockPrefix/blockInMyKhoi (giới hạn 1000 biểu thức).
+    function renameKhoiOk(tid, obBlock) {
+      let tp = /databases/$(database)/documents/teams/$(tid);
+      let tb = (tid is string && tid != '' && isValidId(tid) && exists(tp)) ? get(tp).data.get('blockId', '') : '';
+      return renameInBlock(tb) || (obBlock != tb && renameInBlock(obBlock));
+    }
+    function renameInBlock(bid) {
+      return bid is string && bid != '' && bid != 'unassigned' && isValidId(bid) && exists(blockDocPath(bid))
+        && (namedInBlock(bid) || approvedKhoiManagerOf(bid)
+            || (!blockHasDirector(bid) && (bid in myBlockKeys() || get(blockDocPath(bid)).data.get('blockCode', '_NONE_') in myBlockKeys())));
+    }
+    // Rẻ hơn isGdkdOfTeam (giới hạn 1000 biểu thức): GĐKD đã duyệt cùng Phòng / có trong gdkdUids; GĐ Khối kiêm GĐKD.
+    function renameGdkdTeamOk(role, tid) {
+      let me = getUserData();
+      let old = me.get('migratedFromUid', '_NO_OLD_');
+      let tp = /databases/$(database)/documents/teams/$(tid);
+      return tid is string && tid != '' && isValidId(tid) && exists(tp) && (
+        (request.auth.uid in get(tp).data.get('gdkdUids', []) || old in get(tp).data.get('gdkdUids', []))
+        || (role == 'gdkd' && me.get('vnOnboarding', {}).get('status', '') == 'approved' && me.get('teamId', '') == tid)
+      );
+    }
+    // Tự đổi tên mình: chỉ trường tên + nhật ký RENAME_USER (targetUid == chính mình).
+    function selfRenameOk(userId) {
+      return isOwner(userId) && renameShapeOk() && renameAuditOk(userId)
+        && (vnPermAs(renameRole(), 'vn.users.rename_self')
+            // Được yêu cầu cập nhật tên → luôn được tự đổi tên (kể cả khi quyền rename_self bị tắt).
+            || exists(/databases/$(database)/documents/nameUpdateRequests/$(userId)));
+    }
+    // Vai trò đã chuẩn (dữ liệu thường lưu đúng khoá) → bỏ qua chuỗi so sánh dài của normalizedUserRole (giới hạn 1000 biểu thức).
+    function renameRole() {
+      let r = rawUserRole();
+      return r in ['super_admin', 'admin', 'mod', 'accountant', 'gdda', 'gd_khoi', 'tro_ly_khoi', 'truong_ban_kd', 'pho_ban_kd', 'gdkd', 'assistant', 'user'] ? r : normalizedUserRole();
+    }
+    function renameUserOk(userId) {
+      let role = renameRole();
+      return renameShapeOk() && renameAuditOk(userId) && vnPermAs(role, 'vn.users.rename') && renameScopeOk(role);
+    }
+
+    function targetIsPlainUser() {
+      return existing().get('role', 'user') is string
+        && existing().get('role', 'user').lower() in ['user', 'người dùng', 'nguoi dung', ''];
+    }
+
+    function targetIsAdminLevel() {
+      return existing().get('role', 'user') is string
+        && existing().get('role', 'user').lower() in ['admin', 'super_admin', 'super admin', 'quản trị', 'quan tri'];
+    }
+
+    // Sửa Phòng (teamId/teamName/teamCode) của user có sẵn: CHỈ Admin / Super Admin (nhánh isAdmin của users update).
+    // Mod / Kế toán / GĐ Khối / Trợ lý Khối / GĐKD không chuyển / bỏ Phòng — chỉ còn ghi Phòng khi duyệt đăng ký lần đầu (vnApprovalUserWriteOk).
+
+    // Email → source profile index. Built during CRM migration copy (oldUid = users/{oldUid})
+    // and maintained by admin provisioning (oldUid = the pre-provisioned users/{docId}).
+    // One entry per email = at most one pre-provisioned profile per email.
+    // Clients read own email only.
+    match /usersByEmail/{emailId} {
+      allow read: if (isSignedIn() && resource.data.get('email', '') == request.auth.token.get('email', '').lower())
+                  || isAdmin() || isSuperAdmin();
+      // First sign-in with no entry yet: the verified owner of the email may claim it for
+      // their own uid (create only; re-pointing an existing entry is admin-only).
+      allow create: if isEmailVerified()
+                    && emailId == emailIndexKey(tokenEmailLower())
+                    && incoming().keys().hasOnly(['email', 'oldUid', 'claimedAt'])
+                    && incoming().get('email', '') == tokenEmailLower()
+                    && incoming().get('oldUid', '') == request.auth.uid;
+      allow write: if isAdmin() || isSuperAdmin();
+    }
+
+    // Cross-project UID remap (first login on v2): the new users/{newUid} may copy the
+    // migrated users/{oldUid} profile only when usersByEmail maps the caller's verified
+    // email to that oldUid, and role/scope fields are copied verbatim (no escalation).
+    function tokenEmailLower() {
+      return request.auth.token.get('email', '').lower();
+    }
+
+    function migratedSourceOk(data) {
+      let idxPath = /databases/$(database)/documents/usersByEmail/$(data.get('emailIndexId', '_none_'));
+      let oldUid = data.get('migratedFromUid', '');
+      let oldPath = /databases/$(database)/documents/users/$(oldUid);
+      return isEmailVerified()
+        && oldUid is string && oldUid != '' && oldUid != request.auth.uid
+        && data.get('uid', '') == request.auth.uid
+        && data.get('email', '').lower() == tokenEmailLower()
+        && exists(idxPath)
+        && get(idxPath).data.get('email', '') == tokenEmailLower()
+        && get(idxPath).data.get('oldUid', '') == oldUid
+        && exists(oldPath)
+        && (
+             (data.get('role', 'user') == get(oldPath).data.get('role', 'user')
+               && data.get('assignedBlock', '') == get(oldPath).data.get('assignedBlock', '')
+               && data.get('assignedBlocks', []) == get(oldPath).data.get('assignedBlocks', []))
+             // Hồ sơ cũ GĐ Khối / Trợ lý không có tên trong Khối nào: chép xuống 'user' + needsRoleReview, bỏ Khối.
+             || (get(oldPath).data.get('role', '') in ['gd_khoi', 'tro_ly_khoi']
+               && data.get('role', '') == 'user' && data.get('needsRoleReview', false) == true
+               && data.get('assignedBlock', '') == '' && data.get('assignedBlocks', []) == [])
+           )
+        && data.get('assignedProjects', []) == get(oldPath).data.get('assignedProjects', [])
+        && data.get('assignedBanKd', '') == get(oldPath).data.get('assignedBanKd', '')
+        && data.get('assignedBanKds', []) == get(oldPath).data.get('assignedBanKds', [])
+        && data.get('block', '') == get(oldPath).data.get('block', '')
+        && data.get('blockName', '') == get(oldPath).data.get('blockName', '')
+        // Every other privileged key must equal the source (no smuggled permissions / scopes).
+        && !data.diff(get(oldPath).data).affectedKeys().hasAny(extraPrivilegedUserKeys())
+        // A source already linked to another account cannot be claimed again.
+        && get(oldPath).data.get('linkedToUid', request.auth.uid) == request.auth.uid;
+    }
+
+    // privilegedUserKeys() minus the ones migratedSourceOk compares with defaults above.
+    function extraPrivilegedUserKeys() {
+      return ['blockIds', 'blocks', 'managedBlocks', 'banKdIds', 'managedBanKds',
+              'assignedTeam', 'assignedTeams', 'managedTeams', 'teamScopes', 'teamIds',
+              'permissions', 'customPermissions', 'extraPermissions', 'scopes',
+              'isAdmin', 'isSuperAdmin'];
+    }
+
+    // usersByEmail doc id for an email: lower, '@' -> '_at_', '.' -> '_dot_' (src/lib/userIdentity.ts).
+    function emailIndexKey(email) {
+      return email.lower().replace('@', '_at_').replace('[.]', '_dot_');
+    }
+
+    // After linking users/{uid} from a source doc, the signed-in owner of that email may mark
+    // the SOURCE doc as linked (linkedToUid/linkedAt only) so the Users list stops showing it
+    // as a separate account. No role/scope change; source must be what users/{uid} links from.
+    function linkSourceMarkOk(userId) {
+      let mine = /databases/$(database)/documents/users/$(request.auth.uid);
+      return isEmailVerified()
+        && userId != request.auth.uid
+        && existing().get('email', '') is string
+        && existing().get('email', '').lower() == tokenEmailLower()
+        && existing().get('linkedToUid', request.auth.uid) == request.auth.uid
+        && userChangedKeys().hasOnly(['linkedToUid', 'linkedAt'])
+        && incoming().get('linkedToUid', '') == request.auth.uid
+        && existsAfter(mine)
+        && getAfter(mine).data.get('migratedFromUid', '') == userId;
+    }
+
+    // Admin creating SOMEONE ELSE's profile (pre-provisioning by email): must claim the email in
+    // usersByEmail in the same batch, and the email must not already belong to another live
+    // profile. Prevents a second users doc for an existing email.
+    function adminProvisionOk(userId) {
+      let email = incoming().get('email', '');
+      let idx = /databases/$(database)/documents/usersByEmail/$(emailIndexKey(email));
+      return email is string && email != '' && isValidEmail(email)
+        && existsAfter(idx)
+        && getAfter(idx).data.get('email', '') == email.lower()
+        && getAfter(idx).data.get('oldUid', '') == userId
+        && (!exists(idx)
+            || get(idx).data.get('oldUid', '') == userId
+            || !exists(/databases/$(database)/documents/users/$(get(idx).data.get('oldUid', '_none_'))));
+    }
+
+    match /users/{userId} {
+      // Owner email match lets a migrated user read their own pre-migration profile
+      // (users/{oldUid}) on first login, before users/{newUid} exists.
+      allow read: if isOwner(userId)
+                  || (isGDKD() ? gdkdTeamDocOk(resource.data)
+                      // Trưởng ban KD picks members of their Ban (read only; no user writes).
+                      : (isTruongBanKdRole() || isInternalStaff() || isSuperAdmin() || isAccountant()))
+                  || (isEmailVerified() && resource.data.get('email', '') is string
+                      && resource.data.get('email', '').lower() == tokenEmailLower());
+
+      // Self-create: only role 'user' (or verified app owner as super_admin),
+      // empty assignedProjects, no other scope fields — matches first-sign-in setDoc.
+      // Only admin/super_admin may create someone else's profile (or set role/scope).
+      allow create: if isSignedIn() && (
+                       (isOwner(userId) && isValidUser(incoming())
+                         && selfCreateRoleOk(incoming())
+                         && selfCreateScopeOk(incoming())
+                         && selfCreateKeysOk(incoming())) ||
+                       (isOwner(userId) && isValidUser(incoming()) && migratedSourceOk(incoming())) ||
+                       ((isAdmin() || isSuperAdmin()) && isOwner(userId) && isValidUser(incoming())) ||
+                       ((isAdmin() || isSuperAdmin()) && !isOwner(userId) && isValidUser(incoming())
+                         && adminProvisionOk(userId))
+                     );
+
+      // Self-update: may edit name/team profile fields only; cannot touch role/scope.
+      // Người khác (không phải Admin): chỉ đổi tên (renameUserOk), ghi khi duyệt đăng ký, đánh dấu liên kết.
+      // Phòng (teamId/teamName/teamCode), role, phạm vi: chỉ Admin / Super Admin.
+      allow update: if isSignedIn() && (
+        (isOwner(userId) && selfUpdateDoesNotEscalate()) ||
+        (isOwner(userId) && selfRenameOk(userId)) ||
+        // Đổi tên (chỉ trường tên + nhật ký) — đặt trước các nhánh nặng để không vượt giới hạn 1000 biểu thức.
+        (!isOwner(userId) && renameUserOk(userId)) ||
+        // One-time repair: a stub profile created before the remap worked may adopt the migrated profile.
+        (isOwner(userId) && existing().get('migratedFromUid', '') == ''
+          && isValidUser(incoming()) && migratedSourceOk(incoming())) ||
+        ((isAdmin() || isSuperAdmin()) && isValidUser(incoming())) ||
+        (!isOwner(userId) && vnApprovalUserWriteOk(userId)) ||
+        (!isOwner(userId) && linkSourceMarkOk(userId))
+      );
+
+      allow delete: if isAdmin() || isSuperAdmin() ||
+                       (isAccountant() && !targetIsAdminLevel() && !isOwner(userId));
+    }
+
+    // ===============================================================
+    // Projects
+    // ===============================================================
+    function isValidProject(data) {
+      return data.name is string && data.name.size() > 0 && data.name.size() <= 200;
+    }
+
+    // CĐT (Chủ đầu tư): mọi người đọc; Admin hoặc quyền vn.cdt.manage ghi; chỉ xoá mềm (deleted).
+    match /investors/{cdtId} {
+      allow read: if isSignedIn();
+      allow create, update: if (isAdmin() || vnPerm('vn.cdt.manage'))
+        && incoming().name is string && incoming().name.size() > 0 && incoming().name.size() <= 200
+        && incoming().keys().hasOnly(['name', 'contact', 'note', 'deleted', 'createdAt', 'createdBy', 'updatedAt', 'updatedBy']);
+      allow delete: if false;
+    }
+
+    // Trưởng Ban (ban_kd.leaderUid/leaderId/leaderEmail) hoặc Phó Ban (ban_kd.deputyUids) của Ban banId.
+    function isBanMgrOf(banId) {
+      let path = /databases/$(database)/documents/ban_kd/$(banId);
+      let d = get(path).data;
+      return isSignedIn() && banId is string && banId != '' && exists(path) && (
+        d.get('leaderUid', '_NONE_') == request.auth.uid
+        || d.get('leaderId', '_NONE_') == request.auth.uid
+        || request.auth.uid in d.get('deputyUids', [])
+        || (isEmailVerified() && d.get('leaderEmail', '_NONE_') == tokenEmailLower()));
+    }
+    function supportPctOk(d) {
+      return !('supportPct' in d) || d.supportPct == null
+        || ((d.supportPct is int || d.supportPct is float) && d.supportPct >= 0 && d.supportPct <= 100);
+    }
+    // Chính sách hỗ trợ MKT của dự án: Base (= supportPct), Bonus %, Điều kiện Bonus, Chi phí Max / 1 Sale, CĐT hỗ trợ.
+    function supportPolicyOk(d) {
+      return supportPctOk(d)
+        && (!('supportBonusPct' in d) || d.supportBonusPct == null || ((d.supportBonusPct is int || d.supportBonusPct is float) && d.supportBonusPct >= 0 && d.supportBonusPct <= 100))
+        && (!('supportBonusCond' in d) || (d.supportBonusCond is string && d.supportBonusCond.size() <= 1000))
+        && (!('supportBonusTiers' in d) || (d.supportBonusTiers is list && d.supportBonusTiers.size() <= 10))
+        && (!('supportMaxPerSale' in d) || d.supportMaxPerSale == null || ((d.supportMaxPerSale is int || d.supportMaxPerSale is float) && d.supportMaxPerSale >= 0 && d.supportMaxPerSale < 100000000000))
+        && (!('supportCdt' in d) || d.supportCdt in ['', 'dai_ly', 'khong']);
+    }
+    function banProjectKeys() {
+      return ['name', 'projectCode', 'region', 'type', 'banKdName', 'supportPct', 'supportPctHistory', 'supportBonusPct', 'supportBonusCond', 'supportBonusTiers', 'supportMaxPerSale', 'supportCdt', 'cdtId', 'cdtName',
+              'updatedAt', 'updatedBy'];
+    }
+
+    match /projects/{projectId} {
+      allow get: if isSignedIn();
+      allow list: if isSignedIn();
+      // Trưởng Ban / Phó Ban: thêm, sửa, gỡ dự án khỏi Ban mình (không xoá dự án, không đặt deleted). Chỉ Admin/Kế toán xoá.
+      // Chỉ Admin / Kế toán tạo dự án mới. Trưởng/Phó Ban chỉ GẮN dự án có sẵn (chưa thuộc Ban nào) vào Ban mình.
+      allow create: if isAdmin() || isAccountant();
+      allow update: if isAdmin() || isAccountant() || (
+        // Gắn vào Ban: dự án đang không thuộc Ban nào (banKdId và banKdName rỗng) → 1 dự án chỉ thuộc đúng 1 Ban.
+        existing().get('banKdId', '') == '' && existing().get('banKdName', '') == ''
+        && incoming().diff(existing()).affectedKeys().hasOnly(['banKdId', 'banKdName', 'updatedAt', 'updatedBy'])
+        && incoming().get('banKdId', '') is string && isBanMgrOf(incoming().get('banKdId', ''))
+        && incoming().get('banKdName', '') == get(/databases/$(database)/documents/ban_kd/$(incoming().get('banKdId', ''))).data.get('name', '')
+      ) || (
+        isValidProject(incoming()) && supportPolicyOk(incoming())
+        && incoming().diff(existing()).affectedKeys().hasOnly(banProjectKeys().concat(['banKdId']))
+        // «Gỡ khỏi Ban»: chỉ được bỏ liên kết Ban (banKdId → ''), không chuyển sang Ban khác.
+        && incoming().get('banKdId', '') in [existing().get('banKdId', ''), '']
+        && isBanMgrOf(existing().get('banKdId', ''))
+        // Sửa chính sách hỗ trợ (Base/Bonus/Điều kiện/Max/CĐT) cần quyền «Sửa Tỉ lệ hỗ trợ MKT».
+        && (!incoming().diff(existing()).affectedKeys().hasAny(['supportPct', 'supportPctHistory', 'supportBonusPct', 'supportBonusCond', 'supportBonusTiers', 'supportMaxPerSale', 'supportCdt'])
+            || vnPerm('vn.bankd.support_pct_edit')));
+      allow delete: if isAdmin() || isAccountant();
+    }
+
+    // ===============================================================
+    // Ban Kinh Doanh (Ban KD)
+    // ===============================================================
+    match /ban_kd/{banKdId} {
+      // Role "Trưởng ban KD" may read ONLY the Ban(s) they lead (the client lists them with
+      // leaderUid / leaderId / leaderEmail == own queries). Everyone else: any signed-in user.
+      allow get, list: if isSignedIn() && (!isBanKdLockedRole() || truongBanLeadsBan(resource.data));
+      allow create: if isAdmin() || isAccountant() || isSuperAdmin();
+      allow update: if isAdmin() || isAccountant() || isSuperAdmin() ||
+                       (isBanKdLeaderOfExisting()
+                         && incoming().diff(existing()).affectedKeys().hasOnly(['memberUids', 'updatedAt'])
+                         && incoming().get('memberUids', []) is list) ||
+                       // Trưởng Ban / Phó Ban: Tỉ lệ hỗ trợ MKT mặc định của Ban (+ lịch sử).
+                       ((isBanKdLeaderOfExisting() || request.auth.uid in existing().get('deputyUids', []))
+                         && incoming().diff(existing()).affectedKeys().hasOnly(['supportPct', 'supportMaxPerSale', 'supportPctHistory', 'updatedAt'])
+                         && supportPctOk(incoming())
+                         && (!('supportMaxPerSale' in incoming()) || incoming().supportMaxPerSale == null || ((incoming().supportMaxPerSale is int || incoming().supportMaxPerSale is float) && incoming().supportMaxPerSale >= 0 && incoming().supportMaxPerSale < 100000000000)) && vnPerm('vn.bankd.support_pct_edit'));
+      allow delete: if isAdmin() || isAccountant() || isSuperAdmin();
+    }
+
+    // Banner ekip Ban KD (ảnh webp nén, data URL). Xem: mọi người đăng nhập. Sửa: admin/kế toán/SA hoặc Trưởng/Phó Ban đó.
+    match /ban_kd_banner/{banId} {
+      allow get, list: if isSignedIn();
+      allow create, update: if (isAdmin() || isAccountant() || isSuperAdmin() || isBanMgrOf(banId))
+        && incoming().keys().hasOnly(['dataUrl', 'banName', 'updatedAt', 'updatedBy'])
+        && incoming().dataUrl is string && incoming().dataUrl.matches('^data:image/(webp|jpeg|png);base64,.*')
+        && incoming().dataUrl.size() <= 900000;
+      allow delete: if isAdmin() || isSuperAdmin();
+    }
+
+    // Same leader test on a ban_kd document (used for reads by role truong_ban_kd).
+    function truongBanLeadsBan(data) {
+      return data.get('leaderUid', '_NONE_') == request.auth.uid
+        || data.get('leaderId', '_NONE_') == request.auth.uid
+        || request.auth.uid in data.get('deputyUids', [])
+        || (isEmailVerified() && data.get('leaderEmail', '_NONE_') == tokenEmailLower());
+    }
+
+    // Trưởng ban: ban_kd.leaderUid / leaderId == uid, or leaderEmail == verified token email.
+    // Applies to role truong_ban_kd AND legacy leaders with role 'user': memberUids only.
+    function isBanKdLeaderOfExisting() {
+      return isSignedIn() && (
+        existing().get('leaderUid', '_NONE_') == request.auth.uid ||
+        existing().get('leaderId', '_NONE_') == request.auth.uid ||
+        (isEmailVerified() && existing().get('leaderEmail', '') is string
+          && existing().get('leaderEmail', '') != ''
+          && existing().get('leaderEmail', '').lower() == tokenEmailLower())
+      );
+    }
+
+    // ===============================================================
+    // Teams
+    // ===============================================================
+    // A team's Khối link may be empty/unassigned or a block of the caller's Khối.
+    function teamBlockOkForKhoiManager(blockId) {
+      return blockId == null || blockId == '' || blockId == 'unassigned' || blockInMyKhoi(blockId);
+    }
+
+    match /teams/{teamId} {
+      allow read: if isSignedIn();
+      allow create: if isAdmin() || isAccountant() || hasPerm('admin.teams.create') ||
+                       (isKhoiManagerRole() && blockInMyKhoi(incoming().get('blockId', '')));
+      allow update: if incoming().get('gdkdUids', []).size() <= 4 && (
+                       isAdmin() || isAccountant() ||
+                       (isKhoiManagerRole()
+                         && !incoming().diff(existing()).affectedKeys().hasAny(['status', 'gdkdUids', 'gdkdApprovedUid'])
+                         && teamBlockOkForKhoiManager(existing().get('blockId', ''))
+                         && teamBlockOkForKhoiManager(incoming().get('blockId', ''))) ||
+                       (incoming().diff(existing()).affectedKeys().hasAny(['gdkdApprovedUid', 'gdkdUids']) && vnGdkdApprovalTeamWriteOk(teamId)) ||
+                       hasPerm('admin.teams.edit'));
+      allow delete: if isAdmin() || isAccountant() || hasPerm('admin.teams.delete') ||
+                       (isKhoiManagerRole() && blockInMyKhoi(existing().get('blockId', '')));
+    }
+
+    // ===============================================================
+    // Blocks
+    // ===============================================================
+    function isValidBlock(data) {
+      return data.name is string && data.name.size() > 0 &&
+             data.blockCode is string && data.blockCode.size() > 0 &&
+             (!('teamPrefix' in data) || data.teamPrefix is string);
+    }
+
+    // Fields defining who belongs to a Khối — admin-only.
+    function blockScopeKeys() {
+      return ['directorUid', 'assistantUids', 'assistantUid', 'blockCode'];
+    }
+
+    match /blocks/{blockId} {
+      allow read: if isSignedIn();
+      allow create: if (isAdmin() || isSuperAdmin()) && isValidBlock(incoming());
+      allow update: if isValidBlock(incoming()) && (
+                       isAdmin() || isSuperAdmin() ||
+                       ((isAccountant() || (isKhoiManagerRole() && blockInMyKhoi(blockId)))
+                         && !incoming().diff(existing()).affectedKeys().hasAny(blockScopeKeys()))
+                     );
+      // Chỉ Admin xoá Khối (UI chặn khi còn Phòng KD đang hoạt động)
+      allow delete: if isAdmin() || isSuperAdmin();
+    }
+
+    // ===============================================================
+    // Budgets
+    // ===============================================================
+    function isValidBudget(data) {
+      return (!('projectId' in data) || data.projectId is string) &&
+             (!('month' in data) || data.month is string) &&
+             (!('amount' in data) || data.amount is number || data.amount is int || data.amount is float);
+    }
+
+    // ---------------------------------------------------------------
+    // Khoá KỲ ĐÃ QUA (vĩnh viễn, trừ Super Admin) — theo cài đặt Super Admin trong «Khoá theo ngày».
+    // vnLocks/current.pastLock.{ns|nt} = {on, day 1..28, min 0..1439, offset 0..3}: bản ghi tháng M bị khoá từ
+    // ngày `day` lúc `min` (giờ VN) của tháng M+offset trở đi; không có ngày mở lại. Tháng không đọc được → không khoá theo kỳ.
+    // ---------------------------------------------------------------
+    function vnMIdx(s) {
+      return !(s is string) ? -1
+        : s.matches('^[0-9]{4}-[0-9]{1,2}$') ? int(s.split('-')[0]) * 12 + int(s.split('-')[1])
+        : s.matches('^[0-9]{1,2}[./-][0-9]{4}$') ? int(s.split('[./-]')[1]) * 12 + int(s.split('[./-]')[0])
+        : s.matches('(?i).*th[áa]ng *[0-9]{1,2}([^0-9].*)?$') ? 2026 * 12 + int(s.split('(?i)th[áa]ng *')[1].split('[^0-9]')[0])
+        : -1;
+    }
+    function vnPastHit(cfg, M) {
+      let t = request.time + duration.value(7, 'h');
+      let tgt = M + cfg.get('offset', 1);
+      let cur = t.year() * 12 + t.month();
+      return M > 0 && (cur > tgt || (cur == tgt && (t.day() > cfg.get('day', 1)
+        || (t.day() == cfg.get('day', 1) && t.hours() * 60 + t.minutes() >= cfg.get('min', 0)))));
+    }
+    function vnPastCfg(kind) {
+      return (exists(/databases/$(database)/documents/vnLocks/current)
+        ? get(/databases/$(database)/documents/vnLocks/current).data : {}).get('pastLock', {}).get(kind, {});
+    }
+    // true = được ghi (kỳ chưa khoá, hoặc Super Admin). Cấu hình tắt → không parse tháng.
+    function vnPastOpen(kind, m) {
+      let cfg = vnPastCfg(kind);
+      return cfg.get('on', false) != true || !vnPastHit(cfg, vnMIdx(m)) || isSuperAdmin();
+    }
+    function pastCfgOk(C) {
+      return C is map && C.keys().hasOnly(['on', 'day', 'min', 'offset']) && C.get('on', false) is bool
+        && C.day is int && C.day >= 1 && C.day <= 28 && C.min is int && C.min >= 0 && C.min < 1440
+        && C.offset is int && C.offset >= 0 && C.offset <= 3;
+    }
+    function pastMapOk(M) {
+      return M is map && M.keys().hasOnly(['ns', 'nt']) && (!('ns' in M) || pastCfgOk(M.ns)) && (!('nt' in M) || pastCfgOk(M.nt));
+    }
+
+    match /budgets/{budgetId} {
+      allow read: if isGDKD() ? (gdkdTeamDocOk(resource.data) || resource.data.get('createdBy', '') == request.auth.uid) : canReadBudgets();
+
+      allow create: if canWriteBudgetCreate() && isValidBudget(incoming()) && vnPastOpen('ns', incoming().get('month', ''));
+      
+      allow update: if canWriteBudgetUpdate() && isValidBudget(incoming()) && vnPastOpen('ns', resource.data.get('month', '')) && vnPastOpen('ns', incoming().get('month', ''));
+      
+      allow delete: if vnPastOpen('ns', resource.data.get('month', '')) && (isAdmin() || isAccountant() || 
+                       (isGDKD() && resource.data.get('teamName', '') == getUserData().get('teamName', '_NONE_')) ||
+                       (isGDKhoi() && isMatchBlockPrefix(resource.data.get('teamId', ''))) ||
+                       resource.data.get('createdBy', '') == request.auth.uid);
+    }
+
+    // ===============================================================
+    // Block Budgets
+    // ===============================================================
+    function getSystemSettings() {
+      return exists(/databases/$(database)/documents/settings/global)
+        ? get(/databases/$(database)/documents/settings/global).data
+        : {};
+    }
+
+
+    // Khung đăng ký / sửa NS Khối: CHỈ theo «Thời gian MỞ» vnLocks/current (vnOpen: openWin + pastWin, Super Admin bỏ qua).
+
+    function isValidBlockBudget(data) {
+      return (!('projectId' in data) || data.projectId is string) &&
+             (!('month' in data) || data.month is string) &&
+             (!('amount' in data) || data.amount is number || data.amount is int || data.amount is float);
+    }
+
+    // Non-admin writes must target a block of the caller's Khối; blockCode (if sent)
+    // must match blocks/{blockId}.blockCode so a record cannot masquerade as another Khối.
+    function blockBudgetCreateScopeOk(data) {
+      return blockInMyKhoi(data.get('blockId', ''))
+        && (!('blockCode' in data) || data.blockCode == '' || data.blockCode == blockCodeOf(data.blockId));
+    }
+
+    match /block_budgets/{blockBudgetId} {
+      allow read: if canReadBlockBudgets();
+      allow create: if isValidBlockBudget(incoming()) && vnPastOpen('ns', incoming().get('month', '')) && (
+                       isAdmin() || (
+                         hasAnyPerm(['block_budget.create', 'block_budget.edit'])
+                         && vnOpen('nsCreate', incoming().get('month', ''))
+                         && blockBudgetCreateScopeOk(incoming())
+                       ));
+      allow update: if isValidBlockBudget(incoming()) && vnPastOpen('ns', resource.data.get('month', '')) && vnPastOpen('ns', incoming().get('month', '')) && (
+                       isAdmin() || (
+                         hasPerm('block_budget.edit')
+                         && vnOpen('nsEdit', resource.data.get('month', ''))
+                         && (!('month' in incoming()) || incoming().month == resource.data.month)
+                         && !incoming().diff(existing()).affectedKeys().hasAny(['blockId', 'blockCode', 'createdBy'])
+                         && blockInMyKhoi(resource.data.get('blockId', ''))
+                       ));
+      allow delete: if vnPastOpen('ns', resource.data.get('month', '')) && (isAdmin() || (
+                       hasPerm('block_budget.delete')
+                       && vnOpen('nsEdit', resource.data.get('month', ''))
+                       && blockInMyKhoi(resource.data.get('blockId', ''))
+                     ));
+    }
+
+    // ===============================================================
+    // Reciprocal Budgets (Ngân sách đối ứng Khối)
+    // ===============================================================
+    match /reciprocal_budgets/{reciprocalBudgetId} {
+      allow read: if canReadReciprocal();
+      allow create: if vnPastOpen('ns', incoming().get('month', '')) && (hasPerm('reciprocal_budget.create') || isAdmin() || isSuperAdmin());
+      allow update: if vnPastOpen('ns', resource.data.get('month', '')) && vnPastOpen('ns', incoming().get('month', '')) && (hasPerm('reciprocal_budget.edit') || isAdmin() || isSuperAdmin() || isAccountant());
+      allow delete: if vnPastOpen('ns', resource.data.get('month', '')) && (isAdmin() || isSuperAdmin() || isAccountant()
+                       || hasPerm('reciprocal_budget.delete'));
+    }
+
+    // ===============================================================
+    // Costs
+    // ===============================================================
+    match /costs/{costId} {
+      allow read: if isGDKD() ? (gdkdTeamDocOk(resource.data) || resource.data.get('createdBy', '') == request.auth.uid) : canReadCosts();
+
+      allow create: if canWriteCostCreate() && vnPastOpen('ns', incoming().get('month', ''));
+      
+      allow update: if canWriteCostUpdate() && vnPastOpen('ns', resource.data.get('month', '')) && vnPastOpen('ns', incoming().get('month', ''));
+      
+      allow delete: if vnPastOpen('ns', resource.data.get('month', '')) && (isAdmin() || isAccountant() || 
+                       (isGDKD() && resource.data.get('teamName', '') == getUserData().get('teamName', '_NONE_')) ||
+                       (isGDKhoi() && isMatchBlockPrefix(resource.data.get('teamId', ''))) ||
+                       resource.data.get('createdBy', '') == request.auth.uid);
+    }
+
+    // ===============================================================
+    // Support Requests
+    // ===============================================================
+    match /supportRequests/{requestId} {
+      allow read: if isAdmin() || isMod() || isAccountant() || resource.data.userId == request.auth.uid;
+      allow create: if isSignedIn() && incoming().userId == request.auth.uid;
+      allow update: if isAdmin() || isMod() || isAccountant() || resource.data.userId == request.auth.uid;
+      allow delete: if isAdmin() || isAccountant();
+    }
+
+    // ===============================================================
+    // Audit Logs
+    // ===============================================================
+    // Nhật ký thay đổi (changeLog): append-only, không giả mạo được —
+    // actor = người gọi, at = giờ máy chủ, before = đúng dữ liệu hiện tại của tài liệu đích.
+    function clKeyCol(c) {
+      return c in ['users', 'teams', 'blocks', 'ban_kd', 'projects', 'budgets', 'block_budgets', 'reciprocal_budgets', 'ns_lines', 'costs',
+                   'weekly_reports', 'efficiencyReports', 'acceptances', 'finalAcceptances', 'rolePermissions', 'settings'];
+    }
+    match /changeLog/{logId} {
+      allow read: if isAdmin() || isSuperAdmin();
+      allow create: if isSignedIn()
+        && incoming().keys().hasOnly(['col', 'docId', 'op', 'before', 'patch', 'options', 'actor', 'actorName', 'at', 'restoreOf'])
+        && incoming().actor == request.auth.uid
+        && incoming().at == request.time
+        && clKeyCol(incoming().col) && incoming().docId is string && incoming().docId.size() > 0
+        && incoming().op in ['create', 'set', 'update', 'delete']
+        && (exists(/databases/$(database)/documents/$(incoming().col)/$(incoming().docId))
+              ? incoming().before == get(/databases/$(database)/documents/$(incoming().col)/$(incoming().docId)).data
+              : incoming().before == null);
+      // Chỉ được đánh dấu 'failed' entry của chính mình (khi ghi dữ liệu thất bại).
+      allow update: if isSignedIn() && resource.data.actor == request.auth.uid
+        && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['status']) && incoming().status == 'failed';
+      // Hạn giữ 12 tháng: Admin xoá bản cũ hơn 365 ngày (sau khi đã lưu trữ lên Drive).
+      allow delete: if (isAdmin() || isSuperAdmin()) && resource.data.at < request.time - duration.value(365, 'd');
+    }
+
+    // Nhật ký sao lưu Drive (api/backup-drive) — chỉ Admin đọc/ghi, không sửa/xoá.
+    match /backupRuns/{runId} {
+      allow read, create: if isAdmin() || isSuperAdmin();
+      allow update, delete: if false;
+    }
+    match /auditLogs/{logId} {
+      allow read: if isInternalStaff() && !isGDKD();
+      // Append-only: a signed-in user logs their own actions; no tampering afterwards.
+      allow create: if isSignedIn()
+                    && incoming().get('userId', '') == request.auth.uid
+                    && (incoming().get('userEmail', null) == null
+                        || (incoming().get('userEmail', '') is string
+                            && incoming().get('userEmail', '').lower() == tokenEmailLower()))
+                    && incoming().get('action', '') is string;
+      allow update, delete: if isAdmin() || isSuperAdmin();
+    }
+
+    // ===============================================================
+    // Regions & Types
+    // ===============================================================
+    match /regions/{regionId} {
+      allow read: if isSignedIn();
+      allow write: if isAdmin() || isAccountant();
+    }
+
+    match /types/{typeId} {
+      allow read: if isSignedIn();
+      allow write: if isAdmin() || isAccountant();
+    }
+
+    // ===============================================================
+    // Efficiency Reports
+    // ===============================================================
+    match /efficiencyReports/{reportId} {
+      allow read: if isGDKD() ? (gdkdTeamDocOk(resource.data) || resource.data.get('createdBy', '') == request.auth.uid) : canReadEfficiency();
+      allow write: if isInternalStaff();
+    }
+
+    // ===============================================================
+    // Acceptances & Final Acceptances
+    // ===============================================================
+    // v-next: 1 bản ghi / Người phụ trách / dự án / tháng — khoá ntKeys/{ntMonth_uid_projectId}
+    function ntKeyOk(acceptanceId) {
+      return incoming().get('implementerUid', '') == ''
+        || (incoming().get('ntMonth', '') is string && incoming().get('ntMonth', '').matches('^[0-9]{4}-[0-9]{2}$')
+            && incoming().get('projectId', '') is string
+            && getAfter(/databases/$(database)/documents/ntKeys/$(incoming().ntMonth + '_' + incoming().implementerUid + '_' + incoming().projectId + (incoming().get('supplementFor', '') != '' ? '_bs' : ''))).data.get('acceptanceId', '') == acceptanceId);
+    }
+
+    // Nghiệm thu bổ sung: lưu ở kỳ M (month, supplementIn = M), supplementFor = kỳ cũ M-1…M-12 (YYYY-MM).
+    // Không sửa bản kỳ đã khoá: Mod tạo bản bổ sung MỚI riêng (khoá ntKeys riêng hậu tố _bs). Super Admin quyết.
+    // Rẻ (giới hạn 1000 biểu thức/lượt ghi): bản bổ sung luôn lưu month dạng YYYY-MM → cắt chuỗi thay vì vnMIdx (regex).
+    function ntSuppShapeOk() {
+      let m = incoming().get('month', '');
+      let f = incoming().supplementFor;
+      let d = (m is string && m.matches('^[0-9]{4}-[0-9]{2}$') && f is string && f.matches('^[0-9]{4}-[0-9]{2}$'))
+        ? (int(m[0:4]) * 12 + int(m[5:7])) - (int(f[0:4]) * 12 + int(f[5:7])) : 0;
+      return d >= 1 && d <= 12 && incoming().get('supplementIn', m) == m;
+    }
+    function ntSuppCreateOk() {
+      return !incoming().keys().hasAny(['supplementFor', 'supplementStatus', 'supplementDecidedBy', 'supplementDecidedAt', 'supplementIn'])
+        || ('supplementFor' in incoming() && ntSuppShapeOk() && incoming().get('supplementStatus', 'pending') == 'pending');
+    }
+    // Sửa thường: không đổi supplementFor/In; trạng thái chỉ Super Admin đổi, người khác chỉ được đưa về 'pending'.
+    function ntSuppEditOk() {
+      return !('supplementFor' in existing())
+        ? !incoming().keys().hasAny(['supplementFor', 'supplementStatus', 'supplementHistory', 'supplementDecidedBy', 'supplementDecidedAt', 'supplementNote', 'supplementIn', 'supplementProof'])
+        : (incoming().get('supplementFor', '') == existing().supplementFor && incoming().get('month', '') == existing().get('month', '')
+           && incoming().get('supplementIn', '') == existing().get('supplementIn', '')
+           && (incoming().get('supplementStatus', '') in [existing().get('supplementStatus', ''), 'pending']
+               || (incoming().get('supplementStatus', '') in ['approved', 'rejected'] && isSuperAdmin())));
+    }
+    // Duyệt / Từ chối / Đặt lại: chỉ Super Admin, chỉ đụng khoá trạng thái — được cả khi kỳ đã khoá.
+    // Bản MỚI có supplementIn: duyệt chuyển month/ntMonth về kỳ gốc (supplementFor), đặt lại/từ chối chuyển về supplementIn.
+    // Cách 2 (26/10): chuyển sang 'approved' phải kèm supplementProof {img, inv} = id ảnh + hoá đơn của CHÍNH bản ghi này.
+    function ntSuppProofOk(aid) {
+      let p = incoming().get('supplementProof', {});
+      return incoming().get('supplementStatus', '') != 'approved' || existing().get('supplementStatus', '') == 'approved'
+        || (p is map && p.get('img', '') is string && p.get('inv', '') is string && p.get('img', '') != '' && p.get('inv', '') != ''
+            && get(/databases/$(database)/documents/acceptanceImages/$(p.img)).data.get('acceptanceId', '') == aid
+            && get(/databases/$(database)/documents/acceptanceInvoices/$(p.inv)).data.get('acceptanceId', '') == aid);
+    }
+    function ntSuppDecisionOk() {
+      return isSuperAdmin() && incoming().get('supplementStatus', '') in ['pending', 'approved', 'rejected']
+        && incoming().diff(existing()).affectedKeys().hasOnly(['supplementStatus', 'supplementHistory', 'supplementDecidedBy', 'supplementDecidedAt', 'supplementNote', 'supplementProof', 'month', 'ntMonth'])
+        && (incoming().get('month', '') == existing().get('month', '')
+            || ('supplementIn' in existing() && incoming().get('month', '') in [existing().supplementFor, existing().supplementIn]));
+    }
+
+    // v-next go-live: settings/global.ntImplementerRequiredFrom (timestamp). Từ mốc này bản ghi mới phải có
+    // implementerUid + cờ ntRequired=true; bản ghi mang cờ không được bỏ trống Người phụ trách. Bản ghi cũ: không bắt buộc.
+    function ntHasImpl() {
+      return incoming().get('implementerUid', '') is string && incoming().get('implementerUid', '') != '';
+    }
+    // Tháng 10/2026 (21/9–20/10): Người phụ trách tự nhập — implementerManual=true, không uid, ntMonth '2026-10'.
+    function ntManualShapeOk() {
+      let n = incoming().get('implementerName', '');
+      return incoming().get('implementerManual', false) == true
+        && incoming().get('implementerUid', '') == ''
+        && n is string && n.size() > 0 && n.size() <= 120
+        && incoming().get('ntMonth', '') == '2026-10'
+        && incoming().get('month', '') in ['10.2026', '2026-10'];
+    }
+    // Cờ tự nhập chỉ hợp lệ đúng hình dạng; cần quyền khi tạo / đổi tên tự nhập (sửa số liệu khác của bản ghi thì không).
+    function ntManualFieldsOk(isUpdate) {
+      return incoming().get('implementerManual', false) != true
+        || (ntManualShapeOk()
+            && ((isUpdate && !incoming().diff(existing()).affectedKeys().hasAny(['implementerName', 'implementerManual', 'implementerUid', 'ntMonth', 'month']))
+                || vnPerm('vn.nt_records.manual_assignee')));
+    }
+    function ntHasImplOrManual() {
+      return ntHasImpl() || (incoming().get('implementerManual', false) == true && ntManualShapeOk());
+    }
+    function ntCreateReqOk() {
+      return !('ntImplementerRequiredFrom' in getSystemSettings())
+        || request.time < getSystemSettings().ntImplementerRequiredFrom
+        || (ntHasImplOrManual() && incoming().get('ntRequired', false) == true);
+    }
+    // «Link QC»: adLinks là list ≤ 20 phần tử.
+    function ntAdLinksOk() {
+      return !('adLinks' in incoming()) || (incoming().adLinks is list && incoming().adLinks.size() <= 20);
+    }
+
+    function ntUpdateReqOk() {
+      return resource.data.get('ntRequired', false) != true
+        || (ntHasImplOrManual() && incoming().get('ntRequired', false) == true);
+    }
+
+    // Phạm vi đọc Nghiệm thu (acceptances / finalAcceptances) khớp màn hình:
+    // Admin/Mod/Kế toán/Super Admin/Trưởng ban KD: toàn bộ (cần report_nt.view|home.view như cũ).
+    // GĐKD: Phòng mình. GĐ Khối/Trợ lý Khối: Phòng thuộc Khối mình (+ Phòng kiêm GĐKD).
+    // GĐDA: dự án được gán (projectId). Trợ lý BGĐ (assistant): dự án được gán hoặc Phòng thuộc Khối được gán.
+    // Vai trò khác (user…): không (chỉ bản ghi mình phụ trách — nhánh implementerUid).
+    // Trưởng ban KD: chỉ dự án thuộc Ban mình (projects/{projectId}.banKdId → ban_kd leader/deputy). 2 lần đọc/dự án.
+    function ntBanProjectOk(pid) {
+      let pp = /databases/$(database)/documents/projects/$(pid);
+      let bp = /databases/$(database)/documents/ban_kd/$(get(pp).data.get('banKdId', '_NONE_'));
+      return pid is string && pid != '' && exists(pp) && exists(bp) && truongBanLeadsBan(get(bp).data);
+    }
+    function ntReadScopeOk(d) {
+      let r = normalizedUserRole();
+      return isAppOwner()
+        || (r in ['super_admin', 'admin', 'mod', 'accountant'] && canReadAcceptances())
+        || (r == 'truong_ban_kd' && canReadAcceptances() && ntBanProjectOk(d.get('projectId', '')))
+        || (r == 'gdkd' && gdkdTeamDocOk(d))
+        || (r in ['gd_khoi', 'tro_ly_khoi'] && canReadAcceptances() && (isMatchBlockPrefix(d.get('teamId', '')) || gdkdTeamDocOk(d)))
+        || (r in ['gdda', 'assistant'] && canReadAcceptances() && d.get('projectId', '') in getUserData().get('assignedProjects', []))
+        || (r == 'assistant' && canReadAcceptances() && isMatchBlockPrefix(d.get('teamId', '')));
+    }
+
+    match /acceptances/{acceptanceId} {
+      // NVKD: chỉ đọc bản ghi mình phụ trách (tab Nghiệm thu MKT trong Quản lý Phòng KD).
+      allow read: if (request.auth != null && resource.data.get('implementerUid', '') == request.auth.uid && vnPerm('vn.team_nt.view'))
+        || ntReadScopeOk(resource.data);
+      allow create: if (isAdmin() || isMod()) && vnPastOpen('nt', incoming().get('month', '')) && (incoming().get('ntMonth', '') in ['', incoming().get('month', '')] || vnPastOpen('nt', incoming().get('ntMonth', ''))) && vnUnlocked('nt', incoming().get('month', '')) && ntKeyOk(acceptanceId) && ntCreateReqOk() && ntManualFieldsOk(false) && ntSuppCreateOk() && ntAdLinksOk();
+      allow update: if ('supplementFor' in existing() && incoming().get('supplementStatus', '') != existing().get('supplementStatus', '') && ntSuppDecisionOk() && ntSuppProofOk(acceptanceId)) || (isAdmin() || isMod()) && vnPastOpen('nt', existing().get('month', '')) && (existing().get('ntMonth', '') in ['', existing().get('month', '')] || vnPastOpen('nt', existing().get('ntMonth', ''))) && (incoming().get('ntMonth', '') in ['', existing().get('ntMonth', ''), existing().get('month', '')] || vnPastOpen('nt', incoming().get('ntMonth', ''))) && vnUnlocked('nt', existing().get('month', '')) && (incoming().get('month', '') == existing().get('month', '') || (vnUnlocked('nt', incoming().get('month', '')) && vnPastOpen('nt', incoming().get('month', '')))) && ntKeyOk(acceptanceId) && ntUpdateReqOk() && ntManualFieldsOk(true) && ntSuppEditOk() && ntSuppProofOk(acceptanceId) && ntAdLinksOk();
+      allow delete: if (isAdmin() || isMod()) && vnPastOpen('nt', resource.data.get('month', '')) && vnPastOpen('nt', resource.data.get('ntMonth', '')) && vnUnlocked('nt', resource.data.get('month', ''));
+    }
+
+    match /ntKeys/{key} {
+      // App không đọc ntKeys (chỉ rules getAfter); chỉ người ghi + Kế toán.
+      allow read: if isAdmin() || isMod() || isAccountant();
+      allow create: if (isAdmin() || isMod())
+        && incoming().keys().hasOnly(['acceptanceId', 'month', 'uid', 'projectId', 'createdAt'])
+        && incoming().acceptanceId is string && incoming().month is string && incoming().uid is string && incoming().projectId is string
+        && (key == incoming().month + '_' + incoming().uid + '_' + incoming().projectId || key == incoming().month + '_' + incoming().uid + '_' + incoming().projectId + '_bs')
+        && vnPastOpen('nt', incoming().month) && vnUnlocked('nt', incoming().month);
+      // Không update (đảm bảo duy nhất). Giải phóng khoá: xoá.
+      allow delete: if (isAdmin() || isMod()) && vnPastOpen('nt', resource.data.get('month', '')) && vnUnlocked('nt', resource.data.get('month', ''));
+    }
+
+    match /finalAcceptances/{finalId} {
+      // Cùng phạm vi đọc với acceptances (ntReadScopeOk).
+      allow read: if ntReadScopeOk(resource.data);
+      allow create: if (isAdmin() || isMod()) && vnPastOpen('nt', incoming().get('month', '')) && vnUnlocked('nt', incoming().get('month', ''));
+      allow update: if (isAdmin() || isMod()) && vnPastOpen('nt', resource.data.get('month', '')) && vnPastOpen('nt', incoming().get('month', '')) && vnUnlocked('nt', resource.data.get('month', '')) && vnUnlocked('nt', incoming().get('month', ''));
+      allow delete: if (isAdmin() || isMod()) && vnPastOpen('nt', resource.data.get('month', '')) && vnUnlocked('nt', resource.data.get('month', ''));
+    }
+
+
+    // ===============================================================
+    // Document Processing
+    // ===============================================================
+    match /docProcessing/{docId} {
+      allow read: if canReadDocProcessing();
+      allow write: if isInternalStaff() && !isGDKD();
+    }
+
+    // ===============================================================
+    // Settings
+    // ===============================================================
+    // settings/github_backup holds only non-secret GitHub/Vercel config (repo, branch,
+    // folder, vercelUrl, lastSyncResult). The GitHub token lives in
+    // settings_private/github_backup (admin-only). Until an admin re-saves the config,
+    // a legacy `token` field may still exist here: while it does, only admins can read
+    // the doc, and no write may add/change the token (removing it is allowed).
+    function githubBackupTokenUnchangedOrRemoved() {
+      return !('token' in incoming())
+        || (resource != null && 'token' in resource.data && incoming().token == resource.data.token);
+    }
+
+    match /settings/{settingId} {
+      allow read: if isSignedIn() && (
+        settingId != 'github_backup' || isAdmin() || resource == null || !('token' in resource.data)
+      );
+      allow create, update: if settingId == 'github_backup'
+        ? (isAdmin() && githubBackupTokenUnchangedOrRemoved())
+        : (isAdmin() || isAccountant());
+      allow delete: if settingId == 'github_backup' ? isAdmin() : (isAdmin() || isAccountant());
+    }
+
+    // ===============================================================
+    // Private settings (secrets) — Admin / Super Admin only
+    // ===============================================================
+    match /settings_private/{settingId} {
+      allow read, write: if isAdmin() || isSuperAdmin();
+    }
+
+    // ===============================================================
+    // Role Permissions
+    // ===============================================================
+    match /rolePermissions/{roleId} {
+      allow read: if isSignedIn();
+      allow write: if isAdmin();
+    }
+
+    // ===============================================================
+    // Team Notifications
+    // ===============================================================
+    // "Mark as read": only add the caller's own email to readBy (nothing else changes).
+    // A legacy malformed readBy map ({_type:'arrayUnion', value:[...]}) may be healed into a list.
+    function markReadOnlyOk() {
+      let newRead = incoming().get('readBy', []);
+      let oldRead = existing().get('readBy', []);
+      return incoming().diff(existing()).affectedKeys().hasOnly(['readBy'])
+        && newRead is list
+        && (
+          (oldRead is list && newRead.hasAll(oldRead)
+            && newRead.toSet().difference(oldRead.toSet()).hasOnly([tokenEmailLower()]))
+          || (!(oldRead is list))
+        );
+    }
+
+    // Chỉ người nhận đọc thông báo (mọi vai trò): targetEmails / recipients chứa email đăng nhập, hoặc targetUid == uid.
+    function notifRecipientOk() {
+      return isSignedIn() && (
+        tokenEmailLower() in resource.data.get('targetEmails', [])
+        || tokenEmailLower() in resource.data.get('recipients', [])
+        || resource.data.get('targetUid', '') == request.auth.uid);
+    }
+
+    function notifCreateOk() {
+      return isInternalStaff()
+        && (!('createdBy' in incoming()) || incoming().createdBy == request.auth.uid);
+    }
+
+    match /teamNotifications/{notifId} {
+      allow read: if notifRecipientOk();
+      allow create: if notifCreateOk();
+      allow update: if isAdmin() || isSuperAdmin() || isAccountant() || isMod()
+                    || (isSignedIn() && markReadOnlyOk());
+      allow delete: if isAdmin() || isAccountant();
+    }
+    match /notifications/{notifId} {
+      allow read: if notifRecipientOk();
+      allow create: if notifCreateOk();
+      allow update: if isAdmin() || isSuperAdmin() || isAccountant() || isMod()
+                    || (isSignedIn() && markReadOnlyOk());
+      allow delete: if isAdmin() || isAccountant();
+    }
+  
+    // ===============================================================
+    // v-next: Ngân sách MKT (ns_lines), Báo cáo tuần (weekly_reports),
+    // Báo cáo Nghiệm thu (acceptanceImages, acceptanceImageData, shareLinks)
+    // ===============================================================
+    function vnUser() { return getUserData(); }
+
+    // ---------------------------------------------------------------
+    // v-next: Sổ đăng ký quyền (registry) — vnDefaultPerms SINH từ lib/vnext/featureRegistry.ts
+    // ---------------------------------------------------------------
+    // BEGIN GENERATED vn-registry (lib/vnext/featureRegistry.ts → npm run gen:vn-rules). Không sửa tay.
+    function vnDefaultPerms(role) {
+      return
+      role == 'admin' ? ['vn.ns.view', 'vn.ns.team_edit', 'vn.ns.support_approve', 'vn.ns.support_export', 'vn.kyc.view', 'vn.kyc.manage', 'vn.approvals.login_popup', 'vn.bankd.projects', 'vn.bankd.support_pct', 'vn.bankd.support_pct_edit', 'vn.cdt.manage', 'vn.reports.admin_edit', 'vn.team_nt.view', 'vn.report.phong.view', 'vn.report.khoi.view', 'vn.report.ban.view', 'vn.report_mgmt.view', 'vn.report.export', 'vn.nt_report.view', 'vn.nt_report.export', 'vn.nt_images.upload', 'vn.nt_invoices.upload', 'vn.share_links.manage', 'vn.nt_records.assign', 'vn.nt_records.manual_assignee', 'vn.approvals.review', 'vn.transfer.direct', 'vn.dual_gdkd.assign', 'vn.users.rename', 'vn.users.rename_self', 'vn.guide.view', 'vn.support_info.view', 'vn.team_status.edit', 'vn.notif.bell', 'vn.home.role', 'vn.search.global', 'vn.view.cards', 'vn.errorlog.view', 'vn.usage.view'] :
+      role == 'mod' ? ['vn.ns.view', 'vn.bankd.projects', 'vn.bankd.support_pct', 'vn.bankd.support_pct_edit', 'vn.team_nt.view', 'vn.report.phong.view', 'vn.report.khoi.view', 'vn.report.ban.view', 'vn.report_mgmt.view', 'vn.report.export', 'vn.nt_report.view', 'vn.nt_report.export', 'vn.nt_images.upload', 'vn.nt_invoices.upload', 'vn.share_links.manage', 'vn.nt_records.assign', 'vn.nt_records.manual_assignee', 'vn.users.rename_self', 'vn.guide.view', 'vn.support_info.view', 'vn.notif.bell', 'vn.home.role', 'vn.search.global', 'vn.view.cards'] :
+      role == 'accountant' ? ['vn.ns.view', 'vn.kyc.view', 'vn.bankd.projects', 'vn.bankd.support_pct', 'vn.bankd.support_pct_edit', 'vn.team_nt.view', 'vn.report.phong.view', 'vn.report.khoi.view', 'vn.report.ban.view', 'vn.report_mgmt.view', 'vn.report.export', 'vn.nt_report.view', 'vn.nt_report.export', 'vn.users.rename_self', 'vn.guide.view', 'vn.support_info.view', 'vn.team_status.edit', 'vn.notif.bell', 'vn.home.role', 'vn.search.global', 'vn.view.cards'] :
+      role == 'gdda' ? ['vn.ns.view', 'vn.ns.register', 'vn.bankd.projects', 'vn.bankd.support_pct', 'vn.bankd.support_pct_edit', 'vn.weekly.submit', 'vn.users.rename_self', 'vn.guide.view', 'vn.support_info.view', 'vn.notif.bell', 'vn.home.role', 'vn.search.global', 'vn.view.cards'] :
+      role == 'gd_khoi' ? ['vn.ns.view', 'vn.ns.khoi_register', 'vn.ns.support_approve', 'vn.ns.support_export', 'vn.kyc.view', 'vn.approvals.login_popup', 'vn.bankd.projects', 'vn.bankd.support_pct', 'vn.bankd.support_pct_edit', 'vn.weekly.submit', 'vn.team_nt.view', 'vn.report.phong.view', 'vn.report.khoi.view', 'vn.report.export', 'vn.nt_report.view', 'vn.nt_report.export', 'vn.approvals.review', 'vn.users.rename', 'vn.users.rename_self', 'vn.guide.view', 'vn.support_info.view', 'vn.notif.bell', 'vn.home.role', 'vn.search.global', 'vn.view.cards'] :
+      role == 'tro_ly_khoi' ? ['vn.ns.view', 'vn.ns.khoi_register', 'vn.ns.support_approve', 'vn.ns.support_export', 'vn.kyc.view', 'vn.approvals.login_popup', 'vn.bankd.projects', 'vn.bankd.support_pct', 'vn.bankd.support_pct_edit', 'vn.weekly.submit', 'vn.team_nt.view', 'vn.report.phong.view', 'vn.report.khoi.view', 'vn.report.export', 'vn.nt_report.view', 'vn.nt_report.export', 'vn.approvals.review', 'vn.users.rename', 'vn.users.rename_self', 'vn.guide.view', 'vn.support_info.view', 'vn.notif.bell', 'vn.home.role', 'vn.search.global', 'vn.view.cards'] :
+      role == 'truong_ban_kd' ? ['vn.ns.view', 'vn.bankd.projects', 'vn.bankd.support_pct', 'vn.bankd.support_pct_edit', 'vn.report.ban.view', 'vn.report.export', 'vn.nt_report.view', 'vn.nt_report.export', 'vn.users.rename_self', 'vn.guide.view', 'vn.support_info.view', 'vn.notif.bell', 'vn.home.role', 'vn.search.global', 'vn.view.cards'] :
+      role == 'pho_ban_kd' ? ['vn.ns.view', 'vn.bankd.projects', 'vn.bankd.support_pct', 'vn.bankd.support_pct_edit', 'vn.report.ban.view', 'vn.report.export', 'vn.nt_report.view', 'vn.nt_report.export', 'vn.users.rename_self', 'vn.guide.view', 'vn.support_info.view', 'vn.notif.bell', 'vn.home.role', 'vn.search.global', 'vn.view.cards'] :
+      role == 'gdkd' ? ['vn.ns.view', 'vn.ns.register', 'vn.ns.team_edit', 'vn.approvals.login_popup', 'vn.bankd.projects', 'vn.bankd.support_pct', 'vn.bankd.support_pct_edit', 'vn.weekly.submit', 'vn.team_nt.view', 'vn.report.phong.view', 'vn.report.export', 'vn.nt_report.view', 'vn.nt_report.export', 'vn.approvals.review', 'vn.users.rename', 'vn.users.rename_self', 'vn.guide.view', 'vn.support_info.view', 'vn.notif.bell', 'vn.home.role', 'vn.search.global', 'vn.view.cards'] :
+      role == 'assistant' ? ['vn.ns.view', 'vn.ns.register', 'vn.bankd.projects', 'vn.bankd.support_pct', 'vn.bankd.support_pct_edit', 'vn.weekly.submit', 'vn.users.rename_self', 'vn.guide.view', 'vn.support_info.view', 'vn.notif.bell', 'vn.home.role', 'vn.search.global', 'vn.view.cards'] :
+      role == 'user' ? ['vn.ns.view', 'vn.ns.register', 'vn.bankd.projects', 'vn.bankd.support_pct', 'vn.bankd.support_pct_edit', 'vn.weekly.submit', 'vn.team_nt.view', 'vn.users.rename_self', 'vn.guide.view', 'vn.support_info.view', 'vn.notif.bell', 'vn.home.role', 'vn.search.global', 'vn.view.cards'] :
+      [];
+    }
+    // END GENERATED vn-registry
+
+    // Quyền v-next: rolePermissions/{role}.knownKeys chứa khoá → theo permissions; khoá mới → mặc định registry.
+    function vnPerm(key) {
+      return vnPermAs(normalizedUserRole(), key);
+    }
+    function vnPermAs(role, key) {
+      let path = /databases/$(database)/documents/rolePermissions/$(role);
+      return isAppOwner() || role == 'super_admin' || (hasUserData() && (
+        (exists(path) && key in get(path).data.get('knownKeys', []))
+          ? key in get(path).data.get('permissions', [])
+          : key in vnDefaultPerms(role)));
+    }
+
+    // ---------------------------------------------------------------
+    // v-next: Đăng ký tài khoản lần đầu / duyệt chức vụ / xin chuyển Phòng-Khối (accessRequests/{uid})
+    // ---------------------------------------------------------------
+    function vnExemptRole() {
+      return isAppOwner() || normalizedUserRole() in ['gd_khoi', 'tro_ly_khoi', 'mod', 'admin', 'super_admin'];
+    }
+    function vnOnboarded() {
+      return vnUser().get('vnOnboarding', {}).get('status', '') == 'approved' || vnExemptRole();
+    }
+    function reqPath(uid) {
+      return /databases/$(database)/documents/accessRequests/$(uid);
+    }
+    function isGdkOfBlock(blockId) {
+      return normalizedUserRole() in ['gd_khoi', 'tro_ly_khoi'] && blockInMyKhoi(blockId);
+    }
+    function teamBlockMatches(teamId, blockId) {
+      return teamExists(teamId) && (teamDoc(teamId).get('blockId', '') == blockId
+        || teamDoc(teamId).get('blockCode', '_NONE_') == blockCodeOf(blockId));
+    }
+    function teamGdkdCount(teamId) {
+      return teamDoc(teamId).get('gdkdUids', []).size();
+    }
+    function accessReqShapeOk(d, uid) {
+      return d.keys().hasOnly(['uid', 'email', 'name', 'kind', 'dept', 'position', 'blockId', 'blockCode', 'teamId', 'teamName', 'teamCode',
+                               'boUnit', 'fromTeamId', 'fromBlockId', 'alsoGdkdTeamId', 'alsoGdkdTeamName', 'note', 'status', 'createdAt', 'reason', 'decidedBy', 'decidedByName', 'decidedAt'])
+        && d.uid == uid && d.kind in ['onboarding', 'transfer']
+        && d.get('name', '') is string && d.get('name', '').size() > 0 && d.get('name', '').size() <= 120
+        && (
+          (d.dept == 'kd' && d.position in ['gd_khoi', 'tro_ly_khoi', 'gdkd', 'nvkd']
+            && isValidId(d.get('blockId', '')) && exists(blockDocPath(d.get('blockId', '')))
+            && d.get('blockCode', '') == blockCodeOf(d.blockId)
+            && (!(d.position in ['gdkd', 'nvkd'])
+                || (teamBlockMatches(d.get('teamId', ''), d.blockId) && teamActive(d.teamId)
+                    && d.get('teamName', '') == teamDoc(d.teamId).get('name', '')
+                    && d.get('teamCode', '') == teamDoc(d.teamId).get('teamCode', ''))))
+          || (d.dept == 'bo' && d.position in ['bo_truong_ban', 'bo_pho_ban', 'bo_nhan_vien'] && d.get('boUnit', '') in ['ban_kd', 'digital'])
+        );
+    }
+    // Người dùng tự gửi / sửa yêu cầu (chỉ trạng thái pending; không tự quyết).
+    function accessReqOwnerWriteOk(uid) {
+      let d = incoming();
+      return isOwner(uid) && accessReqShapeOk(d, uid) && d.status == 'pending'
+        && !d.keys().hasAny(['decidedBy', 'decidedByName', 'decidedAt', 'reason'])
+        && d.get('email', '') == tokenEmailLower()
+        && (resource == null || resource.data.get('status', '') != 'pending' || resource.data.get('kind', '') == d.kind)
+        // Đã bỏ «Xin chuyển Phòng»: chỉ còn đăng ký lần đầu.
+        && d.kind == 'onboarding' && !vnOnboarded();
+    }
+    function accessReqDecisionShapeOk() {
+      return incoming().diff(existing()).affectedKeys().hasOnly(['status', 'decidedBy', 'decidedByName', 'decidedAt', 'reason'])
+        && existing().status == 'pending'
+        && incoming().status in ['approved', 'rejected']
+        && incoming().get('decidedBy', '') == request.auth.uid
+        && request.auth.uid != existing().uid
+        && (incoming().status == 'approved'
+            || (incoming().get('reason', '') is string && incoming().get('reason', '').size() >= 3));
+    }
+    // Phạm vi người duyệt (GĐK: Khối mình; GĐKD: Phòng mình). Admin: tất cả. Tối đa 4 GĐKD/Phòng.
+    function accessReqCanDecide(r) {
+      return (incoming().status != 'approved' || r.position != 'gdkd'
+              || teamGdkdCount(r.teamId) < 4 || r.uid in teamDoc(r.teamId).get('gdkdUids', []))
+        && vnDecideAs(r, normalizedUserRole());
+    }
+    // role tính 1 lần (giới hạn 1000 biểu thức của rules).
+    function vnDecideAs(r, role) {
+      return role in ['admin', 'super_admin'] || isAppOwner()
+        // Yêu cầu «Xin chuyển» cũ (kind transfer): chỉ Admin quyết.
+        || (role in ['gd_khoi', 'tro_ly_khoi', 'gdkd'] && r.get('kind', '') == 'onboarding' && vnPermAs(role, 'vn.approvals.review') && (
+              // B5: GĐK / Trợ lý Khối duyệt NVKD vào mọi Phòng thuộc Khối mình (Phòng phải thuộc đúng Khối — accessReqShapeOk/teamBlockMatches).
+              (role in ['gd_khoi', 'tro_ly_khoi'] && r.position in ['tro_ly_khoi', 'gdkd', 'nvkd'] && blockInMyKhoi(r.get('blockId', '')))
+              || (role == 'gd_khoi' && r.position == 'nvkd' && vnInGdkdUids(r.get('teamId', '')))
+              || (role == 'gdkd' && r.position == 'nvkd' && vnGdkdOfTeamCheap(r.get('teamId', '')))));
+    }
+    function vnGdkdOfTeamCheap(teamId) {
+      return teamExists(teamId) && vnUser().get('vnOnboarding', {}).get('status', '') == 'approved'
+        && (vnUser().get('teamId', '') == teamId
+            || (vnUser().get('teamId', '') == '' && vnUser().get('teamName', '_NONE_') == teamDoc(teamId).get('name', '_X_'))
+            || vnInGdkdUids(teamId));
+    }
+    // Ghi users/{uid} khi duyệt: chỉ trong cùng batch chuyển yêu cầu pending → approved bởi chính người duyệt.
+    function vnApprovalUserWriteOk(userId) {
+      let p = reqPath(userId);
+      let keys = userChangedKeys();
+      let r = get(p).data;
+      let ob = incoming().get('vnOnboarding', {});
+      // Đường duy nhất để GĐ Khối / Trợ lý / GĐKD ghi Phòng: duyệt ĐĂNG KÝ LẦN ĐẦU (không phải xin chuyển) vào đúng Phòng/Khối người dùng đã chọn.
+      return exists(p)
+        && r.get('status', '') == 'pending'
+        && r.get('kind', '') == 'onboarding'
+        && ob.get('blockId', '') == r.get('blockId', '')
+        && ob.get('teamId', '') == r.get('teamId', '')
+        && getAfter(p).data.get('status', '') == 'approved'
+        && getAfter(p).data.get('decidedBy', '') == request.auth.uid
+        && keys.hasOnly(['role', 'teamId', 'teamName', 'teamCode', 'assignedBlock', 'vnOnboarding', 'updatedAt', 'fullName', 'displayName'])
+        && (!keys.hasAny(['fullName', 'displayName'])
+            || (incoming().get('fullName', '') == get(p).data.get('name', '_NONE_') && incoming().get('displayName', '') == get(p).data.get('name', '_NONE_')))
+        && incoming().get('vnOnboarding', {}).get('status', '') == 'approved'
+        && incoming().get('vnOnboarding', {}).get('position', '') == get(p).data.position
+        && (
+          (get(p).data.position == 'tro_ly_khoi'
+            && incoming().get('role', '') == 'tro_ly_khoi'
+            && incoming().get('assignedBlock', '') == get(p).data.get('blockCode', '_NONE_')
+            && !keys.hasAny(['teamId', 'teamName', 'teamCode']))
+          || (get(p).data.position in ['gdkd', 'nvkd']
+            && incoming().get('role', '') == (get(p).data.position == 'gdkd' ? 'gdkd' : 'user')
+            && incoming().get('teamId', '') == get(p).data.get('teamId', '_NONE_')
+            && incoming().get('teamName', '') == get(p).data.get('teamName', '_NONE_')
+            && incoming().get('teamCode', '') == get(p).data.get('teamCode', '')
+            && !keys.hasAny(['assignedBlock']))
+        );
+    }
+    // GĐK thêm GĐKD vừa duyệt vào teams.gdkdUids (đúng 1 uid, cùng batch với yêu cầu đã duyệt).
+    function vnGdkdApprovalTeamWriteOk(teamId) {
+      return incoming().get('gdkdApprovedUid', '') is string && isValidId(incoming().get('gdkdApprovedUid', ''))
+        && incoming().diff(existing()).affectedKeys().hasOnly(['gdkdUids', 'gdkdApprovedUid', 'updatedAt'])
+        && vnGdkdApprovedViaRequest(teamId, incoming().get('gdkdApprovedUid', ''));
+    }
+    function vnGdkdApprovedViaRequest(teamId, nu) {
+      let p = reqPath(nu);
+      return incoming().get('gdkdUids', []).hasAll(existing().get('gdkdUids', []))
+        && incoming().get('gdkdUids', []).hasAll([nu])
+        && incoming().get('gdkdUids', []).size() <= existing().get('gdkdUids', []).size() + 1
+        && exists(p) && get(p).data.get('status', '') == 'pending'
+        && getAfter(p).data.get('status', '') == 'approved'
+        && getAfter(p).data.get('decidedBy', '') == request.auth.uid
+        && get(p).data.position == 'gdkd' && get(p).data.get('teamId', '') == teamId;
+    }
+
+    function vnReadReqAs(r, role) {
+      return (role in ['gd_khoi', 'tro_ly_khoi'] && blockInMyKhoi(r.get('blockId', '')))
+        || (role == 'gd_khoi' && vnInGdkdUids(r.get('teamId', '')))
+        || (role == 'gdkd' && vnGdkdOfTeamCheap(r.get('teamId', '')));
+    }
+
+    // Kết nối Google Drive (OAuth Admin). 'enc' = refresh token MÃ HOÁ AES-256-GCM (khoá chỉ có trên máy chủ Vercel).
+    // Đọc công khai được chuỗi mã hoá (cần cho ảnh trong link chia sẻ) nhưng vô dụng nếu không có khoá máy chủ.
+    match /driveOAuth/{id} {
+      allow get: if id == 'main';
+      allow list: if false;
+      allow create, update: if isAdmin() && id == 'main'
+        && incoming().keys().hasOnly(['enc', 'email', 'rootUrl', 'connectedBy', 'connectedAt', 'updatedAt'])
+        && incoming().get('enc', '') is string && incoming().get('enc', '').matches('^v1\\..*')
+        && incoming().get('rootUrl', '') is string;
+      allow delete: if isAdmin();
+    }
+
+    // Yêu cầu cập nhật tên (người duyệt thành viên → người dùng). Cờ tự xoá khi người dùng đổi tên.
+    function nameReqShapeOk(uid) {
+      return incoming().keys().hasOnly(['uid', 'by', 'byName', 'byEmail', 'at', 'note', 'oldName', 'teamId'])
+        && incoming().uid == uid && incoming().by == request.auth.uid
+        && incoming().get('note', '') is string && incoming().get('note', '').size() <= 300
+        && incoming().get('oldName', '') is string && incoming().at is string;
+    }
+    function nameReqCanSet(uid) {
+      let ar = /databases/$(database)/documents/accessRequests/$(uid);
+      return isAdmin() || isSuperAdmin() || isAppOwner()
+        || (exists(ar) && vnDecideAs(get(ar).data, normalizedUserRole()));
+    }
+    match /nameUpdateRequests/{uid} {
+      allow get: if isSignedIn() && (uid == request.auth.uid || resource == null || isAdmin() || isSuperAdmin() || resource.data.by == request.auth.uid || nameReqCanSet(uid));
+      allow list: if isSignedIn() && (isAdmin() || isSuperAdmin() || resource.data.by == request.auth.uid || resource.data.uid == request.auth.uid);
+      allow create, update: if isSignedIn() && uid != request.auth.uid && nameReqShapeOk(uid) && nameReqCanSet(uid);
+      // Người dùng chỉ xoá được cờ khi tên đã khác tên lúc bị yêu cầu (getAfter: chạy được cả trong batch đổi tên).
+      allow delete: if isSignedIn() && (isAdmin() || isSuperAdmin() || resource.data.by == request.auth.uid
+        || (uid == request.auth.uid
+            && getAfter(/databases/$(database)/documents/users/$(uid)).data.get('fullName', '') != resource.data.get('oldName', '')));
+    }
+
+    match /accessRequests/{uid} {
+      // Đọc yêu cầu của chính mình kể cả khi chưa tồn tại (listener của màn đăng ký).
+      allow get: if isSignedIn() && (uid == request.auth.uid || (resource != null && (isAdmin() || vnReadReqAs(resource.data, normalizedUserRole()))));
+      allow list: if isSignedIn() && (isAdmin() || resource.data.get('uid', '') == request.auth.uid
+        || vnReadReqAs(resource.data, normalizedUserRole()));
+      allow create: if accessReqOwnerWriteOk(uid);
+      allow update: if accessReqOwnerWriteOk(uid)
+        || (isOwner(uid) && existing().status == 'pending'
+            && incoming().diff(existing()).affectedKeys().hasOnly(['status']) && incoming().status == 'cancelled')
+        || (accessReqDecisionShapeOk() && accessReqCanDecide(existing()));
+      allow delete: if isAdmin();
+    }
+
+    function teamDoc(teamId) {
+      return get(/databases/$(database)/documents/teams/$(teamId)).data;
+    }
+
+    function teamExists(teamId) {
+      return teamId is string && isValidId(teamId) && exists(/databases/$(database)/documents/teams/$(teamId));
+    }
+
+    // GĐKD của Phòng: role gdkd và (teamId của mình == teamId, hoặc uid nằm trong teams.gdkdUids)
+    // Thành viên Phòng: users.teamId, hoặc (dữ liệu cũ) users.teamName == teams.name
+    function isMemberOfTeam(teamId) {
+      return teamExists(teamId) && (
+        vnUser().get('teamId', '') == teamId
+        || (vnUser().get('teamId', '') == '' && vnUser().get('teamName', '_NONE_') == teamDoc(teamId).get('name', '_X_'))
+      );
+    }
+
+    // uid (hoặc UID cũ đã chuyển: users.migratedFromUid) nằm trong teams.gdkdUids.
+    function vnInGdkdUids(teamId) {
+      return teamExists(teamId) && (request.auth.uid in teamDoc(teamId).get('gdkdUids', [])
+        || getUserData().get('migratedFromUid', '_NO_OLD_') in teamDoc(teamId).get('gdkdUids', []));
+    }
+    // GĐKD của Phòng, hoặc GĐ Khối kiêm GĐKD (có trong teams.gdkdUids).
+    function isGdkdOfTeam(teamId) {
+      return (isGDKD() && vnOnboarded() && teamExists(teamId) && (isMemberOfTeam(teamId) || vnInGdkdUids(teamId)))
+        || (normalizedUserRole() == 'gd_khoi' && vnInGdkdUids(teamId));
+    }
+
+    function teamActive(teamId) {
+      return teamExists(teamId) && teamDoc(teamId).get('status', 'active') != 'inactive';
+    }
+
+    function isNonRegisteringRole() {
+      return normalizedUserRole() in ['gd_khoi', 'tro_ly_khoi', 'mod', 'admin', 'super_admin', 'accountant', 'truong_ban_kd', 'pho_ban_kd'];
+    }
+
+    function nsShapeOk(d, id) {
+      return d.period is string && d.period.matches('^[0-9]{4}-[0-9]{2}$')
+        && d.kind in ['user', 'gdkd', 'gdk', 'khoi']
+        && d.projectId is string && isValidId(d.projectId)
+        && d.amount is number && d.amount >= 0 && d.amount < 100000000000
+        && (!('history' in d) || (d.history is list && d.history.size() <= 200))
+        && (d.kind != 'user' || (d.ownerUid is string && d.teamId is string
+              && id == 'u_' + d.period + '_' + d.teamId + '_' + d.projectId + '_' + d.ownerUid))
+        && (d.kind != 'gdkd' || (d.teamId is string && id == 'p_' + d.period + '_' + d.teamId + '_' + d.projectId))
+        && (d.kind != 'gdk' || (d.blockId is string && id == 'k_' + d.period + '_' + d.blockId + '_' + d.projectId))
+        && (d.kind != 'khoi' || (d.ownerUid is string && d.blockId is string
+              && id == 'g_' + d.period + '_' + d.blockId + '_' + d.projectId + '_' + d.ownerUid));
+    }
+
+    // Không đổi danh tính dòng khi sửa
+    function nsIdentityUnchanged() {
+      return !incoming().diff(existing()).affectedKeys().hasAny(['period', 'kind', 'teamId', 'blockId', 'projectId', 'ownerUid']);
+    }
+
+    function lastHistoryHasReason() {
+      return incoming().get('history', []).size() > existing().get('history', []).size()
+        && incoming().history[incoming().history.size() - 1].get('reason', '') is string
+        && incoming().history[incoming().history.size() - 1].get('reason', '').size() >= 3
+        && incoming().history[incoming().history.size() - 1].get('byUid', '') == request.auth.uid;
+    }
+
+    match /ns_lines/{lineId} {
+      // GĐK / Trợ lý Khối: chỉ dòng thuộc Khối mình phụ trách (truy vấn blockId ==).
+      allow read: if isSignedIn() && (
+        // GĐKD: chỉ Phòng mình (không còn đọc toàn công ty).
+        ((isInternalStaff() || isTruongBanKdRole() || isPhoBanKdRole()) && !isKhoiManagerRole() && !isGDKD())
+        || (isGDKD() && vnGdkdOfTeamCheap(resource.data.get('teamId', '')))
+        || resource.data.get('ownerUid', '') == request.auth.uid
+        || (isKhoiManagerRole() && blockInMyKhoi(resource.data.get('blockId', '')))
+        || (normalizedUserRole() == 'gd_khoi' && vnInGdkdUids(resource.data.get('teamId', '')))
+      );
+      // Bỏ hẳn «Bổ sung ngân sách» (kể cả Admin): không tạo dòng gdkd/gdk.
+      // Khung đăng ký / sửa: CHỈ vnOpen (Thời gian MỞ + khoá kỳ đã qua; Super Admin bỏ qua) — khung cũ budgetStartDay/EndDay, nsUnlockedPeriods đã bỏ.
+      allow create: if isSignedIn() && nsShapeOk(incoming(), lineId) && incoming().kind in ['user', 'khoi']
+        && vnOpen('nsCreate', incoming().period) && (
+        isAdmin()
+        || (incoming().kind == 'user' && incoming().ownerUid == request.auth.uid
+            && !isNonRegisteringRole()
+            && vnOnboarded()
+            && isMemberOfTeam(incoming().teamId)
+            && teamActive(incoming().teamId))
+        // GĐK / Trợ lý kiêm GĐKD: đăng ký NS như user tại Phòng có trong teams.gdkdUids.
+        || (incoming().kind == 'user' && incoming().ownerUid == request.auth.uid
+            && normalizedUserRole() in ['gd_khoi', 'tro_ly_khoi']
+            && vnOnboarded()
+            && vnInGdkdUids(incoming().teamId)
+            && teamActive(incoming().teamId))
+        // GĐ Khối / Trợ lý Khối tự Đăng ký MKT cho Khối mình.
+        || (incoming().kind == 'khoi' && incoming().ownerUid == request.auth.uid
+            && normalizedUserRole() in ['gd_khoi', 'tro_ly_khoi'] && blockInMyKhoi(incoming().blockId))
+      );
+      // Dòng bổ sung cũ (gdkd/gdk): không ai đổi số tiền (kể cả Admin); chỉ đánh dấu (xoá/chuyển).
+      allow update: if isSignedIn() && nsShapeOk(incoming(), lineId) && vnOpen('nsEdit', existing().period) && (
+        (isAdmin() && (incoming().kind in ['user', 'khoi'] || incoming().amount == existing().amount))
+        || (nsIdentityUnchanged() && (
+              (existing().kind == 'user' && existing().ownerUid == request.auth.uid && !isNonRegisteringRole())
+              || (existing().kind == 'user' && existing().ownerUid == request.auth.uid
+                  && normalizedUserRole() in ['gd_khoi', 'tro_ly_khoi'] && vnInGdkdUids(existing().teamId))
+              || (existing().kind == 'user' && existing().ownerUid != request.auth.uid
+                  && isGdkdOfTeam(existing().teamId) && lastHistoryHasReason())
+              || (existing().kind == 'khoi' && existing().ownerUid == request.auth.uid
+                  && normalizedUserRole() in ['gd_khoi', 'tro_ly_khoi'] && blockInMyKhoi(existing().blockId))
+           ))
+      );
+      allow delete: if vnOpen('nsEdit', resource.data.get('period', '')) && (isAdmin()
+        || (resource.data.kind in ['user', 'khoi'] && resource.data.ownerUid == request.auth.uid));
+    }
+
+    // ---------------------------------------------------------------
+    // B1: Thông tin thanh toán (CCCD / STK / Ngân hàng) — userKyc/{uid}. Tách khỏi users (users đọc rộng).
+    // Đọc: chính user, Admin, Kế toán, GĐ Khối / Trợ lý Khối của Khối user đang thuộc (theo users.teamId → teams.blockId,
+    // hoặc vnOnboarding.blockId). GĐKD và vai trò khác: KHÔNG (kể cả thành viên Phòng mình).
+    // ---------------------------------------------------------------
+    function kycBlockOf(uid) {
+      let u = get(/databases/$(database)/documents/users/$(uid)).data;
+      let tid = u.get('teamId', '');
+      return (tid is string && tid != '' && teamExists(tid) && teamDoc(tid).get('blockId', '') != '')
+        ? teamDoc(tid).get('blockId', '')
+        : u.get('vnOnboarding', {}).get('blockId', '');
+    }
+    // Tối đa 3 tài khoản nhận tiền; cấp gốc (bankAccount/bankName/accountHolder) = tài khoản mặc định.
+    function kycAccOk(a) {
+      return a is map && a.keys().hasOnly(['id', 'bankName', 'bankAccount', 'accountHolder'])
+        && a.id is string && a.id.matches('^a[0-9]{1,2}$')
+        && a.bankAccount is string && a.bankAccount.matches('^[0-9]{6,20}$')
+        && a.bankName is string && a.bankName.size() >= 2 && a.bankName.size() <= 100
+        && a.accountHolder is string && a.accountHolder.size() >= 2 && a.accountHolder.size() <= 100 && a.accountHolder == a.accountHolder.upper();
+    }
+    function kycAccountsOk(d) {
+      return !('accounts' in d) || (
+        d.accounts is list && d.accounts.size() >= 1 && d.accounts.size() <= 3
+        && kycAccOk(d.accounts[0])
+        && (d.accounts.size() < 2 || (kycAccOk(d.accounts[1]) && d.accounts[1].id != d.accounts[0].id))
+        && (d.accounts.size() < 3 || (kycAccOk(d.accounts[2]) && d.accounts[2].id != d.accounts[0].id && d.accounts[2].id != d.accounts[1].id))
+        && d.get('defaultAccountId', '') is string
+        // Mọi tài khoản cùng một chủ = tên chủ TK mặc định (cấp gốc).
+        && d.accounts[0].accountHolder == d.get('accountHolder', '')
+        && (d.accounts.size() < 2 || d.accounts[1].accountHolder == d.get('accountHolder', ''))
+        && (d.accounts.size() < 3 || d.accounts[2].accountHolder == d.get('accountHolder', ''))
+      );
+    }
+    function kycShapeOk(uid) {
+      let d = incoming();
+      return d.keys().hasOnly(['uid', 'cccd', 'bankAccount', 'bankName', 'accountHolder', 'accounts', 'defaultAccountId', 'fullName', 'updatedAt', 'updatedBy'])
+        && kycAccountsOk(d)
+        && d.uid == uid
+        && d.cccd is string && d.cccd.matches('^[0-9]{12}$')
+        && d.bankAccount is string && d.bankAccount.matches('^[0-9]{6,20}$')
+        && d.bankName is string && d.bankName.size() >= 2 && d.bankName.size() <= 100
+        && d.accountHolder is string && d.accountHolder.size() >= 2 && d.accountHolder.size() <= 100
+        && d.accountHolder == d.accountHolder.upper()
+        && d.get('fullName', '') is string && d.get('fullName', '').size() <= 120
+        && d.updatedBy == request.auth.uid;
+    }
+    match /userKyc/{uid} {
+      allow read: if isSignedIn() && (
+        isOwner(uid)
+        || (normalizedUserRole() in ['admin', 'super_admin', 'accountant'] && vnPerm('vn.kyc.view'))
+        || (isKhoiManagerRole() && vnPerm('vn.kyc.view') && exists(/databases/$(database)/documents/users/$(uid)) && blockInMyKhoi(kycBlockOf(uid)))
+      );
+      allow create, update: if isSignedIn() && kycShapeOk(uid) && (isOwner(uid) || (isAdmin() && vnPerm('vn.kyc.manage')));
+      allow delete: if isAdmin();
+    }
+
+    // ---------------------------------------------------------------
+    // B2: Duyệt hỗ trợ MKT — nsSupport/{lineId} (lineId = ns_lines kind 'user'). Không có doc = Chưa được duyệt.
+    // Ghi: Admin, hoặc GĐ Khối / Trợ lý Khối của Khối ghi trên dòng NS. Các trường định danh phải khớp dòng NS.
+    // ---------------------------------------------------------------
+    function nsLinePath(lineId) {
+      return /databases/$(database)/documents/ns_lines/$(lineId);
+    }
+    // Cờ công khai «đã có STK nhận tiền» (không chứa CCCD/STK). Chỉ ghi đúng sự thật theo userKyc (sau khi ghi).
+    function kycHasBank(p) {
+      return p.get('bankAccount', '') is string && p.get('bankAccount', '').matches('^[0-9]{6,20}$');
+    }
+    function payOkAfter(uid) {
+      let p = /databases/$(database)/documents/userKyc/$(uid);
+      return existsAfter(p) && kycHasBank(getAfter(p).data);
+    }
+    // Như payOkNow nhưng chỉ 1 lượt get (không exists): thiếu userKyc → lỗi → từ chối duyệt (đúng ý: chưa có STK).
+    // Giữ số lượt truy cập tài liệu của nsSupport ≤ 10 (exists + get tính 2 lượt trên emulator).
+    function payOkGetOnly(uid) {
+      return uid is string && uid != '' && kycHasBank(get(/databases/$(database)/documents/userKyc/$(uid)).data);
+    }
+    function payOkNow(uid) {
+      let p = /databases/$(database)/documents/userKyc/$(uid);
+      return uid is string && uid != '' && exists(p) && kycHasBank(get(p).data);
+    }
+    // ---------------------------------------------------------------
+    // Khoá theo ngày (giờ VN, nhiều khoảng, tuỳ chọn theo tháng NS). vnLocks/current = { nsCreate, nsEdit, nt: [{from,to,period}] ≤5 }.
+    // Trong khoảng khoá: MỌI người bị chặn (kể cả Admin / GĐK); chỉ super_admin tạo/sửa. Chỉ super_admin sửa cài đặt; lịch sử chỉ ghi thêm.
+    // ---------------------------------------------------------------
+    function lockRngHit(r, p) {
+      return r.from <= request.time && request.time < r.to && (r.get('period', '') == '' || r.get('period', '') == p);
+    }
+    // Khoá lặp lại hằng tháng: recurring.{kind} = cấu hình {on, fromDay, fromMin, toDay, toMin, periodOffset|null, exceptions} (cho giao diện).
+    // Để vừa giới hạn 1000 biểu thức, Super Admin lưu → app BIÊN DỊCH mọi khoảng (lẻ + lặp) vào lockWin.{kind}.{năm*12+tháng giờ VN} = [≤3 cửa sổ]
+    // (36 tháng; đã áp ngoại lệ / periodOffset / ngày cuối tháng / vắt tháng). Rules chỉ tra 1 khoá = tháng hiện tại.
+    // Doc cũ chưa có lockWin → kiểm tra danh sách khoảng lẻ như trước.
+    function vnWinHit(w, p) {
+      return w.from <= request.time && request.time < w.to && (w.period == '' || w.period == p);
+    }
+    function vnWinListHit(L, p) {
+      return (L.size() > 0 && vnWinHit(L[0], p)) || (L.size() > 1 && vnWinHit(L[1], p)) || (L.size() > 2 && vnWinHit(L[2], p));
+    }
+    function vnLockedFor(D, kind, p) {
+      let t = request.time + duration.value(7, 'h');
+      return vnOpenMode(D, kind)
+        ? !vnWinListHit(D.openWin[kind].get(string(t.year() * 12 + t.month()), []), p)
+        : ('lockWin' in D
+          ? vnWinListHit(D.lockWin.get(kind, {}).get(string(t.year() * 12 + t.month()), []), p)
+          : vnLegacyHit(D.get(kind, []), p));
+    }
+    // Chế độ MỞ: openWin.{kind}.{năm*12+tháng VN} = [≤3 cửa sổ MỞ] (app biên dịch khi Lưu). Có openWin.{kind} → ngoài cửa sổ mở = khoá.
+    function vnOpenMode(D, kind) {
+      return 'openWin' in D && kind in D.openWin;
+    }
+    function vnLegacyHit(L, p) {
+      return (L.size() > 0 && lockRngHit(L[0], p)) || (L.size() > 1 && lockRngHit(L[1], p)) || (L.size() > 2 && lockRngHit(L[2], p))
+        || (L.size() > 3 && lockRngHit(L[3], p)) || (L.size() > 4 && lockRngHit(L[4], p));
+    }
+    function vnUnlockedIn(D, kind, p) {
+      return !vnLockedFor(D, kind, p) || isSuperAdmin();
+    }
+    // ns_lines (sát giới hạn 1000 biểu thức): khoá theo ngày + khoá kỳ đã qua trong 1 lần đọc vnLocks, dùng bảng biên dịch sẵn
+    // pastWin.ns.{năm*12+tháng hiện tại (giờ VN)} = {m: 'YYYY-MM', at}: kỳ < m đã khoá; kỳ == m khoá từ `at`. So sánh chuỗi YYYY-MM.
+    function vnPastWinHit(w, p) {
+      return w != null && (p < w.m || (p == w.m && request.time >= w.at));
+    }
+    function vnOpenIn(D, kind, p) {
+      let k = string((request.time + duration.value(7, 'h')).year() * 12 + (request.time + duration.value(7, 'h')).month());
+      return ((vnOpenMode(D, kind) ? vnWinListHit(D.openWin[kind].get(k, []), p) : ('lockWin' in D ? !vnWinListHit(D.lockWin.get(kind, {}).get(k, []), p) : !vnLegacyHit(D.get(kind, []), p)))
+        && (!('pastWin' in D) || !vnPastWinHit(D.pastWin.get('ns', {}).get(k, null), p))) || isSuperAdmin();
+    }
+    function vnOpen(kind, p) {
+      return vnOpenIn(exists(/databases/$(database)/documents/vnLocks/current)
+        ? get(/databases/$(database)/documents/vnLocks/current).data : {}, kind, p);
+    }
+    function vnUnlocked(kind, p) {
+      return vnUnlockedIn(exists(/databases/$(database)/documents/vnLocks/current)
+        ? get(/databases/$(database)/documents/vnLocks/current).data : {}, kind, p);
+    }
+    function recWinOk(M) {
+      return M is map && M.keys().hasOnly(['nsCreate', 'nsEdit', 'nt'])
+        && (!('nsCreate' in M) || (M.nsCreate is map && M.nsCreate.size() <= 40))
+        && (!('nsEdit' in M) || (M.nsEdit is map && M.nsEdit.size() <= 40))
+        && (!('nt' in M) || (M.nt is map && M.nt.size() <= 40));
+    }
+    function recOk(R) {
+      return R is map && R.keys().hasOnly(['on', 'fromDay', 'fromMin', 'toDay', 'toMin', 'periodOffset', 'exceptions'])
+        && R.get('on', false) is bool
+        && R.fromDay is int && R.fromDay >= 1 && R.fromDay <= 31 && R.toDay is int && R.toDay >= 1 && R.toDay <= 31
+        && R.fromMin is int && R.fromMin >= 0 && R.fromMin < 1440 && R.toMin is int && R.toMin >= 0 && R.toMin < 1440
+        && (R.get('periodOffset', null) == null || (R.periodOffset is int && R.periodOffset >= -2 && R.periodOffset <= 2))
+        && R.get('exceptions', []) is list && R.get('exceptions', []).size() <= 24;
+    }
+    function recMapOk(M) {
+      return M is map && M.keys().hasOnly(['nsCreate', 'nsEdit', 'nt'])
+        && (!('nsCreate' in M) || recOk(M.nsCreate)) && (!('nsEdit' in M) || recOk(M.nsEdit)) && (!('nt' in M) || recOk(M.nt));
+    }
+    function lockListOk(L) {
+      return L is list && L.size() <= 12;
+    }
+    match /vnLocks/{id} {
+      allow read: if isSignedIn();
+      allow create, update: if isSuperAdmin() && id == 'current'
+        && incoming().keys().hasOnly(['nsCreate', 'nsEdit', 'nt', 'recurring', 'lockWin', 'open', 'openWin', 'pastLock', 'pastWin', 'updatedAt', 'updatedBy'])
+        && recWinOk(incoming().get('openWin', {})) && incoming().get('open', {}) is map
+        && pastMapOk(incoming().get('pastLock', {})) && (!('pastWin' in incoming()) || (incoming().pastWin is map && incoming().pastWin.keys().hasOnly(['ns', 'nt'])))
+        && recMapOk(incoming().get('recurring', {})) && recWinOk(incoming().get('lockWin', {}))
+        && lockListOk(incoming().get('nsCreate', [])) && lockListOk(incoming().get('nsEdit', [])) && lockListOk(incoming().get('nt', []));
+      allow delete: if false;
+    }
+    match /vnLocksHistory/{id} {
+      allow read: if isAdmin();
+      allow create: if isSuperAdmin() && incoming().by == request.auth.uid;
+      allow update, delete: if false;
+    }
+
+    // Chuông thông báo: mỗi người chỉ đọc / đánh dấu đã đọc / xoá thông báo của mình.
+    match /userNotifs/{id} {
+      allow read: if isSignedIn() && resource.data.toUid == request.auth.uid;
+      allow create: if isSignedIn() && incoming().createdBy == request.auth.uid
+        && incoming().keys().hasOnly(['toUid', 'type', 'title', 'body', 'link', 'createdAt', 'createdBy', 'read', 'refId'])
+        && incoming().toUid is string && incoming().toUid.size() > 0 && incoming().read == false
+        && incoming().title is string && incoming().title.size() <= 200
+        && incoming().get('body', '') is string && incoming().get('body', '').size() <= 1000
+        && incoming().get('link', '') is string && incoming().get('link', '').size() <= 300;
+      allow update: if isSignedIn() && existing().toUid == request.auth.uid
+        && incoming().diff(existing()).affectedKeys().hasOnly(['read', 'readAt']) && incoming().read == true;
+      allow delete: if isSignedIn() && resource.data.toUid == request.auth.uid;
+    }
+
+    // Nhật ký lỗi nội bộ (không PII). Ai đăng nhập cũng ghi; chỉ Admin đọc / xoá. Tự xoá > 90 ngày (TTL expireAt).
+    match /errorLogs/{id} {
+      allow read, delete: if isAdmin();
+      allow create: if isSignedIn()
+        && incoming().keys().hasOnly(['at', 'screen', 'role', 'device', 'browser', 'msg', 'kind', 'expireAt'])
+        && incoming().msg is string && incoming().msg.size() <= 500
+        && incoming().screen is string && incoming().screen.size() <= 100
+        && incoming().role is string && incoming().role.size() <= 40
+        && incoming().device in ['desktop', 'mobile', 'tablet']
+        && incoming().browser is string && incoming().browser.size() <= 40
+        && incoming().at is string && incoming().expireAt is timestamp;
+      allow update: if false;
+    }
+
+    // Thống kê sử dụng: 1 doc / người / ngày (id = YYYY-MM-DD_uid). Chỉ chính người đó ghi; Admin đọc.
+    match /usageDaily/{id} {
+      allow read: if isAdmin();
+      allow create, update: if isSignedIn() && incoming().uid == request.auth.uid && id == incoming().day + '_' + request.auth.uid
+        && incoming().keys().hasOnly(['day', 'uid', 'role', 'blockId', 'banKdId', 'device', 'screens', 'first', 'last', 'expireAt'])
+        && incoming().screens is map && incoming().screens.size() <= 60 && incoming().device in ['desktop', 'mobile', 'tablet'];
+      allow delete: if isAdmin();
+    }
+
+    match /payStatus/{uid} {
+      allow read: if isSignedIn();
+      allow create, update: if isSignedIn()
+        && incoming().keys().hasOnly(['uid', 'hasPay', 'since', 'updatedAt'])
+        && incoming().get('since', '') is string
+        && incoming().uid == uid && incoming().hasPay is bool && incoming().get('updatedAt', '') is string
+        && incoming().hasPay == payOkAfter(uid);
+      allow delete: if false;
+    }
+    // Khóa nsSupport (GĐK + tầng Ban).
+    function supportKeys() {
+      return ['lineId', 'period', 'ownerUid', 'teamId', 'blockId', 'projectId', 'amount', 'status', 'reason', 'decidedBy', 'decidedByName', 'decidedAt', 'history',
+              'banStatus', 'banReason', 'banDecidedBy', 'banDecidedByName', 'banDecidedAt', 'banDecidedRole'];
+    }
+    function supportShapeOk(lineId) {
+      let d = incoming();
+      let l = get(nsLinePath(lineId)).data;
+      return d.keys().hasOnly(supportKeys())
+        && l.kind in ['user', 'khoi']
+        && d.lineId == lineId && d.period == l.period && d.ownerUid == l.ownerUid
+        && d.teamId == l.get('teamId', '') && d.blockId == l.get('blockId', '') && d.projectId == l.projectId
+        && d.amount == l.amount
+        && d.status in ['pending', 'approved', 'rejected']
+        && (d.status != 'rejected' || (d.get('reason', '') is string && d.get('reason', '').size() >= 3 && d.get('reason', '').size() <= 300))
+        && d.decidedBy == request.auth.uid
+        && d.decidedByName is string && d.decidedByName.size() <= 120
+        && (!('history' in d) || (d.history is list && d.history.size() <= 100))
+        // GĐK duyệt → xếp hàng Ban (banStatus=pending). Không ghi banDecided*.
+        && (d.status != 'approved' || d.get('banStatus', '') == 'pending')
+        && !('banReason' in d) && !('banDecidedBy' in d) && !('banDecidedByName' in d) && !('banDecidedAt' in d) && !('banDecidedRole' in d)
+        && (d.status == 'approved' || !('banStatus' in d))
+        // NS Khối: GĐK/Trợ lý tự đăng ký → được tự Đặt lại / Từ chối / Duyệt lại bản của mình (vốn tự duyệt).
+        && (d.ownerUid != request.auth.uid || l.kind == 'khoi')
+        // Chưa có STK nhận tiền → không được duyệt (chỉ «Từ chối» / «Đặt lại»).
+        && (d.status != 'approved' || payOkGetOnly(d.ownerUid));
+    }
+    // Trưởng Ban của dự án (không gồm Phó Ban). get(project)+get(ban) — cùng get ns_lines được cache.
+    function isBanLeaderOfProject(projectId) {
+      let banId = get(/databases/$(database)/documents/projects/$(projectId)).data.get('banKdId', '');
+      let d = get(/databases/$(database)/documents/ban_kd/$(banId)).data;
+      return banId is string && banId != '' && (
+        d.get('leaderUid', '_NONE_') == request.auth.uid
+        || d.get('leaderId', '_NONE_') == request.auth.uid
+        || (isEmailVerified() && d.get('leaderEmail', '_NONE_') == tokenEmailLower()));
+    }
+    // Phó Ban (ban_kd.deputyUids) của dự án — cùng get(project)+get(ban) đã cache với isBanLeaderOfProject.
+    function isBanDeputyOfProject(projectId) {
+      let banId = get(/databases/$(database)/documents/projects/$(projectId)).data.get('banKdId', '');
+      return banId is string && banId != ''
+        && request.auth.uid in get(/databases/$(database)/documents/ban_kd/$(banId)).data.get('deputyUids', []);
+    }
+    // Trưởng Ban ưu tiên: Phó Ban không ghi đè quyết định Trưởng Ban (banDecidedRole == 'leader').
+    // Ghi đồng thời: rules đánh giá trên bản hiện hành → nếu Trưởng Ban ghi trước, Phó Ban bị từ chối.
+    function isBanWrite() {
+      return incoming().get('banDecidedBy', '') == request.auth.uid
+        && (resource == null || incoming().diff(resource.data).affectedKeys().hasAny(['banStatus', 'banReason', 'banDecidedBy', 'banDecidedAt', 'banDecidedRole']));
+    }
+    function banSupportWriterOk(lineId) {
+      let l = get(nsLinePath(lineId)).data;
+      let r = incoming().get('banDecidedRole', '');
+      return ((isAdmin() || isAccountant() || isSuperAdmin()) && r in ['', 'admin'])
+        || (isBanLeaderOfProject(l.projectId) && r in ['', 'leader'])
+        || (r == 'deputy' && !isBanLeaderOfProject(l.projectId) && isBanDeputyOfProject(l.projectId)
+            && (resource == null || resource.data.get('banDecidedRole', '') != 'leader'));
+    }
+    // Ban duyệt / từ chối / đặt lại chờ duyệt: giữ nguyên quyết định GĐK (status=approved); chỉ ghi ban* + history.
+    // create: materialize NS tự duyệt / grandfather chưa có nsSupport (decidedBy == 'auto').
+    // update: resource đã GĐK approved — đổi banStatus (kể cả grandfather thiếu banStatus → ghi rõ).
+    function banSupportShapeOk(lineId) {
+      let d = incoming();
+      let l = get(nsLinePath(lineId)).data;
+      return d.keys().hasOnly(supportKeys())
+        && l.kind in ['user', 'khoi']
+        && d.lineId == lineId && d.period == l.period && d.ownerUid == l.ownerUid
+        && d.teamId == l.get('teamId', '') && d.blockId == l.get('blockId', '') && d.projectId == l.projectId
+        && d.amount == l.amount
+        && d.status == 'approved'
+        && d.banStatus in ['approved', 'rejected', 'pending']
+        // Từ chối: bắt buộc banReason. Đặt lại: banReason tuỳ chọn (app hiện ghi lý do vào history). Duyệt: không banReason.
+        && (d.banStatus == 'approved'
+            ? !('banReason' in d)
+            : d.banStatus == 'rejected'
+              ? (d.get('banReason', '') is string && d.get('banReason', '').size() >= 3 && d.get('banReason', '').size() <= 300)
+              : (!('banReason' in d) || (d.get('banReason', '') is string && d.get('banReason', '').size() >= 3 && d.get('banReason', '').size() <= 300)))
+        && d.banDecidedBy == request.auth.uid
+        && d.banDecidedByName is string && d.banDecidedByName.size() <= 120
+        && d.banDecidedAt is string && d.banDecidedAt.size() <= 40
+        && d.get('banDecidedRole', '') in ['', 'admin', 'leader', 'deputy']
+        && d.decidedBy is string && d.decidedBy.size() <= 128
+        && d.decidedByName is string && d.decidedByName.size() <= 120
+        && d.decidedAt is string && d.decidedAt.size() <= 40
+        && (!('history' in d) || (d.history is list && d.history.size() <= 100))
+        && (
+          (request.method == 'create' && d.decidedBy == 'auto')
+          || (request.method == 'update' && resource.data.status == 'approved'
+              && resource.data.decidedBy == d.decidedBy
+              && resource.data.decidedAt == d.decidedAt
+              && resource.data.get('decidedByName', '') == d.decidedByName)
+        );
+    }
+    // = vnPermAs(role, 'vn.ns.support_approve') nhưng không duyệt cả vnDefaultPerms (rẻ hơn ~1 danh sách 25 khoá).
+    // Mặc định registry của khoá này: admin, gd_khoi, tro_ly_khoi (featureRegistry.ts) — đổi registry thì sửa cả ở đây (test live-cost kiểm tra).
+    function supportPermOk(role) {
+      let path = /databases/$(database)/documents/rolePermissions/$(role);
+      let pd = exists(path) ? get(path).data : {};
+      return role == 'super_admin' || isAppOwner()
+        || ('vn.ns.support_approve' in pd.get('knownKeys', [])
+              ? 'vn.ns.support_approve' in pd.get('permissions', [])
+              : role in ['admin', 'gd_khoi', 'tro_ly_khoi']);
+    }
+    // = blockInMyKhoi(blockId) nhưng không exists(blocks/…) riêng (Khối thiếu → get lỗi → từ chối).
+    function supportKhoiOk(blockId) {
+      let b = get(blockDocPath(blockId)).data;
+      let old = getUserData().get('migratedFromUid', '_NO_OLD_');
+      return blockId is string && blockId != '' && blockId != 'unassigned' && isValidId(blockId) && (
+        b.get('directorUid', '_NONE_') == request.auth.uid || request.auth.uid in b.get('assistantUids', [])
+        || b.get('directorUid', '_NONE_') == old || old in b.get('assistantUids', [])
+        || approvedKhoiManagerOf(blockId)
+        || (!(b.get('directorUid', '') is string && b.get('directorUid', '') != '') && (
+              blockId in myBlockKeys() || b.get('blockCode', '_NONE_') in myBlockKeys())));
+    }
+    function supportWriterOk(role, blockId) {
+      return supportPermOk(role) && (
+        isAppOwner() || role in ['admin', 'super_admin']
+        || (role in ['gd_khoi', 'tro_ly_khoi'] && supportKhoiOk(blockId)));
+    }
+    match /nsSupport/{lineId} {
+      // Phó Ban transaction reads before materializing an auto-approved Khối line.
+      // A missing support has no resource.data; authorize that get via its ns_lines project.
+      allow get: if isSignedIn() && resource == null
+        && isBanMgrOf(get(/databases/$(database)/documents/projects/$(get(nsLinePath(lineId)).data.projectId)).data.get('banKdId', ''));
+      allow read: if isSignedIn() && resource != null && (
+        resource.data.get('ownerUid', '') == request.auth.uid
+        || isAdmin() || isMod() || isAccountant()
+        || (isKhoiManagerRole() && blockInMyKhoi(resource.data.get('blockId', '')))
+        || (isGDKD() && vnGdkdOfTeamCheap(resource.data.get('teamId', '')))
+        // Ngân sách Ban: Trưởng/Phó Ban của Ban gắn dự án (isBanMgrOf) — không dùng isTruongBanKdRole() (quá rộng).
+        || isBanMgrOf(get(/databases/$(database)/documents/projects/$(resource.data.projectId)).data.get('banKdId', ''))
+      );
+      // Không exists(ns_lines) riêng: supportShapeOk/banSupportShapeOk get() dòng NS (thiếu → lỗi → từ chối). ≤10 reads.
+      // GĐK/Admin: supportWriterOk. Trưởng/Phó Ban (+ Admin/KT override): banSupportWriterOk — Trưởng Ban ưu tiên.
+      // Tách nhánh theo ý định (tránh vượt 1000 biểu thức khi người ghi vừa là GĐK vừa là Trưởng/Phó Ban):
+      // ghi quyết định Ban (banDecidedBy = mình, có đổi trường ban*) → CHỈ nhánh Ban; còn lại → CHỈ nhánh GĐK.
+      allow create, update: if isSignedIn() && vnPastOpen('ns', incoming().period) && (
+        isBanWrite()
+          ? (banSupportWriterOk(lineId) && banSupportShapeOk(lineId))
+          : (supportWriterOk(normalizedUserRole(), incoming().blockId) && supportShapeOk(lineId))
+      );
+      allow delete: if isAdmin();
+    }
+
+    // ---------------------------------------------------------------
+    // Lịch sử bản đăng ký NS MKT — nsLineHistory/{autoId}: CHỈ GHI THÊM. Không ai sửa / xoá (kể cả Admin).
+    // Định danh (lineId/period/kind/owner/team/block/project) phải khớp dòng ns_lines; byUid = người ghi.
+    // ---------------------------------------------------------------
+    function histShapeOk() {
+      let d = incoming();
+      let l = get(nsLinePath(d.lineId)).data;
+      return d.keys().hasOnly(['lineId', 'period', 'kind', 'ownerUid', 'teamId', 'blockId', 'projectId', 'action', 'changes', 'reason', 'prevStatus', 'byUid', 'byName', 'byRole', 'at'])
+        && d.keys().hasAll(['lineId', 'period', 'kind', 'ownerUid', 'teamId', 'blockId', 'projectId', 'action', 'changes', 'byUid', 'byName', 'byRole', 'at'])
+        && d.lineId is string && isValidId(d.lineId) && exists(nsLinePath(d.lineId))
+        && l.kind in ['user', 'khoi'] && d.kind == l.kind
+        && d.period == l.period && d.ownerUid == l.get('ownerUid', '') && d.teamId == l.get('teamId', '')
+        && d.blockId == l.get('blockId', '') && d.projectId == l.projectId
+        && d.action in ['create', 'update', 'delete', 'approved', 'rejected', 'pending']
+        && d.changes is list && d.changes.size() <= 10
+        && (!('reason' in d) || (d.reason is string && d.reason.size() <= 300))
+        && (!('prevStatus' in d) || (d.prevStatus is string && d.prevStatus.size() <= 20))
+        && d.byUid == request.auth.uid && d.byName is string && d.byName.size() <= 120 && d.byRole is string && d.byRole.size() <= 40
+        && d.at is string && d.at.size() <= 40;
+    }
+    match /nsLineHistory/{hid} {
+      allow read: if isSignedIn() && (
+        resource.data.get('ownerUid', '') == request.auth.uid
+        || isAdmin() || isMod() || isAccountant()
+        || (isKhoiManagerRole() && blockInMyKhoi(resource.data.get('blockId', '')))
+        || (isGDKD() && vnGdkdOfTeamCheap(resource.data.get('teamId', '')))
+      );
+      allow create: if isSignedIn() && histShapeOk() && (
+        // Thao tác trên dòng: người đăng ký, GĐKD của Phòng (sửa có lý do), GĐK/Trợ lý Khối của Khối, Admin.
+        (incoming().action in ['create', 'update', 'delete'] && (
+          isAdmin()
+          || incoming().ownerUid == request.auth.uid
+          || isGdkdOfTeam(incoming().teamId)
+          || (isKhoiManagerRole() && blockInMyKhoi(incoming().blockId))))
+        // Quyết định duyệt: GĐK/Trợ lý Khối của Khối, Admin (không tự duyệt khoản của mình).
+        || (incoming().action in ['approved', 'rejected', 'pending'] && incoming().ownerUid != request.auth.uid
+            && vnPerm('vn.ns.support_approve')
+            && (isAdmin() || (isKhoiManagerRole() && blockInMyKhoi(incoming().blockId))))
+      );
+      allow update, delete: if false;
+    }
+
+    // ---------------------------------------------------------------
+    // B4: Hóa đơn Nghiệm thu (metadata; file trên Drive thư mục Hóa đơn riêng). Admin/Mod ghi.
+    // ---------------------------------------------------------------
+    // Hoá đơn / ảnh gắn với Nghiệm thu: theo tháng của bản Nghiệm thu (chưa có bản ghi → không khoá theo kỳ).
+    function vnNtDocOpen(aid) {
+      return !(aid is string) || aid == ''
+        || !exists(/databases/$(database)/documents/acceptances/$(aid))
+        || vnNtMonthOpen(get(/databases/$(database)/documents/acceptances/$(aid)).data.get('month', ''));
+    }
+    // Khoá kỳ NT (khoá theo ngày) + khoá kỳ đã qua; Super Admin bỏ qua (trong vnUnlocked / vnPastOpen).
+    function vnNtMonthOpen(m) {
+      return (vnPastCfg('nt').get('on', false) != true || vnPastOpen('nt', m)) && vnUnlocked('nt', m);
+    }
+
+    match /acceptanceInvoices/{invId} {
+      allow read: if isSignedIn() && (isGDKD() ? gdkdTeamDocOk(resource.data) : (isInternalStaff() || isTruongBanKdRole() || isPhoBanKdRole() || hasPerm('report_nt.view')));
+      allow create: if (isAdmin() || isMod()) && vnPerm('vn.nt_invoices.upload')
+        && incoming().keys().hasOnly(['acceptanceId', 'fileId', 'name', 'origName', 'mime', 'size', 'webViewLink', 'path', 'order', 'uploadedBy', 'uploadedByName', 'uploadedAt', 'teamId'])
+        && (!('teamId' in incoming()) || incoming().teamId is string)
+        && incoming().acceptanceId is string && incoming().fileId is string && incoming().fileId.matches('^[a-zA-Z0-9_-]{10,}$')
+        && incoming().mime is string && incoming().mime.matches('application/(pdf|zip|x-zip-compressed|vnd[.]ms-excel|vnd[.]openxmlformats-officedocument[.]spreadsheetml[.]sheet)|image/(jpeg|png|webp|heic|heif)')
+        && incoming().uploadedBy == request.auth.uid && vnNtDocOpen(incoming().acceptanceId);
+      allow update: if (isAdmin() || isMod()) && incoming().diff(existing()).affectedKeys().hasOnly(['order']) && vnNtDocOpen(resource.data.get('acceptanceId', ''));
+      allow delete: if (isAdmin() || isMod()) && vnNtDocOpen(resource.data.get('acceptanceId', ''));
+    }
+
+    // Báo cáo tuần: user tự nộp trong cửa sổ đợt; quản lý chỉ đọc. Admin/Super Admin sửa mọi lúc.
+    // Cửa sổ (giờ VN, kỳ period=YYYY-MM = tháng M): đợt1 = 27–28/(M−1); đợt2 = 3–4/M; đợt3 = 11/M; đợt4 = 19–20/M.
+    function weeklyShapeOk(d, id) {
+      return d.period is string && d.period.matches('^[0-9]{4}-[0-9]{2}$')
+        && d.dot is int && d.dot >= 1 && d.dot <= 4
+        && d.uid is string && id == d.period + '_' + string(d.dot) + '_' + d.uid
+        && d.items is list && d.items.size() <= 60;
+    }
+    function vnWeeklyDotOpen(period, dot) {
+      let t = request.time + duration.value(7, 'h');
+      let M = vnMIdx(period);
+      let cur = t.year() * 12 + t.month();
+      let d = t.day();
+      return M > 0 && (
+        (dot == 1 && cur == M - 1 && (d == 27 || d == 28))
+        || (dot == 2 && cur == M && (d == 3 || d == 4))
+        || (dot == 3 && cur == M && d == 11)
+        || (dot == 4 && cur == M && (d == 19 || d == 20))
+      );
+    }
+    match /weekly_reports/{repId} {
+      allow read: if isSignedIn() && (
+        ((isInternalStaff() || isTruongBanKdRole() || isPhoBanKdRole()) && !isKhoiManagerRole() && !isGDKD())
+        || (isGDKD() && vnGdkdOfTeamCheap(resource.data.get('teamId', '')))
+        || resource.data.get('uid', '') == request.auth.uid
+        || (isKhoiManagerRole() && blockInMyKhoi(resource.data.get('blockId', '')))
+        || (normalizedUserRole() == 'gd_khoi' && vnInGdkdUids(resource.data.get('teamId', '')))
+      );
+      // Admin (vn.reports.admin_edit) / Super Admin sửa mọi lúc. User chỉ trong cửa sổ đợt (server-time VN).
+      allow create, update: if isSignedIn() && weeklyShapeOk(incoming(), repId) && (
+        (isAdmin() && vnPerm('vn.reports.admin_edit'))
+        || (incoming().get('deleted', false) != true && incoming().uid == request.auth.uid && (!isNonRegisteringRole() || isKhoiManagerRole()) && vnOnboarded()
+            && (resource == null || resource.data.uid == request.auth.uid)
+            && (isSuperAdmin() || vnWeeklyDotOpen(incoming().period, incoming().dot)))
+      );
+      allow delete: if isAdmin();
+    }
+
+    // Ảnh Nghiệm thu (metadata) — chỉ Admin/Mod ghi
+    match /acceptanceImages/{imgId} {
+      allow read: if isSignedIn() && (isGDKD() ? gdkdTeamDocOk(resource.data) : (isInternalStaff() || isTruongBanKdRole() || isPhoBanKdRole() || hasPerm('report_nt.view')));
+      allow create, update: if (isAdmin() || isMod()) && vnPerm('vn.nt_images.upload')
+        && incoming().acceptanceId is string && incoming().provider is string
+        && (!('caption' in incoming()) || (incoming().caption is string && incoming().caption.size() <= 500))
+        && vnNtDocOpen(incoming().acceptanceId);
+      allow delete: if (isAdmin() || isMod()) && vnNtDocOpen(resource.data.get('acceptanceId', ''));
+    }
+    // Nhà cung cấp lưu trữ dự phòng (staging / khi chưa có Drive): ảnh nén dạng data URL
+    match /acceptanceImageData/{imgId} {
+      allow read: if isSignedIn() && (isGDKD() ? gdkdTeamDocOk(resource.data) : (isInternalStaff() || isTruongBanKdRole() || isPhoBanKdRole() || hasPerm('report_nt.view')));
+      // Ảnh lưu tạm: gắn acceptanceId (bản mới) → theo kỳ của bản Nghiệm thu. Ảnh cũ chưa có acceptanceId → không khoá theo kỳ.
+      allow create: if (isAdmin() || isMod()) && incoming().dataUrl is string && incoming().dataUrl.size() < 900000
+        && (!('acceptanceId' in incoming()) || (incoming().acceptanceId is string && vnNtDocOpen(incoming().acceptanceId)));
+      allow delete: if (isAdmin() || isMod()) && vnNtDocOpen(resource.data.get('acceptanceId', ''));
+    }
+
+    // Link chia sẻ công khai: token = doc id (32 ký tự ngẫu nhiên). Ai có token được GET khi còn hạn và chưa thu hồi.
+    // Không cho LIST công khai. Chỉ Admin/Mod tạo/thu hồi.
+    match /shareLinks/{token} {
+      allow get: if (isAdmin() || isMod())
+        || (token.size() >= 24 && resource.data.get('revokedAt', null) == null
+            && resource.data.expiresAt is timestamp && resource.data.expiresAt > request.time);
+      allow list: if isAdmin() || isMod();
+      allow create: if (isAdmin() || isMod()) && vnPerm('vn.share_links.manage') && token.size() >= 24
+        && incoming().createdBy == request.auth.uid
+        && incoming().expiresAt is timestamp
+        && incoming().expiresAt <= request.time + duration.value(31, 'd')
+        && incoming().get('revokedAt', null) == null;
+      allow update: if (isAdmin() || isMod())
+        && incoming().diff(existing()).affectedKeys().hasOnly(['revokedAt', 'revokedBy']);
+      allow delete: if isAdmin();
+
+      // Bản sao ảnh cho link công khai (provider dự phòng). Đọc theo hiệu lực của link cha.
+      match /images/{imgId} {
+        allow read: if (isAdmin() || isMod()) || (
+          token.size() >= 24
+          && get(/databases/$(database)/documents/shareLinks/$(token)).data.get('revokedAt', null) == null
+          && get(/databases/$(database)/documents/shareLinks/$(token)).data.expiresAt > request.time
+        );
+        allow create: if (isAdmin() || isMod()) && incoming().dataUrl is string && incoming().dataUrl.size() < 900000;
+        allow delete: if isAdmin() || isMod();
+      }
+    }
+  }
+}

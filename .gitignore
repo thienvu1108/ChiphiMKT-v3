@@ -1,0 +1,18 @@
+node_modules/
+build/
+dist/
+coverage/
+.DS_Store
+*.log
+.env*
+!.env.example
+tmp/
+workspace/
+*.py
+.vercel
+
+# Real database dumps must NEVER be committed or shipped to the client.
+# Only the two empty placeholder files imported by the build are kept.
+/backups/*.json
+!/backups/block_budgets.json
+!/backups/reciprocal_budgets.json

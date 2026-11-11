@@ -1,0 +1,392 @@
+[
+  {
+    "file": "src/AuthenticatedApp.tsx",
+    "line": 12345,
+    "responsive": true,
+    "tag": "<Table>"
+  },
+  {
+    "file": "src/AuthenticatedApp.tsx",
+    "line": 13829,
+    "responsive": true,
+    "tag": "<Table>"
+  },
+  {
+    "file": "src/AuthenticatedApp.tsx",
+    "line": 14478,
+    "responsive": true,
+    "tag": "<Table>"
+  },
+  {
+    "file": "src/AuthenticatedApp.tsx",
+    "line": 15426,
+    "responsive": true,
+    "tag": "<Table>"
+  },
+  {
+    "file": "src/AuthenticatedApp.tsx",
+    "line": 16263,
+    "responsive": true,
+    "tag": "<Table>"
+  },
+  {
+    "file": "src/AuthenticatedApp.tsx",
+    "line": 16921,
+    "responsive": true,
+    "tag": "<Table>"
+  },
+  {
+    "file": "src/AuthenticatedApp.tsx",
+    "line": 17317,
+    "responsive": true,
+    "tag": "<Table>"
+  },
+  {
+    "file": "src/AuthenticatedApp.tsx",
+    "line": 17681,
+    "responsive": true,
+    "tag": "<Table>"
+  },
+  {
+    "file": "src/AuthenticatedApp.tsx",
+    "line": 18110,
+    "responsive": true,
+    "tag": "<Table className=\"min-w-[900px] table-fixed w-full\">"
+  },
+  {
+    "file": "src/AuthenticatedApp.tsx",
+    "line": 18413,
+    "responsive": true,
+    "tag": "<Table className=\"min-w-[900px] table-fixed w-full\">"
+  },
+  {
+    "file": "src/AuthenticatedApp.tsx",
+    "line": 18862,
+    "responsive": true,
+    "tag": "<Table>"
+  },
+  {
+    "file": "src/AuthenticatedApp.tsx",
+    "line": 19252,
+    "responsive": true,
+    "tag": "<Table className=\"min-w-[720px]\">"
+  },
+  {
+    "file": "src/AuthenticatedApp.tsx",
+    "line": 20826,
+    "responsive": true,
+    "tag": "<Table className=\"min-w-[560px]\">"
+  },
+  {
+    "file": "src/AuthenticatedApp.tsx",
+    "line": 21319,
+    "responsive": true,
+    "tag": "<Table>"
+  },
+  {
+    "file": "src/AuthenticatedApp.tsx",
+    "line": 23805,
+    "responsive": true,
+    "tag": "<Table className=\"min-w-[1000px] w-full table-auto text-[10px]\">"
+  },
+  {
+    "file": "src/AuthenticatedApp.tsx",
+    "line": 24117,
+    "responsive": true,
+    "tag": "<Table>"
+  },
+  {
+    "file": "src/components/AdminReciprocalBudgets.tsx",
+    "line": 1051,
+    "responsive": true,
+    "tag": "<Table>"
+  },
+  {
+    "file": "src/components/BanKdManagementView.tsx",
+    "line": 1073,
+    "responsive": true,
+    "tag": "<Table className=\"min-w-[480px]\">"
+  },
+  {
+    "file": "src/components/BanKdManagementView.tsx",
+    "line": 1319,
+    "responsive": true,
+    "tag": "<Table data-mh-responsive className=\"md:min-w-[640px]\">"
+  },
+  {
+    "file": "src/components/MktEfficiencyManager.tsx",
+    "line": 922,
+    "responsive": false,
+    "tag": "<table className=\"w-full text-left border-collapse\">"
+  },
+  {
+    "file": "src/components/BanKdManager.tsx",
+    "line": 1289,
+    "responsive": true,
+    "tag": "<Table className=\"min-w-[480px]\">"
+  },
+  {
+    "file": "src/components/BlockReciprocalRegistration.tsx",
+    "line": 820,
+    "responsive": true,
+    "tag": "<Table>"
+  },
+  {
+    "file": "src/components/AcceptanceManager.tsx",
+    "line": 1685,
+    "responsive": false,
+    "tag": "<table className=\"w-full text-[11px]\">"
+  },
+  {
+    "file": "src/components/AcceptanceManager.tsx",
+    "line": 2109,
+    "responsive": false,
+    "tag": "<table className=\"w-full text-left border-collapse min-w-[1800px] sm:min-w-[2400px] caption-bottom text-[11px] sm:text-sm [&_th]:px-1.5 [&_td]:px-1 sm:[&_th]:px-2 sm:[&_td]:px-2\">"
+  },
+  {
+    "file": "src/components/MktProcessManager.tsx",
+    "line": 508,
+    "responsive": true,
+    "tag": "<Table id=\"mkt-process-table\" className=\"min-w-[640px]\">"
+  },
+  {
+    "file": "src/vnext/TeamPage.tsx",
+    "line": 133,
+    "responsive": true,
+    "tag": "<table data-mh-responsive className=\"w-full\" data-testid=\"vn-team-members\">"
+  },
+  {
+    "file": "src/vnext/TeamPage.tsx",
+    "line": 166,
+    "responsive": true,
+    "tag": "<table data-mh-responsive className=\"w-full\">"
+  },
+  {
+    "file": "src/vnext/TeamPage.tsx",
+    "line": 218,
+    "responsive": true,
+    "tag": "<table data-mh-responsive className=\"w-full\">"
+  },
+  {
+    "file": "src/vnext/LegacyBudgetPage.tsx",
+    "line": 80,
+    "responsive": true,
+    "tag": "<table data-mh-responsive className=\"w-full\">"
+  },
+  {
+    "file": "src/vnext/ChangeLogPanel.tsx",
+    "line": 62,
+    "responsive": false,
+    "tag": "<table className=\"w-full min-w-[720px]\">"
+  },
+  {
+    "file": "src/vnext/ChangeLogPanel.tsx",
+    "line": 82,
+    "responsive": true,
+    "tag": "<table data-mh-responsive className=\"w-full\">"
+  },
+  {
+    "file": "src/vnext/ntDeck.tsx",
+    "line": 106,
+    "responsive": false,
+    "tag": "<table className=\"w-full self-start\">"
+  },
+  {
+    "file": "src/vnext/ntDeck.tsx",
+    "line": 110,
+    "responsive": false,
+    "tag": "<table className=\"w-full self-start\">"
+  },
+  {
+    "file": "src/vnext/ntDeck.tsx",
+    "line": 121,
+    "responsive": false,
+    "tag": "<table className=\"w-full\">"
+  },
+  {
+    "file": "src/vnext/RenameUser.tsx",
+    "line": 76,
+    "responsive": true,
+    "tag": "<table data-mh-responsive className=\"w-full\" data-testid=\"vn-khoi-members\">"
+  },
+  {
+    "file": "src/vnext/BackupPanel.tsx",
+    "line": 69,
+    "responsive": false,
+    "tag": "<table className=\"w-full min-w-[560px]\">"
+  },
+  {
+    "file": "src/vnext/BackupPanel.tsx",
+    "line": 104,
+    "responsive": true,
+    "tag": "<table data-mh-responsive className=\"w-full\">"
+  },
+  {
+    "file": "src/vnext/batchViews.tsx",
+    "line": 500,
+    "responsive": true,
+    "tag": "<table data-mh-responsive className=\"w-full\" data-testid=\"vn-err-table\">"
+  },
+  {
+    "file": "src/vnext/batchViews.tsx",
+    "line": 585,
+    "responsive": true,
+    "tag": "<table data-mh-responsive className=\"w-full\">"
+  },
+  {
+    "file": "src/vnext/weeklyViews.tsx",
+    "line": 147,
+    "responsive": true,
+    "tag": "<table data-mh-responsive className=\"w-full\">"
+  },
+  {
+    "file": "src/vnext/weeklyViews.tsx",
+    "line": 262,
+    "responsive": false,
+    "tag": "<table className=\"w-full min-w-[980px]\">"
+  },
+  {
+    "file": "src/vnext/weeklyViews.tsx",
+    "line": 357,
+    "responsive": false,
+    "tag": "<table className=\"w-full min-w-[820px]\">"
+  },
+  {
+    "file": "src/vnext/weeklyViews.tsx",
+    "line": 397,
+    "responsive": true,
+    "tag": "<table data-mh-responsive className=\"w-full\">"
+  },
+  {
+    "file": "src/vnext/weeklyViews.tsx",
+    "line": 429,
+    "responsive": false,
+    "tag": "<table className=\"w-full min-w-[640px]\">"
+  },
+  {
+    "file": "src/vnext/BanNsApprovePanel.tsx",
+    "line": 392,
+    "responsive": true,
+    "tag": "<table data-mh-responsive className=\"w-full text-[13px]\">"
+  },
+  {
+    "file": "src/vnext/BanNsApprovePanel.tsx",
+    "line": 467,
+    "responsive": true,
+    "tag": "<table data-mh-responsive className=\"w-full text-[13px]\">"
+  },
+  {
+    "file": "src/vnext/BanKdPanels.tsx",
+    "line": 186,
+    "responsive": true,
+    "tag": "<table data-mh-responsive className=\"w-full\">"
+  },
+  {
+    "file": "src/vnext/BanKdPanels.tsx",
+    "line": 308,
+    "responsive": true,
+    "tag": "<table data-mh-responsive className=\"w-full\" data-testid=\"vn-ban-policy-table\">"
+  },
+  {
+    "file": "src/vnext/BanKdPanels.tsx",
+    "line": 345,
+    "responsive": true,
+    "tag": "<table data-mh-responsive className=\"w-full\">"
+  },
+  {
+    "file": "src/vnext/BanKdPanels.tsx",
+    "line": 394,
+    "responsive": true,
+    "tag": "<table data-mh-responsive className=\"w-full\">"
+  },
+  {
+    "file": "src/vnext/SupportViews.tsx",
+    "line": 318,
+    "responsive": false,
+    "tag": "<table className=\"w-full\" data-testid=\"vn-support-table\">"
+  },
+  {
+    "file": "src/vnext/SupportViews.tsx",
+    "line": 412,
+    "responsive": false,
+    "tag": "<table className=\"w-full table-fixed min-w-[980px]\" data-testid=\"vn-admin-ns-table\">"
+  },
+  {
+    "file": "src/vnext/NtReportPage.tsx",
+    "line": 153,
+    "responsive": true,
+    "tag": "<table data-mh-responsive className=\"w-full text-[13px]\">"
+  },
+  {
+    "file": "src/vnext/NtReportPage.tsx",
+    "line": 338,
+    "responsive": true,
+    "tag": "<table data-mh-responsive className=\"w-full\">"
+  },
+  {
+    "file": "src/vnext/NtReportPage.tsx",
+    "line": 422,
+    "responsive": true,
+    "tag": "<table data-mh-responsive className=\"w-full\">"
+  },
+  {
+    "file": "src/vnext/budgetViews.tsx",
+    "line": 67,
+    "responsive": true,
+    "tag": "<table data-mh-responsive className=\"w-full\">"
+  },
+  {
+    "file": "src/vnext/budgetViews.tsx",
+    "line": 177,
+    "responsive": true,
+    "tag": "<table data-mh-responsive className=\"w-full\">"
+  },
+  {
+    "file": "src/vnext/budgetViews.tsx",
+    "line": 219,
+    "responsive": true,
+    "tag": "<table data-mh-responsive className=\"w-full\">"
+  },
+  {
+    "file": "src/vnext/budgetViews.tsx",
+    "line": 292,
+    "responsive": true,
+    "tag": "<table data-mh-responsive className=\"w-full\">"
+  },
+  {
+    "file": "src/vnext/budgetViews.tsx",
+    "line": 418,
+    "responsive": true,
+    "tag": "<table data-mh-responsive className=\"w-full\">"
+  },
+  {
+    "file": "src/vnext/budgetViews.tsx",
+    "line": 434,
+    "responsive": true,
+    "tag": "<table data-mh-responsive className=\"w-full\">"
+  },
+  {
+    "file": "src/vnext/budgetViews.tsx",
+    "line": 505,
+    "responsive": true,
+    "tag": "<table data-mh-responsive className=\"w-full\">"
+  },
+  {
+    "file": "src/vnext/KycViews.tsx",
+    "line": 212,
+    "responsive": true,
+    "tag": "<table data-mh-responsive className=\"w-full\">"
+  },
+  {
+    "file": "src/vnext/SupportInfoPage.tsx",
+    "line": 50,
+    "responsive": true,
+    "tag": "<table data-mh-responsive className=\"w-full\" data-testid=\"vn-info-table\">"
+  },
+  {
+    "file": "components/ui/table.tsx",
+    "line": 11,
+    "responsive": true,
+    "tag": "<table\n        data-slot=\"table\"\n        data-mh-responsive\n        className={cn(\"w-full caption-bottom text-sm\", className)}\n        {...props}\n      />"
+  }
+]

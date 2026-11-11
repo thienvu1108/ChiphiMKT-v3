@@ -1,0 +1,214 @@
+/**
+ * ChiphiMKT Design System — Design Tokens
+ * Brand: MAYHOMES Corporate Clean
+ * Stack: React 19 + Vite + Tailwind CSS v4 + shadcn/ui + Be Vietnam Pro
+ * Cập nhật: 2026-11-03 (Asia/Saigon)
+ *
+ * Cách dùng: import vào src/index.css (thay hoặc đồng bộ với :root hiện tại).
+ * Giữ nguyên tên biến shadcn (--primary, --background…) để components/ui/* không đổi.
+ */
+
+:root {
+  /* —— Brand MAYHOMES —— */
+  --mh-navy: #1A4BAC;
+  --mh-navy-hover: #143C8A;
+  --mh-navy-pressed: #0F2F6C;
+  --mh-navy-50: #EEF3FC;
+  --mh-navy-100: #DCE6F8;
+  --mh-navy-200: #B8CDEF;
+  --mh-accent: #F26A21;
+  --mh-accent-hover: #D95A16;
+  --mh-accent-soft: #FEF0E8;
+
+  /* —— Surfaces —— */
+  --mh-bg: #F5F7FA;
+  --mh-surface: #FFFFFF;
+  --mh-surface-2: #F2F5F9;
+  --mh-border: #E3E8EF;
+  --mh-border-strong: #C9D4E5;
+  --mh-sticky: #E8EEF8;
+
+  /* —— Text —— */
+  --mh-text: #0F1B2D;
+  --mh-text-2: #5B6B82;
+  --mh-text-3: #8A97AB;
+  --mh-text-inverse: #FFFFFF;
+
+  /* —— Semantic status (duyệt / ngân sách / NT) —— */
+  --mh-ok: #12805C;
+  --mh-ok-soft: #E7F5EF;
+  --mh-warn: #B45309;
+  --mh-warn-soft: #FEF3E2;
+  --mh-err: #C2362B;
+  --mh-err-soft: #FCEBEA;
+  --mh-info: #2563EB;
+  --mh-info-soft: #E8F0FE;
+  --mh-pending: #7C3AED;          /* chờ duyệt (Khối/Ban) */
+  --mh-pending-soft: #F3E8FF;
+  --mh-draft: #64748B;
+  --mh-draft-soft: #F1F5F9;
+
+  /* —— shadcn semantic (light) —— */
+  --background: var(--mh-bg);
+  --foreground: var(--mh-text);
+  --card: var(--mh-surface);
+  --card-foreground: var(--mh-text);
+  --popover: var(--mh-surface);
+  --popover-foreground: var(--mh-text);
+  --primary: var(--mh-navy);
+  --primary-foreground: #FFFFFF;
+  --secondary: var(--mh-navy-50);
+  --secondary-foreground: var(--mh-navy-hover);
+  --muted: var(--mh-surface-2);
+  --muted-foreground: var(--mh-text-2);
+  --accent: var(--mh-accent);
+  --accent-foreground: #FFFFFF;
+  --destructive: var(--mh-err);
+  --border: var(--mh-border);
+  --input: var(--mh-border);
+  --ring: var(--mh-navy);
+
+  /* Charts — Recharts */
+  --chart-1: #1A4BAC;   /* primary series */
+  --chart-2: #F26A21;   /* cost / accent */
+  --chart-3: #12805C;   /* positive / ROI */
+  --chart-4: #B45309;   /* warning */
+  --chart-5: #5B6B82;   /* muted / comparison */
+
+  /* Radius scale (base 10px = 0.625rem) */
+  --radius: 0.625rem;
+
+  /* Spacing scale — dense dashboard (8–32px) */
+  --space-1: 0.25rem;   /* 4 */
+  --space-2: 0.5rem;    /* 8 */
+  --space-3: 0.75rem;   /* 12 */
+  --space-4: 1rem;      /* 16 */
+  --space-5: 1.25rem;   /* 20 */
+  --space-6: 1.5rem;    /* 24 */
+  --space-8: 2rem;      /* 32 */
+  --space-10: 2.5rem;   /* 40 */
+  --space-12: 3rem;     /* 48 */
+
+  /* Elevation */
+  --shadow-xs: 0 1px 2px rgb(15 27 45 / 0.04);
+  --shadow-sm: 0 1px 3px rgb(15 27 45 / 0.06), 0 1px 2px rgb(15 27 45 / 0.04);
+  --shadow-md: 0 4px 12px rgb(15 27 45 / 0.08), 0 2px 4px rgb(15 27 45 / 0.04);
+  --shadow-lg: 0 12px 32px rgb(15 27 45 / 0.12), 0 4px 8px rgb(15 27 45 / 0.06);
+  --shadow-focus: 0 0 0 3px rgb(26 75 172 / 0.28);
+
+  /* Layout */
+  --sidebar-width: 248px;
+  --sidebar-collapsed: 72px;
+  --header-height: 56px;
+  --header-height-mobile: 52px;
+  --bottom-nav-height: 64px;
+  --content-max: 1440px;
+  --z-sticky: 20;
+  --z-header: 40;
+  --z-sidebar: 50;
+  --z-overlay: 60;
+  --z-modal: 70;
+  --z-toast: 80;
+
+  /* Motion */
+  --ease-standard: cubic-bezier(0.2, 0, 0, 1);
+  --duration-fast: 120ms;
+  --duration-normal: 200ms;
+  --duration-slow: 320ms;
+
+  /* Sidebar (shadcn) */
+  --sidebar: #FFFFFF;
+  --sidebar-foreground: var(--mh-text);
+  --sidebar-primary: var(--mh-navy);
+  --sidebar-primary-foreground: #FFFFFF;
+  --sidebar-accent: var(--mh-navy-50);
+  --sidebar-accent-foreground: var(--mh-navy);
+  --sidebar-border: var(--mh-border);
+  --sidebar-ring: var(--mh-navy);
+}
+
+/* Dark mode — giữ nhận diện MAYHOMES (không dùng xám trung tính thuần) */
+.dark {
+  --mh-navy: #5B8DEF;
+  --mh-navy-hover: #7AA3F5;
+  --mh-navy-pressed: #3D6FD4;
+  --mh-navy-50: #1A2744;
+  --mh-navy-100: #243356;
+  --mh-navy-200: #31456E;
+  --mh-accent: #FF8A4A;
+  --mh-accent-hover: #FF9E6B;
+  --mh-accent-soft: #3A2418;
+
+  --mh-bg: #0B1220;
+  --mh-surface: #121A2B;
+  --mh-surface-2: #1A2336;
+  --mh-border: rgb(255 255 255 / 0.10);
+  --mh-border-strong: rgb(255 255 255 / 0.16);
+  --mh-sticky: #1A2744;
+
+  --mh-text: #F1F5F9;
+  --mh-text-2: #94A3B8;
+  --mh-text-3: #64748B;
+  --mh-text-inverse: #0B1220;
+
+  --mh-ok: #34D399;
+  --mh-ok-soft: #0F2E24;
+  --mh-warn: #FBBF24;
+  --mh-warn-soft: #3A2A0A;
+  --mh-err: #F87171;
+  --mh-err-soft: #3A1515;
+  --mh-info: #60A5FA;
+  --mh-info-soft: #15253F;
+  --mh-pending: #C4B5FD;
+  --mh-pending-soft: #2A1F45;
+  --mh-draft: #94A3B8;
+  --mh-draft-soft: #1E293B;
+
+  --background: var(--mh-bg);
+  --foreground: var(--mh-text);
+  --card: var(--mh-surface);
+  --card-foreground: var(--mh-text);
+  --popover: var(--mh-surface);
+  --popover-foreground: var(--mh-text);
+  --primary: var(--mh-navy);
+  --primary-foreground: #0B1220;
+  --secondary: var(--mh-navy-50);
+  --secondary-foreground: #DCE6F8;
+  --muted: var(--mh-surface-2);
+  --muted-foreground: var(--mh-text-2);
+  --accent: var(--mh-accent);
+  --accent-foreground: #0B1220;
+  --destructive: var(--mh-err);
+  --border: var(--mh-border);
+  --input: var(--mh-border-strong);
+  --ring: var(--mh-navy);
+
+  --chart-1: #5B8DEF;
+  --chart-2: #FF8A4A;
+  --chart-3: #34D399;
+  --chart-4: #FBBF24;
+  --chart-5: #94A3B8;
+
+  --shadow-xs: 0 1px 2px rgb(0 0 0 / 0.35);
+  --shadow-sm: 0 1px 3px rgb(0 0 0 / 0.4);
+  --shadow-md: 0 4px 12px rgb(0 0 0 / 0.45);
+  --shadow-lg: 0 12px 32px rgb(0 0 0 / 0.55);
+  --shadow-focus: 0 0 0 3px rgb(91 141 239 / 0.4);
+
+  --sidebar: #121A2B;
+  --sidebar-foreground: var(--mh-text);
+  --sidebar-primary: var(--mh-navy);
+  --sidebar-primary-foreground: #0B1220;
+  --sidebar-accent: var(--mh-navy-50);
+  --sidebar-accent-foreground: #DCE6F8;
+  --sidebar-border: var(--mh-border);
+  --sidebar-ring: var(--mh-navy);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  :root {
+    --duration-fast: 0ms;
+    --duration-normal: 0ms;
+    --duration-slow: 0ms;
+  }
+}

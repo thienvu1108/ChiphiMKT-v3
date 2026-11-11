@@ -1,0 +1,435 @@
+{
+  "entities": {
+    "User": {
+      "title": "User",
+      "description": "User profile with roles and project assignments",
+      "type": "object",
+      "properties": {
+        "email": { "type": "string" },
+        "role": { 
+          "type": "string", 
+          "enum": ["super_admin", "admin", "mod", "user", "gd_khoi", "gdkd"] 
+        },
+        "displayName": { "type": "string" },
+        "fullName": { "type": "string" },
+        "teamName": { "type": "string" },
+        "teamId": { "type": "string", "description": "Team ID the user belongs to" },
+        "teamCode": { "type": "string", "description": "Team code the user belongs to" },
+        "assignedBlock": { "type": "string", "description": "Block ID assigned to GĐ Khối (e.g. EG01)" },
+        "assignedProjects": { 
+          "type": "array", 
+          "items": { "type": "string" },
+          "description": "List of project IDs assigned to Mod"
+        },
+        "createdAt": { "type": "string", "format": "date-time" },
+        "updatedAt": { "type": "string", "format": "date-time" }
+      }
+    },
+    "Block": {
+      "title": "Block",
+      "description": "A business block/group containing multiple teams",
+      "type": "object",
+      "properties": {
+        "name": { "type": "string", "description": "Block name (e.g., Khối EG01)" },
+        "blockCode": { "type": "string", "description": "Block code unique ID (e.g., EG01)" },
+        "teamPrefix": { "type": "string", "description": "The first two characters shared by sub-teams (e.g., MH)" },
+        "createdAt": { "type": "string", "format": "date-time" },
+        "createdBy": { "type": "string" }
+      },
+      "required": ["name", "blockCode", "teamPrefix"]
+    },
+    "Project": {
+      "title": "Project",
+      "description": "A real estate project",
+      "type": "object",
+      "properties": {
+        "name": { "type": "string", "description": "Project name" },
+        "projectCode": { "type": "string", "description": "Project unique code (e.g., DA-VLP)" },
+        "description": { "type": "string", "description": "Project description" },
+        "region": { "type": "string", "description": "Region name" },
+        "type": { "type": "string", "description": "Project type" },
+        "banKdId": { "type": "string", "description": "ID of Ban KD (Business Division)" },
+        "banKdName": { "type": "string", "description": "Name of Ban KD (Business Division)" },
+        "createdAt": { "type": "string", "format": "date-time" },
+        "createdBy": { "type": "string" }
+      },
+      "required": ["name"]
+    },
+    "Team": {
+      "title": "Team",
+      "description": "A marketing team",
+      "type": "object",
+      "properties": {
+        "name": { "type": "string", "description": "Team name" },
+        "teamCode": { "type": "string", "description": "Team unique code (e.g., MAY01.1)" },
+        "createdAt": { "type": "string", "format": "date-time" },
+        "createdBy": { "type": "string" }
+      },
+      "required": ["name"]
+    },
+    "BudgetRegistration": {
+      "title": "Budget Registration",
+      "description": "Monthly budget registration by a team for a project",
+      "type": "object",
+      "properties": {
+        "projectId": { "type": "string" },
+        "projectName": { "type": "string" },
+        "teamName": { "type": "string" },
+        "month": { "type": "string", "description": "YYYY-MM" },
+        "amount": { "type": "number" },
+        "verifiedAmount": { "type": "number", "description": "Admin verified actual cost after inspection" },
+        "notes": { "type": "string" },
+        "createdAt": { "type": "string", "format": "date-time" },
+        "createdBy": { "type": "string" },
+        "userEmail": { "type": "string" },
+        "assignedUserEmail": { "type": "string", "description": "Email of user assigned to handle this budget" }
+      },
+      "required": ["projectId", "teamName", "month", "amount"]
+    },
+    "WeeklyCost": {
+      "title": "Weekly Cost",
+      "description": "Actual marketing cost spent weekly",
+      "type": "object",
+      "properties": {
+        "projectId": { "type": "string" },
+        "projectName": { "type": "string" },
+        "weekNumber": { "type": "number" },
+        "startDate": { "type": "string", "format": "date" },
+        "endDate": { "type": "string", "format": "date" },
+        "amount": { "type": "number", "description": "Total actual cost for the week" },
+        "visaAmount": { "type": "number", "description": "Cost run via company visa card" },
+        "digitalAmount": { "type": "number", "description": "Cost run via digital agency" },
+        "notes": { "type": "string" },
+        "createdAt": { "type": "string", "format": "date-time" },
+        "createdBy": { "type": "string" },
+        "userEmail": { "type": "string" },
+        "assignedUserEmail": { "type": "string", "description": "Email of user assigned to handle the related budget" }
+      },
+      "required": ["projectId", "weekNumber", "amount"]
+    },
+    "AuditLog": {
+      "title": "Audit Log",
+      "description": "History of changes",
+      "type": "object",
+      "properties": {
+        "action": { "type": "string" },
+        "collection": { "type": "string" },
+        "docId": { "type": "string" },
+        "data": { "type": "object" },
+        "timestamp": { "type": "string", "format": "date-time" },
+        "userEmail": { "type": "string" },
+        "userId": { "type": "string" }
+      }
+    },
+    "Region": {
+      "title": "Region",
+      "description": "A geographic region or area",
+      "type": "object",
+      "properties": {
+        "name": { "type": "string" },
+        "createdAt": { "type": "string", "format": "date-time" },
+        "createdBy": { "type": "string" }
+      },
+      "required": ["name"]
+    },
+    "Type": {
+      "title": "Type",
+      "description": "A project type (e.g., High-rise, Low-rise)",
+      "type": "object",
+      "properties": {
+        "name": { "type": "string" },
+        "createdAt": { "type": "string", "format": "date-time" },
+        "createdBy": { "type": "string" }
+      },
+      "required": ["name"]
+    },
+    "BlockBudget": {
+      "title": "Block Budget Registration",
+      "description": "Marketing budget registration by block and project",
+      "type": "object",
+      "properties": {
+        "blockId": { "type": "string" },
+        "blockCode": { "type": "string" },
+        "blockName": { "type": "string" },
+        "projectId": { "type": "string" },
+        "projectName": { "type": "string" },
+        "month": { "type": "string", "description": "YYYY-MM" },
+        "amount": { "type": "number" },
+        "banKdId": { "type": "string", "description": "ID of Ban KD" },
+        "banKdName": { "type": "string", "description": "Name of Ban KD" },
+        "notes": { "type": "string" },
+        "createdAt": { "type": "string", "format": "date-time" },
+        "updatedAt": { "type": "string", "format": "date-time" },
+        "createdBy": { "type": "string" },
+        "userEmail": { "type": "string" },
+        "creatorName": { "type": "string" }
+      },
+      "required": ["blockId", "projectId", "month", "amount"]
+    },
+    "EfficiencyReport": {
+      "title": "Efficiency Report",
+      "description": "Actual sales and revenue performance by team and project",
+      "type": "object",
+      "properties": {
+        "projectId": { "type": "string" },
+        "projectName": { "type": "string" },
+        "teamId": { "type": "string" },
+        "teamName": { "type": "string" },
+        "month": { "type": "string", "description": "YYYY-MM" },
+        "salesCount": { "type": "number" },
+        "revenue": { "type": "number" },
+        "createdAt": { "type": "string", "format": "date-time" },
+        "updatedAt": { "type": "string", "format": "date-time" },
+        "createdBy": { "type": "string" },
+        "createdByEmail": { "type": "string" }
+      },
+      "required": ["projectId", "teamId", "month"]
+    },
+    "Setting": {
+      "title": "System Settings",
+      "description": "Global configuration settings",
+      "type": "object",
+      "properties": {
+        "updatedAt": { "type": "string", "format": "date-time" },
+        "updatedBy": { "type": "string" }
+      }
+    },
+    "Acceptance": {
+      "title": "Acceptance",
+      "description": "Monthly marketing cost acceptance/finalization",
+      "type": "object",
+      "properties": {
+        "month": { "type": "string", "description": "YYYY-MM" },
+        "teamId": { "type": "string" },
+        "teamCode": { "type": "string" },
+        "teamName": { "type": "string" },
+        "projectId": { "type": "string" },
+        "projectCode": { "type": "string" },
+        "projectName": { "type": "string" },
+        "facebookCost": { "type": "number" },
+        "zaloCost": { "type": "number" },
+        "googleCost": { "type": "number" },
+        "tiktokCost": { "type": "number" },
+        "postingCost": { "type": "number" },
+        "otherCost": { "type": "number" },
+        "totalCost": { "type": "number" },
+        "beforeAcceptanceCost": { "type": "number" },
+        "afterAcceptanceCost": { "type": "number" },
+        "visaCost": { "type": "number" },
+        "digitalCost": { "type": "number" },
+        "crmCost": { "type": "number" },
+        "status": { 
+          "type": "string", 
+          "enum": ["Trước nghiệm thu", "Đã nghiệm thu"] 
+        },
+        "acceptanceType": {
+          "type": "string",
+          "enum": ["Chi phí không đổi", "Chi phí thay đổi"]
+        },
+        "createdAt": { "type": "string", "format": "date-time" },
+        "updatedAt": { "type": "string", "format": "date-time" },
+        "createdBy": { "type": "string" }
+      },
+      "required": ["month", "teamId", "projectId"]
+    },
+    "SupportRequest": {
+      "title": "Support Request",
+      "description": "User support requests and admin responses",
+      "type": "object",
+      "properties": {
+        "title": { "type": "string" },
+        "content": { "type": "string" },
+        "category": { 
+          "type": "string", 
+          "enum": ["Kỹ thuật", "Quy trình", "Ngân sách", "Khác"] 
+        },
+        "status": { 
+          "type": "string", 
+          "enum": ["Chờ xử lý", "Đang xử lý", "Đã phản hồi", "Đã đóng"] 
+        },
+        "priority": { 
+          "type": "string", 
+          "enum": ["Thấp", "Trung bình", "Cao"] 
+        },
+        "userId": { "type": "string" },
+        "userEmail": { "type": "string" },
+        "userName": { "type": "string" },
+        "adminReply": { "type": "string" },
+        "repliedBy": { "type": "string" },
+        "repliedAt": { "type": "string", "format": "date-time" },
+        "createdAt": { "type": "string", "format": "date-time" },
+        "updatedAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["title", "content", "userId"]
+    },
+    "DocProcessing": {
+      "title": "Document Processing",
+      "description": "Records for accounting department to reconcile documents",
+      "type": "object",
+      "properties": {
+        "projectId": { "type": "string" },
+        "teamId": { "type": "string" },
+        "confirmation": { 
+          "type": "string",
+          "enum": ["Chưa đối soát", "Khớp hồ sơ", "Không khớp hồ sơ"]
+        },
+        "note": { "type": "string" },
+        "updatedAt": { "type": "string", "format": "date-time" },
+        "updatedBy": { "type": "string" },
+        "updatedByEmail": { "type": "string" }
+      },
+      "required": ["projectId", "teamId", "confirmation"]
+    },
+    "RolePermission": {
+      "title": "Role Permission",
+      "description": "Role-based feature permissions mapping",
+      "type": "object",
+      "properties": {
+        "role": { "type": "string" },
+        "permissions": {
+          "type": "array",
+          "items": { "type": "string" }
+        },
+        "updatedAt": { "type": "string", "format": "date-time" },
+        "updatedBy": { "type": "string" }
+      },
+      "required": ["role", "permissions"]
+    },
+    "TeamNotification": {
+      "title": "Team Notification",
+      "description": "Notification sent to team members on budget updates or important changes",
+      "type": "object",
+      "properties": {
+        "type": { "type": "string" },
+        "title": { "type": "string" },
+        "message": { "type": "string" },
+        "projectId": { "type": "string" },
+        "projectName": { "type": "string" },
+        "teamId": { "type": "string" },
+        "teamName": { "type": "string" },
+        "month": { "type": "string" },
+        "oldAmount": { "type": "number" },
+        "newAmount": { "type": "number" },
+        "updatedByName": { "type": "string" },
+        "updatedByEmail": { "type": "string" },
+        "targetEmails": {
+          "type": "array",
+          "items": { "type": "string" }
+        },
+        "readBy": {
+          "type": "array",
+          "items": { "type": "string" }
+        },
+        "createdAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["title", "message"]
+    },
+    "BanKD": {
+      "title": "Ban Kinh Doanh",
+      "description": "Business Division managing projects, assignments, and contact personnel",
+      "type": "object",
+      "properties": {
+        "name": { "type": "string", "description": "Name of Ban KD" },
+        "code": { "type": "string", "description": "Unique code of Ban KD (e.g. BKD-01)" },
+        "description": { "type": "string", "description": "Description of Ban KD" },
+        "leaderName": { "type": "string", "description": "Leader / Head of Division name" },
+        "leaderPhone": { "type": "string", "description": "Leader phone number" },
+        "leaderEmail": { "type": "string", "description": "Leader email" },
+        "contacts": {
+          "type": "array",
+          "description": "List of personnel and positions in this Ban KD",
+          "items": {
+            "type": "object",
+            "properties": {
+              "id": { "type": "string" },
+              "name": { "type": "string" },
+              "title": { "type": "string" },
+              "phone": { "type": "string" },
+              "email": { "type": "string" },
+              "notes": { "type": "string" }
+            },
+            "required": ["name", "title"]
+          }
+        },
+        "createdAt": { "type": "string", "format": "date-time" },
+        "updatedAt": { "type": "string", "format": "date-time" },
+        "createdBy": { "type": "string" }
+      },
+      "required": ["name"]
+    }
+  },
+  "firestore": {
+    "/ban_kd/{banKdId}": {
+      "schema": "BanKD",
+      "description": "Ban Kinh Doanh (Business Divisions) collection"
+    },
+    "/teamNotifications/{notifId}": {
+      "schema": "TeamNotification",
+      "description": "Team notifications for budget updates"
+    },
+    "/users/{userId}": {
+      "schema": "User",
+      "description": "User profiles"
+    },
+    "/projects/{projectId}": {
+      "schema": "Project",
+      "description": "Projects collection"
+    },
+    "/teams/{teamId}": {
+      "schema": "Team",
+      "description": "Teams collection"
+    },
+    "/blocks/{blockId}": {
+      "schema": "Block",
+      "description": "Blocks (Khối) collection"
+    },
+    "/block_budgets/{blockBudgetId}": {
+      "schema": "BlockBudget",
+      "description": "Block Marketing Budget Registrations"
+    },
+    "/efficiencyReports/{reportId}": {
+      "schema": "EfficiencyReport",
+      "description": "Actual sales efficiency reports"
+    },
+    "/budgets/{budgetId}": {
+      "schema": "BudgetRegistration",
+      "description": "Monthly budget registrations"
+    },
+    "/costs/{costId}": {
+      "schema": "WeeklyCost",
+      "description": "Weekly actual costs"
+    },
+    "/acceptances/{acceptanceId}": {
+      "schema": "Acceptance",
+      "description": "Monthly cost acceptance records"
+    },
+    "/supportRequests/{requestId}": {
+      "schema": "SupportRequest",
+      "description": "User support and help requests"
+    },
+    "/docProcessing/{docId}": {
+      "schema": "DocProcessing",
+      "description": "Document reconciliation status records"
+    },
+    "/auditLogs/{logId}": {
+      "schema": "AuditLog",
+      "description": "Audit logs for tracking changes"
+    },
+    "/regions/{regionId}": {
+      "schema": "Region",
+      "description": "Geographic regions"
+    },
+    "/types/{typeId}": {
+      "schema": "Type",
+      "description": "Project types"
+    },
+    "/settings/{settingId}": {
+      "schema": "Setting",
+      "description": "Global system settings"
+    },
+    "/rolePermissions/{roleId}": {
+      "schema": "RolePermission",
+      "description": "Role-based feature permissions mapping"
+    }
+  }
+}
