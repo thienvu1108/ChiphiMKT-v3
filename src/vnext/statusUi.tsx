@@ -18,7 +18,7 @@ export function SummaryBox({ split, onPick, active, testId }: { split: Split; on
       className={`text-left rounded-xl border px-3 py-2 min-w-0 ${onPick ? 'cursor-pointer hover:shadow-sm' : 'cursor-default'} ${active === key && key ? 'ring-2 ring-offset-1' : ''}`}
       style={{ background: m?.bg || '#fff', borderColor: m?.border || 'var(--mh-border)', color: m?.fg || 'var(--mh-text)' }} data-testid={`vn-sum-${key || 'total'}`} data-n={cnt} data-amount={amount}>
       <div className="text-[11px] font-semibold truncate opacity-90">{label} ({cnt})</div>
-      <div className="text-[16px] font-bold tabular-nums truncate">{fmtVnd(amount)} <span className="text-[11px] font-normal">đ</span></div>
+      <div className="text-[13.5px] sm:text-[15px] lg:text-[16px] font-bold tabular-nums leading-tight [overflow-wrap:anywhere]">{fmtVnd(amount)} <span className="text-[11px] font-normal">đ</span></div>
     </button>);
   return (
     <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-2" data-testid={testId || 'vn-status-split'} data-total={split.total}

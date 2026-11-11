@@ -12183,7 +12183,8 @@ export default function AuthenticatedApp() {
   if (loading) {
     return (
       <div className="flex flex-col items-center justify-center min-h-screen bg-[var(--mh-surface-2)] gap-4 p-6 text-center">
-        <div className="animate-pulse text-[var(--mh-text-3)]">Đang tải hồ sơ người dùng...</div>
+        <div className="h-9 w-9 rounded-full border-[3px] border-[var(--mh-border)] border-t-[var(--mh-navy)] animate-spin" role="status" aria-label="Đang tải" />
+        <div className="text-[var(--mh-text-3)]">Đang tải hồ sơ người dùng...</div>
         {loadingTooLong && (
           <div className="flex flex-col items-center gap-3 max-w-xs">
             <p className="text-xs text-[var(--mh-text-2)]">

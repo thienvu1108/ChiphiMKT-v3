@@ -61,7 +61,7 @@ export function Tabs({ tabs, value, onChange }: { tabs: { id: string; label: str
               ? 'bg-[var(--mh-navy,var(--mh-navy))] text-white font-semibold md:bg-transparent md:text-[var(--mh-navy,var(--mh-navy))] md:border-[var(--mh-navy,var(--mh-navy))]'
               : 'bg-[var(--mh-surface,#fff)] text-[var(--mh-text-2,var(--mh-text-2))] border border-[var(--mh-border,var(--mh-border))] md:border-0 md:border-b-2 md:border-transparent hover:text-[var(--mh-text,var(--mh-text))]'
           }`}>
-          <span className="truncate">{t.label}</span>
+          <span className="text-center leading-tight break-words">{t.label}</span>
           {t.badge != null && t.badge !== '' && (
             <span className={`text-[10px] font-bold px-1.5 py-0.5 rounded shrink-0 ${t.id === value ? 'bg-[var(--mh-surface)]/25 text-white md:bg-[var(--mh-surface-2)] md:text-[var(--mh-text-2)]' : 'bg-[var(--mh-draft-soft,#F1F5F9)] text-[var(--mh-text-2,var(--mh-text-2))]'}`}>{t.badge}</span>
           )}

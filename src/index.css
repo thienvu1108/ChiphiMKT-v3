@@ -151,6 +151,10 @@
     overflow-wrap: anywhere;
   }
   table[data-mh-responsive] td > * { min-width: 0; max-width: 100%; }
+  /* Respect Tailwind's `hidden` on stacked cells: a cell marked `hidden md:table-cell`
+     must stay hidden on mobile instead of showing as an unlabeled stacked value/dash. */
+  table[data-mh-responsive] tbody td.hidden,
+  table[data-mh-responsive] tfoot td.hidden { display: none !important; }
   /* Never reserve 42% for a label that was not supplied. */
   table[data-mh-responsive] tbody td[data-label]:not([data-label=""])::before,
   table[data-mh-responsive] tfoot td[data-label]:not([data-label=""])::before {
