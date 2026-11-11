@@ -353,6 +353,9 @@ export const AcceptanceDraftRow: React.FC<DraftRowProps> = React.memo(({
       {/* Col E: DỰ ÁN */}
       <TableCell className="p-1 min-w-[190px]">
         <AcceptanceSearchableSelect
+          /* Kỳ ≥ 2026-11: khi đổi Phòng/người/kỳ, danh sách dự án đổi theo đăng ký NS của người mới.
+             Remount select theo (team|người|kỳ) để Base UI không giữ lựa chọn/trạng thái cũ (bug: đổi người xong ô dự án không cập nhật, không thao tác được). */
+          key={budgetChoices ? `proj-${currentDraftTeamId}-${localDraft.implementerUid || 'none'}-${normalizeMonth(localDraft.month)}` : 'proj-all'}
           testId="nt-project-select"
           value={budgetChoices && !budgetChoices.some((c) => c.projectId === currentDraftProjId) ? '' : (currentDraftProjId || '')}
           items={projectItems}

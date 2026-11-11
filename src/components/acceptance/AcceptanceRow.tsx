@@ -426,6 +426,8 @@ export const AcceptanceRow: React.FC<RowProps> = React.memo(({
         {/* Col E: DỰ ÁN */}
         <TableCell className="p-1 min-w-[180px]">
           <AcceptanceSearchableSelect
+            /* Remount theo (team|người|kỳ) để danh sách dự án đổi theo người phụ trách mới (Base UI giữ trạng thái cũ nếu không remount). */
+            key={budgetChoices ? `proj-${currentEditTeamId}-${localEditState?.implementerUid || 'none'}-${localEditState?.month || ''}` : 'proj-all'}
             testId="nt-project-select"
             value={budgetChoices && !budgetChoices.some((c) => c.projectId === currentEditProjId) ? '' : currentEditProjId}
             items={projectItems}
