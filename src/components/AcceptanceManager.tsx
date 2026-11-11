@@ -81,6 +81,8 @@ import {
   ntTotals,
 } from './acceptance/acceptanceUtils';
 import { exportFileName, blockCodeOf, teamCodeOf } from '../../lib/vnext/exportName';
+import { getPeriodOf } from '../../lib/vnext/period';
+import { acceptanceChoicesFor, ntUsesBudgetProjects, projectAllowedForAcceptance } from '../../lib/vnext/ntBudgetProjects';
 
 import { showNtImageUpload, showNtInvoiceUpload } from '../lib/ntUploadGate';
 export const AcceptanceManager = React.memo(({ 
@@ -239,6 +241,46 @@ export const AcceptanceManager = React.memo(({
   // Editing row state
   const [editingRowId, setEditingRowId] = useState<string | null>(null);
   const [editingRowState, setEditingRowState] = useState<any | null>(null);
+  const nsPeriods = useMemo(() => {
+    const s = new Set<string>();
+    const add = (m: unknown) => { const p = normalizeMonth(m); if (/^\d{4}-\d{2}$/.test(p) && p >= '2026-11') s.add(p); };
+    draftRows.forEach((d) => add(d.month));
+    add(editingRowState?.month);
+    add(acceptanceMonthFilter);
+    if (!s.size) add(getPeriodOf());
+    return [...s].slice(0, 10);
+  }, [draftRows, editingRowState?.month, acceptanceMonthFilter]);
+  const [nsLines, setNsLines] = useState<any[]>([]);
+  const [nsSupport, setNsSupport] = useState<Record<string, any>>({});
+  const [nsReady, setNsReady] = useState(false);
+  const nsKey = nsPeriods.join(',');
+  useEffect(() => {
+    if (!(canCreate || canEdit) || !nsPeriods.length) { setNsLines([]); setNsSupport({}); setNsReady(true); return; }
+    setNsReady(false);
+    let linesReady = false;
+    let supReady = false;
+    const done = () => { if (linesReady && supReady) setNsReady(true); };
+    const qLines = fsQuery(collection(db, 'ns_lines'), fsWhere('period', 'in', nsPeriods.slice(0, 10)));
+    const qSup = fsQuery(collection(db, 'nsSupport'), fsWhere('period', 'in', nsPeriods.slice(0, 10)));
+    const u1 = onSnapshot(qLines, (s) => {
+      setNsLines(s.docs.map((d) => ({ id: d.id, ...d.data() })));
+      linesReady = true; done();
+    }, () => { setNsLines([]); linesReady = true; done(); });
+    const u2 = onSnapshot(qSup, (s) => {
+      const o: Record<string, any> = {};
+      s.docs.forEach((d) => { o[d.id] = { id: d.id, ...d.data() }; });
+      setNsSupport(o);
+      supReady = true; done();
+    }, () => { setNsSupport({}); supReady = true; done(); });
+    return () => { u1(); u2(); };
+  }, [canCreate, canEdit, nsKey]);
+  const unregisteredProjectReason = useCallback((row: any) => {
+    if (!ntUsesBudgetProjects(row?.month)) return '';
+    if (!nsReady) return 'Đang tải đăng ký ngân sách của kỳ này.';
+    const choices = acceptanceChoicesFor(row, nsLines, nsSupport, allUsers);
+    if (!projectAllowedForAcceptance(choices, row?.projectId)) return 'Dự án không nằm trong đăng ký NS của người phụ trách tại Phòng và kỳ này.';
+    return '';
+  }, [ntCtx, nsReady, nsLines, nsSupport, allUsers]);
   const [mobileViewMode, setMobileViewMode] = useState<'cards' | 'table'>('cards');
   // Design system: mobile always cards (no horizontal NT table).
   React.useEffect(() => {
@@ -692,6 +734,8 @@ export const AcceptanceManager = React.memo(({
       toast.error('Vui lòng chọn Dự án cho dòng nghiệm thu!');
       return;
     }
+    const scopeErr = unregisteredProjectReason(draftRow);
+    if (scopeErr) { toast.error(scopeErr); return; }
 
     const comp = getRowComputed(draftRow);
     const tm = (teamLookup.findTeam 
@@ -862,7 +906,7 @@ export const AcceptanceManager = React.memo(({
       console.error('Error saving draft:', err);
       toast.error(ntDeniedMsg(err, normalizeMonth(draftRow?.month)) || 'Lỗi khi lưu bản ghi nghiệm thu');
     }
-  }, [user, teamLookup, projectLookup, teams, projects, acceptanceMonthFilter]);
+  }, [user, teamLookup, projectLookup, teams, projects, acceptanceMonthFilter, unregisteredProjectReason]);
 
   // Start Edit
   const handleStartEdit = useCallback((item: any) => {
@@ -884,6 +928,8 @@ export const AcceptanceManager = React.memo(({
       return;
     }
     if (!id || !updatedState) return;
+    const scopeErr = unregisteredProjectReason(updatedState);
+    if (scopeErr) { toast.error(scopeErr); return; }
     const comp = getRowComputed(updatedState);
     const tm = (teamLookup.findTeam 
       ? (teamLookup.findTeam(updatedState.teamId) || teamLookup.findTeam(updatedState.teamCode) || teamLookup.findTeam(updatedState.teamName))
@@ -1054,7 +1100,7 @@ export const AcceptanceManager = React.memo(({
       console.error('Error updating acceptance:', err);
       toast.error(ntDeniedMsg(err, normalizeMonth(updatedState?.month)) || 'Lỗi khi cập nhật bản ghi');
     }
-  }, [canEdit, canCreate, user, teamLookup, projectLookup, teams, projects, blocks, openNtKy, isSuperAdmin]);
+  }, [canEdit, canCreate, user, teamLookup, projectLookup, teams, projects, blocks, openNtKy, isSuperAdmin, unregisteredProjectReason]);
 
   /** Bản kỳ đã khoá không sửa được: tạo dòng nháp «Nghiệm thu bổ sung» MỚI (điền sẵn từ bản này, Phòng/Dự án/Người phụ trách vẫn đổi được). */
   const prefillSuppFromLocked = (src: any, om: string) => {
@@ -1078,6 +1124,8 @@ export const AcceptanceManager = React.memo(({
     const month = normalizeMonth(item.month) || normalizeMonth(item.ntMonth);
     if (!month || !/^[0-9]{4}-[0-9]{2}$/.test(month)) return toast.error('Tháng bản ghi không hợp lệ');
     if (!item.projectId) return toast.error('Bản ghi chưa có Dự án');
+    const scopeErr = unregisteredProjectReason({ ...item, implementerUid: uid, implementerManual: false });
+    if (scopeErr) return toast.error(scopeErr);
     const tm = teamLookup.findTeam?.(item.teamId) || teams.find((t: any) => t.id === item.teamId);
     const blockId = item.blockId || tm?.blockId || '';
     try {
@@ -1087,7 +1135,7 @@ export const AcceptanceManager = React.memo(({
       if (e?.code === 'dup') toast.error(`Trùng: ${name} đã có bản ghi dự án này trong tháng (#${String(e.dup?.id || '').slice(-6).toUpperCase()})`);
       else { console.error(e); toast.error('Không gán được: ' + (e?.code || e?.message || e)); }
     }
-  }, [canEdit, user, teams, teamLookup, acceptances]);
+  }, [canEdit, user, teams, teamLookup, acceptances, unregisteredProjectReason]);
 
   const handleAssignManual = useCallback(async (item: any, name: string) => {
     if (!canManualAssignee) throw new Error('Không có quyền tự nhập Người phụ trách');
@@ -1111,6 +1159,7 @@ export const AcceptanceManager = React.memo(({
         // gỡ người phụ trách cũ nếu đổi Phòng (sẽ gán lại)
         implementerUid: '', implementerName: item.teamId && item.teamId !== tm.id ? '' : (item.implementerName || ''),
         ntTeamId: tm.id, ntBlockId: resolved.blockId || tm.blockId || '',
+        ...(ntUsesBudgetProjects(item.month) && item.teamId !== tm.id ? { projectId: '', projectName: '', projectCode: '' } : {}),
       });
       toast.success('Đã chọn Phòng — tiếp tục chọn Người phụ trách');
     } catch (e: any) { toast.error('Không cập nhật Phòng: ' + (e?.message || e)); }
@@ -2135,6 +2184,8 @@ export const AcceptanceManager = React.memo(({
                     monthsList={uniqueMonths}
                     teamItems={baseTeamItems}
                     projectItems={baseProjectItems}
+                    nsLines={nsLines}
+                    nsSupport={nsSupport}
                     findTeam={teamLookup.findTeam}
                     findProject={projectLookup.findProject}
                     formatCurrency={formatCurrency}
@@ -2172,6 +2223,8 @@ export const AcceptanceManager = React.memo(({
                         monthsList={uniqueMonths}
                         teamItems={baseTeamItems}
                         projectItems={baseProjectItems}
+                        nsLines={nsLines}
+                        nsSupport={nsSupport}
                         teamIdSet={teamIdSet}
                         projectIdSet={projectIdSet}
                         findTeam={teamLookup.findTeam}
