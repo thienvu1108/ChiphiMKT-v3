@@ -228,6 +228,7 @@ const VnReportMgmtPage = lazyRetry(() => VnPages().then((m) => ({ default: m.Rep
 const VnLegacyBudgetPage = lazyRetry(() => import('./vnext/LegacyBudgetPage').then((m) => ({ default: m.LegacyBudgetPage })));
 const VnAdminBudgetPage = lazyRetry(() => VnPages().then((m) => ({ default: m.AdminBudgetPage })));
 const VnKhoi = lazyRetry(() => VnPages().then((m) => ({ default: m.KhoiVNext })));
+const VnOverviewTab = lazyRetry(() => import('./vnext/OverviewTab').then((m) => ({ default: m.OverviewTab })));
 const VnKhoiMembers = lazyRetry(() => import('./vnext/RenameUser').then((m) => ({ default: m.KhoiMembers })));
 const VnRenameUserButton = lazyRetry(() => import('./vnext/RenameUser').then((m) => ({ default: m.RenameUserButton })));
 const VnSelfRenameDialog = lazyRetry(() => import('./vnext/RenameUser').then((m) => ({ default: m.SelfRenameDialog })));
@@ -2212,7 +2213,7 @@ export default function AuthenticatedApp() {
   }, [canEditBlockBudget, isUserAuthorizedForBlockBudget]);
 
   // Ban KD Management States & Filtering
-  const [bankdSubTab, setBankdSubTab] = useState<'bankd-info' | 'bankd-budgets' | 'bankd-nt' | 'bankd-weekly' | 'bankd-projects' | 'bankd-pct'>('bankd-info');
+  const [bankdSubTab, setBankdSubTab] = useState<'bankd-info' | 'bankd-budgets' | 'bankd-nt' | 'bankd-weekly' | 'bankd-projects' | 'bankd-pct' | 'bankd-overview'>('bankd-info');
   const [selectedBanKdId, setSelectedBanKdId] = useState<string>('');
 
   const myBanKds = useMemo(() => {
@@ -13771,6 +13772,7 @@ export default function AuthenticatedApp() {
               aside={currentActiveBlock ? <span className="text-[11px] font-bold text-[var(--mh-navy)] bg-[#EAF0FB] border border-[var(--mh-navy)]/20 px-2 py-0.5 rounded-full truncate max-w-[50%]">{getBlockDisplayName(currentActiveBlock)}</span> : undefined}
               items={[
                     { id: 'block-teams', label: 'Thông tin', short: 'Thông tin', icon: Users },
+                    { id: 'block-overview', label: 'Tổng quan', icon: PieChart, testId: 'block-sub-overview' },
                     canViewBlockBudget ? { id: 'block-budgets', label: 'Ngân sách MKT', short: 'Ngân sách', icon: Wallet, testId: 'block-sub-budgets' } : null,
                     ((isGDKhoi || isTroLyKhoi) && vnCan(vctx, 'vn.ns.khoi_register')) ? { id: 'block-register', label: 'Đăng ký MKT', short: 'Đăng ký MKT', icon: Wallet } : null,
                     ((isGDKhoi || isTroLyKhoi || isAdmin || isSuperAdmin) && vnCan(vctx, 'vn.ns.support_approve')) ? { id: 'block-support', label: 'Duyệt hỗ trợ MKT', short: 'Duyệt HT', icon: UserCheck, testId: 'block-sub-support', badge: khoiTodo.count || undefined } : null,
@@ -13789,6 +13791,7 @@ export default function AuthenticatedApp() {
               className="md:top-[64px]"
               items={[
                 { id: 'bankd-info', label: 'Thông tin Ban', short: 'Thông tin', icon: Building2, testId: 'bankd-sub-bankd-info' },
+                { id: 'bankd-overview', label: 'Tổng quan', icon: PieChart, testId: 'bankd-sub-bankd-overview' },
                 { id: 'bankd-budgets', label: 'Ngân sách Ban', short: 'Ngân sách', icon: Wallet, testId: 'bankd-sub-bankd-budgets' },
                 { id: 'bankd-nt', label: 'Nghiệm thu MKT', short: 'Nghiệm thu', icon: FileCheck, testId: 'bankd-sub-bankd-nt' },
                 { id: 'bankd-weekly', label: 'Báo cáo Ban', icon: BarChart3, testId: 'bankd-sub-bankd-weekly' },
@@ -14960,6 +14963,9 @@ export default function AuthenticatedApp() {
                 </TabsContent>
 
                 {/* TAB 2: Budget registry for block */}
+                <TabsContent value="block-overview" className="space-y-6">
+  {blockSubTab === 'block-overview' && <VnErrorBoundary><React.Suspense fallback={<VnFallback />}><VnOverviewTab c={vctx} scope={{ kind: 'block', blockIds: currentActiveBlock ? [currentActiveBlock.id] : userAllowedBlocks.map((b: any) => b.id) }} title="Tổng quan Khối" desc="Các dự án Khối đăng ký & nghiệm thu — theo tháng. Bấm tiêu đề cột để sắp xếp." /></React.Suspense></VnErrorBoundary>}
+</TabsContent>
                 <TabsContent value="block-weekly" className="space-y-6">
   {blockSubTab === 'block-weekly' && <VnErrorBoundary><React.Suspense fallback={<VnFallback />}><VnKhoi c={vctx} mode="report" activeBlockId={currentActiveBlock?.id} /></React.Suspense></VnErrorBoundary>}
 </TabsContent>
@@ -16018,6 +16024,9 @@ export default function AuthenticatedApp() {
                   </CardHeader>
                 </Card>
               )}
+              {activeTab === 'bankd-mgmt' && bankdSubTab === 'bankd-overview' && !(isTruongBanKd && userAllowedBanKds.length === 0) && (
+                <VnErrorBoundary><React.Suspense fallback={<VnFallback />}><VnOverviewTab c={vctx} scope={{ kind: 'ban', banIds: currentActiveBanKd ? [currentActiveBanKd.id] : userAllowedBanKds.map((b: any) => b.id) }} title="Tổng quan Ban KD" desc="Các dự án thuộc Ban + các Khối đang chạy — theo tháng. Bấm tiêu đề cột để sắp xếp." /></React.Suspense></VnErrorBoundary>
+              )}
               {activeTab === 'bankd-mgmt' && bankdSubTab === 'bankd-weekly' && !(isTruongBanKd && userAllowedBanKds.length === 0) && (
                 <VnErrorBoundary><React.Suspense fallback={<VnFallback />}><VnBanReport c={vctx} banKdIds={currentActiveBanKd ? [currentActiveBanKd.id] : userAllowedBanKds.map((b: any) => b.id)} /></React.Suspense></VnErrorBoundary>
               )}
@@ -16027,8 +16036,8 @@ export default function AuthenticatedApp() {
               {activeTab === 'bankd-mgmt' && bankdSubTab === 'bankd-pct' && canPctView && !(isTruongBanKd && userAllowedBanKds.length === 0) && (
                 <VnErrorBoundary><React.Suspense fallback={<VnFallback />}><VnBanSupportPct key={currentActiveBanKd?.id || 'none'} c={vctx} ban={currentActiveBanKd} /></React.Suspense></VnErrorBoundary>
               )}
-              {activeTab === 'bankd-mgmt' && !['bankd-weekly', 'bankd-projects', 'bankd-pct'].includes(bankdSubTab) && !((isTruongBanKd || isPhoBanKd) && userAllowedBanKds.length === 0) && (
-                <BanKdManagementView 
+              {activeTab === 'bankd-mgmt' && !['bankd-weekly', 'bankd-projects', 'bankd-pct', 'bankd-overview'].includes(bankdSubTab) && !((isTruongBanKd || isPhoBanKd) && userAllowedBanKds.length === 0) && (
+                <BanKdManagementView
                   activeSubTab={bankdSubTab as any}
                   hideSubNav
                   banKdList={banKdList}
