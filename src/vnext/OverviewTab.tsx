@@ -5,7 +5,7 @@ import { Field, Select } from './ui';
 import { normalizeMonth } from '../../lib/vnext/ntReport';
 import { buildOverview } from '../../lib/vnext/overviewReport';
 import { banOfProject } from '../../lib/vnext/supportPct';
-import { OverviewReportView } from '../components/OverviewReportView';
+import { OverviewReportView, type OverviewLayout } from '../components/OverviewReportView';
 
 export type OverviewScope =
   | { kind: 'block'; blockIds: string[] }
@@ -67,5 +67,11 @@ export function OverviewTab({ c, scope, title, desc }: { c: VCtx; scope: Overvie
     </Field>
   );
 
-  return <OverviewReportView o={o} title={title} desc={desc} headerRight={monthPicker} />;
+  const layout: Partial<OverviewLayout> = scope.kind === 'block'
+    // Khối: mục 2 → Dự án tỉ lệ thấp; bỏ xếp hạng/khối chưa căn bán & theo Ban; thêm báo cáo theo từng dự án.
+    ? { lowRatio: 'project', blockRanking: false, blockNoSales: false, byProject: true, byProjectFull: true, byBan: false }
+    // Ban: bỏ mục theo Ban KD, giữ các mục còn lại.
+    : { byBan: false };
+
+  return <OverviewReportView o={o} title={title} desc={desc} headerRight={monthPicker} layout={layout} />;
 }

@@ -1,7 +1,7 @@
 import React, { useMemo, useState } from 'react';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { TrendingUp, Wallet, Users, Home, Building2, Target, AlertTriangle, ChevronUp, ChevronDown, ChevronsUpDown } from 'lucide-react';
-import type { Overview } from '../../lib/vnext/overviewReport';
+import { IN_BUDGET_LOW, type Overview } from '../../lib/vnext/overviewReport';
 
 export const fmtVnd = (n: number | null | undefined) => (n == null ? '—' : Math.round(n).toLocaleString('vi-VN') + ' đ');
 export const fmtNum = (n: number | null | undefined) => (n == null ? '—' : Math.round(n).toLocaleString('vi-VN'));
@@ -116,14 +116,30 @@ function SortableTable<T>({ rows, cols, rowKey, empty }: {
   );
 }
 
-/** Phần hiển thị thuần của Báo cáo Tổng quan (6 mục) — dùng chung cho admin, Khối, Ban. */
-export function OverviewReportView({ o, title = 'Báo cáo Tổng quan MKT', desc, headerRight }: {
-  o: Overview; title?: string; desc?: string; headerRight?: React.ReactNode;
+export type OverviewLayout = {
+  /** Mục 2: theo Khối (count + Khối tỉ lệ thấp) | Dự án tỉ lệ thấp | ẩn. */
+  lowRatio: 'block' | 'project' | 'none';
+  blockRanking: boolean;   // Xếp hạng Khối theo căn bán
+  blockNoSales: boolean;   // Khối chưa phát sinh căn bán
+  byProject: boolean;      // Theo Dự án (có / chưa phát sinh căn bán)
+  byProjectFull: boolean;  // Báo cáo theo từng dự án (đủ chỉ số)
+  byBan: boolean;          // Theo Ban KD
+};
+const DEFAULT_LAYOUT: OverviewLayout = { lowRatio: 'block', blockRanking: true, blockNoSales: true, byProject: true, byProjectFull: false, byBan: true };
+
+/** Phần hiển thị thuần của Báo cáo Tổng quan — dùng chung cho admin, Khối, Ban (chọn mục qua layout). */
+export function OverviewReportView({ o, title = 'Báo cáo Tổng quan MKT', desc, headerRight, layout }: {
+  o: Overview; title?: string; desc?: string; headerRight?: React.ReactNode; layout?: Partial<OverviewLayout>;
 }) {
+  const L = { ...DEFAULT_LAYOUT, ...(layout || {}) };
   type BRow = Overview['blocks'][number];
   type PRow = Overview['projects'][number];
   type NRow = Overview['bans'][number];
   const rightMono = 'text-right font-mono';
+  const projectsLowRatio = o.projects
+    .filter((p) => p.nsReg > 0 && p.ratio != null && (p.ratio as number) < IN_BUDGET_LOW)
+    .sort((a, b) => (a.ratio as number) - (b.ratio as number));
+  let n = 0; const num = () => ++n;
 
   return (
     <div className="space-y-5">
@@ -137,8 +153,8 @@ export function OverviewReportView({ o, title = 'Báo cáo Tổng quan MKT', des
         </CardHeader>
       </Card>
 
-      {/* 1. Tổng quan */}
-      <SectionCard title="1. Tổng quan" icon={<Target className="w-4 h-4 text-indigo-600" />}>
+      {/* Tổng quan */}
+      <SectionCard title={`${num()}. Tổng quan`} icon={<Target className="w-4 h-4 text-indigo-600" />}>
         <div className="grid grid-cols-2 md:grid-cols-3 gap-3">
           <StatTile icon={<Wallet className="w-3.5 h-3.5" />} label="NS đăng ký" value={fmtVnd(o.totals.nsReg)} sub="Tổng NS MKT Khối" tone="indigo" />
           <StatTile icon={<TrendingUp className="w-3.5 h-3.5" />} label="NS thực chạy" value={fmtVnd(o.totals.cost)} sub="Theo Nghiệm thu MKT" tone="rose" />
@@ -149,8 +165,9 @@ export function OverviewReportView({ o, title = 'Báo cáo Tổng quan MKT', des
         </div>
       </SectionCard>
 
-      {/* 2. Theo Khối */}
-      <SectionCard title="2. Báo cáo theo Khối" desc="Chạy trong Ngân sách = thực chạy ở 70%–150% so với Ngân sách đăng ký." icon={<Building2 className="w-4 h-4 text-indigo-600" />}>
+      {/* Theo Khối (count + Khối tỉ lệ thấp) */}
+      {L.lowRatio === 'block' && (
+      <SectionCard title={`${num()}. Báo cáo theo Khối`} desc="Chạy trong Ngân sách = thực chạy ở 70%–150% so với Ngân sách đăng ký." icon={<Building2 className="w-4 h-4 text-indigo-600" />}>
         <div className="grid grid-cols-2 gap-3 mb-4">
           <StatTile icon={<Target className="w-3.5 h-3.5" />} label="Khối chạy trong NS" value={fmtNum(o.blocksInBudget)} sub="70%–150% NS đăng ký" tone="emerald" />
           <StatTile icon={<AlertTriangle className="w-3.5 h-3.5" />} label="Khối chạy ngoài NS" value={fmtNum(o.blocksOutBudget)} sub="< 70% hoặc > 150%" tone="rose" />
@@ -166,9 +183,26 @@ export function OverviewReportView({ o, title = 'Báo cáo Tổng quan MKT', des
           ]}
         />
       </SectionCard>
+      )}
 
-      {/* 3. Xếp hạng Khối theo căn bán */}
-      <SectionCard title="3. Xếp hạng Khối theo căn bán" desc={`${o.blocksWithSales.length} Khối phát sinh căn bán.`} icon={<Home className="w-4 h-4 text-emerald-600" />}>
+      {/* Dự án có tỉ lệ chạy thấp */}
+      {L.lowRatio === 'project' && (
+      <SectionCard title={`${num()}. Dự án có tỉ lệ chạy thấp`} desc="Thực chạy dưới 70% so với Ngân sách đăng ký của dự án." icon={<AlertTriangle className="w-4 h-4 text-rose-600" />}>
+        <SortableTable<PRow>
+          rows={projectsLowRatio} rowKey={(p) => p.projectId} empty="Không có dự án nào chạy dưới 70%."
+          cols={[
+            { key: 'name', label: 'Dự án', val: (p) => p.name, render: (p) => <span className="font-bold">{p.name}</span>, total: () => 'Tổng' },
+            { key: 'nsReg', label: 'Đăng ký', align: 'right', cell: rightMono, val: (p) => p.nsReg, render: (p) => fmtVnd(p.nsReg), total: (rs) => fmtVnd(sum(rs, (p) => p.nsReg)) },
+            { key: 'cost', label: 'Thực chạy', align: 'right', cell: rightMono, val: (p) => p.cost, render: (p) => fmtVnd(p.cost), total: (rs) => fmtVnd(sum(rs, (p) => p.cost)) },
+            { key: 'ratio', label: 'Tỉ lệ', align: 'right', cell: rightMono + ' font-bold text-rose-600', val: (p) => p.ratio, render: (p) => fmtPct(p.ratio), total: (rs) => fmtPct(div(sum(rs, (p) => p.cost), sum(rs, (p) => p.nsReg))) },
+          ]}
+        />
+      </SectionCard>
+      )}
+
+      {/* Xếp hạng Khối theo căn bán */}
+      {L.blockRanking && (
+      <SectionCard title={`${num()}. Xếp hạng Khối theo căn bán`} desc={`${o.blocksWithSales.length} Khối phát sinh căn bán.`} icon={<Home className="w-4 h-4 text-emerald-600" />}>
         <SortableTable<BRow>
           rows={o.blocksWithSales} rowKey={(b) => b.blockId} empty="Chưa Khối nào phát sinh căn bán."
           cols={[
@@ -180,9 +214,11 @@ export function OverviewReportView({ o, title = 'Báo cáo Tổng quan MKT', des
           ]}
         />
       </SectionCard>
+      )}
 
-      {/* 4. Khối chưa phát sinh căn bán */}
-      <SectionCard title="4. Khối chưa phát sinh căn bán" desc="Có chi phí MKT nhưng chưa có căn bán." icon={<AlertTriangle className="w-4 h-4 text-amber-600" />}>
+      {/* Khối chưa phát sinh căn bán */}
+      {L.blockNoSales && (
+      <SectionCard title={`${num()}. Khối chưa phát sinh căn bán`} desc="Có chi phí MKT nhưng chưa có căn bán." icon={<AlertTriangle className="w-4 h-4 text-amber-600" />}>
         <SortableTable<BRow>
           rows={o.blocksNoSales} rowKey={(b) => b.blockId} empty="Mọi Khối có chi phí đều đã phát sinh căn bán."
           cols={[
@@ -193,9 +229,11 @@ export function OverviewReportView({ o, title = 'Báo cáo Tổng quan MKT', des
           ]}
         />
       </SectionCard>
+      )}
 
-      {/* 5. Theo Dự án */}
-      <SectionCard title="5. Báo cáo theo Dự án" desc={`${o.projectsWithSales.length} dự án có căn bán · ${o.projectsNoSales.length} dự án chưa có căn bán.`} icon={<Target className="w-4 h-4 text-indigo-600" />}>
+      {/* Theo Dự án (có / chưa căn bán) */}
+      {L.byProject && (
+      <SectionCard title={`${num()}. Báo cáo theo Dự án`} desc={`${o.projectsWithSales.length} dự án có căn bán · ${o.projectsNoSales.length} dự án chưa có căn bán.`} icon={<Target className="w-4 h-4 text-indigo-600" />}>
         <div className="text-[11px] font-black uppercase text-[var(--mh-text-3)] mb-1">Dự án phát sinh căn bán</div>
         <SortableTable<PRow>
           rows={o.projectsWithSales} rowKey={(p) => p.projectId} empty="Chưa có."
@@ -216,9 +254,30 @@ export function OverviewReportView({ o, title = 'Báo cáo Tổng quan MKT', des
           ]}
         />
       </SectionCard>
+      )}
 
-      {/* 6. Theo Ban */}
-      <SectionCard title="6. Báo cáo theo Ban KD" desc="Xếp hạng theo chi phí thực tế." icon={<Building2 className="w-4 h-4 text-indigo-600" />}>
+      {/* Báo cáo theo từng dự án (đủ chỉ số) */}
+      {L.byProjectFull && (
+      <SectionCard title={`${num()}. Báo cáo theo dự án`} desc="Theo từng dự án đã đăng ký / nghiệm thu — xếp theo chi phí thực tế." icon={<Target className="w-4 h-4 text-indigo-600" />}>
+        <SortableTable<PRow>
+          rows={o.projects} rowKey={(p) => p.projectId} empty="Chưa có dữ liệu."
+          cols={[
+            { key: 'name', label: 'Dự án', val: (p) => p.name, render: (p) => <span className="font-bold">{p.name}</span>, total: () => 'Tổng' },
+            { key: 'nsReg', label: 'Đăng ký', align: 'right', cell: rightMono, val: (p) => p.nsReg, render: (p) => fmtVnd(p.nsReg), total: (rs) => fmtVnd(sum(rs, (p) => p.nsReg)) },
+            { key: 'cost', label: 'Thực chạy', align: 'right', cell: rightMono, val: (p) => p.cost, render: (p) => fmtVnd(p.cost), total: (rs) => fmtVnd(sum(rs, (p) => p.cost)) },
+            { key: 'ratio', label: 'Tỉ lệ', align: 'right', cell: rightMono + ' font-bold', val: (p) => p.ratio, render: (p) => fmtPct(p.ratio), total: (rs) => fmtPct(div(sum(rs, (p) => p.cost), sum(rs, (p) => p.nsReg))) },
+            { key: 'leads', label: 'Lead', align: 'right', cell: rightMono, val: (p) => p.leads, render: (p) => fmtNum(p.leads), total: (rs) => fmtNum(sum(rs, (p) => p.leads)) },
+            { key: 'cpl', label: 'CP/lead', align: 'right', cell: rightMono, val: (p) => p.cpl, render: (p) => fmtVnd(p.cpl), total: (rs) => fmtVnd(div(sum(rs, (p) => p.cost), sum(rs, (p) => p.leads))) },
+            { key: 'canBan', label: 'Căn bán', align: 'right', cell: rightMono + ' font-bold', val: (p) => p.canBan, render: (p) => fmtNum(p.canBan), total: (rs) => fmtNum(sum(rs, (p) => p.canBan)) },
+            { key: 'cpPerUnit', label: 'CP/căn', align: 'right', cell: rightMono + ' font-bold text-fuchsia-700', val: (p) => p.cpPerUnit, render: (p) => fmtVnd(p.cpPerUnit), total: (rs) => fmtVnd(div(sum(rs, (p) => p.cost), sum(rs, (p) => p.canBan))) },
+          ]}
+        />
+      </SectionCard>
+      )}
+
+      {/* Theo Ban */}
+      {L.byBan && (
+      <SectionCard title={`${num()}. Báo cáo theo Ban KD`} desc="Xếp hạng theo chi phí thực tế." icon={<Building2 className="w-4 h-4 text-indigo-600" />}>
         <SortableTable<NRow>
           rows={o.bans} rowKey={(b) => b.banId} empty="Chưa có dữ liệu."
           cols={[
@@ -233,6 +292,7 @@ export function OverviewReportView({ o, title = 'Báo cáo Tổng quan MKT', des
           ]}
         />
       </SectionCard>
+      )}
     </div>
   );
 }
