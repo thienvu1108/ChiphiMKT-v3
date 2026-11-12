@@ -55,6 +55,26 @@ describe('buildOverview — theo Khối', () => {
   });
 });
 
+describe('NS đăng ký = tổng Ngân sách MKT Khối (summarizeBlock)', () => {
+  it('gộp user + gdkd của Phòng + khoi của Khối vào NS theo dự án', () => {
+    const o = buildOverview({
+      period: '2026-11',
+      nsLines: [
+        { id: 'u', kind: 'user', period: '2026-11', teamId: 'T1', ownerUid: 'u1', projectId: 'P1', amount: 100 },
+        { id: 'g', kind: 'gdkd', period: '2026-11', teamId: 'T1', projectId: 'P1', amount: 50 },   // bổ sung GĐKD
+        { id: 'k', kind: 'khoi', period: '2026-11', blockId: 'B1', ownerUid: 'gk', projectId: 'P2', amount: 30 },
+      ],
+      acceptances: [], canBanLines: [],
+      projects: [{ id: 'P1', name: 'DA1', banKdId: 'BANA' }, { id: 'P2', name: 'DA2', banKdId: 'BANA' }],
+      bans: [{ id: 'BANA', name: 'Ban A' }], blocks: [{ id: 'B1', name: 'K1' }], teams: [{ id: 'T1', blockId: 'B1' }],
+    });
+    expect(o.totals.nsReg).toBe(180);                         // 100 + 50 + 30
+    expect(o.blocks.find((b) => b.blockId === 'B1')?.nsReg).toBe(180);
+    expect(o.projects.find((p) => p.projectId === 'P1')?.nsReg).toBe(150); // user + gdkd
+    expect(o.projects.find((p) => p.projectId === 'P2')?.nsReg).toBe(30);  // khoi
+  });
+});
+
 describe('buildOverview — Dự án & Ban', () => {
   it('dự án có / chưa có căn bán', () => {
     const o = ov();
