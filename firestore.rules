@@ -995,6 +995,15 @@ service cloud.firestore {
       allow write: if isInternalStaff();
     }
 
+    // Căn bán (Tháng × Khối × Dự án) — Admin/Mod/Kế toán nhập; nhân sự nội bộ đọc (Báo cáo Tổng quan).
+    match /can_ban/{canBanId} {
+      allow read: if isInternalStaff() && !isGDKD();
+      allow create, update: if (isAdmin() || isSuperAdmin() || isMod() || isAccountant())
+        && incoming().month is string && incoming().blockId is string && incoming().projectId is string
+        && incoming().soLuong is int && incoming().soLuong >= 0 && incoming().soLuong <= 1000000;
+      allow delete: if isAdmin() || isSuperAdmin() || isMod() || isAccountant();
+    }
+
     // ===============================================================
     // Acceptances & Final Acceptances
     // ===============================================================
