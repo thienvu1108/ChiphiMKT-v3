@@ -374,47 +374,53 @@ export function BanNsApprovePanel({
                 );
               })()}
               {open && (
-                <div className="bg-[var(--mh-surface-2)]/60 px-2 pb-2 md:px-0">
-                  {canApprove && (
-                    <div className="px-4 py-2 flex flex-col gap-1.5" data-testid="vn-ban-pgroup-khoi-actions">
-                      {khoiSubs.map((bid) => {
-                        const sub = p.rows.filter((r) => (r.line.blockId || '_none') === bid);
-                        return (
-                          <div key={bid} className="flex flex-wrap items-center gap-2">
-                            <span className="text-[12px] font-semibold text-[var(--mh-text)] min-w-[120px]">{bid === '_none' ? '(Chưa gắn Khối)' : blockName(c, bid)}:</span>
-                            {khoiActions({ rows: sub })}
+                <div className="bg-[var(--mh-surface-2)]/60 md:px-0" data-testid="vn-ban-pgroup-khoi-list">
+                  {khoiSubs.map((bid) => {
+                    const sub = p.rows.filter((r) => (r.line.blockId || '_none') === bid);
+                    const subKey = `P::${p.projectId}::${bid}`;
+                    const subOpen = openProjects.has(subKey);
+                    const subAmount = sub.reduce((s2, r) => s2 + (Number(r.line.amount) || 0), 0);
+                    const subPending = sub.filter((r) => r.ban === 'pending').length;
+                    return (
+                      <div key={bid} className="border-t border-[var(--mh-border)]" data-testid="vn-ban-pgroup-khoi" data-block={bid}>
+                        <div className="px-4 py-2.5 pl-6 flex flex-col gap-2 sm:flex-row sm:items-center sm:gap-3">
+                          <button type="button" className="text-left flex-1 min-w-0 flex flex-wrap items-center gap-2" onClick={() => toggleProject(subKey)} data-testid="vn-ban-pgroup-khoi-toggle">
+                            <span className="text-[var(--mh-text-2)] w-3">{subOpen ? '▾' : '▸'}</span>
+                            <span className="font-semibold text-[13px] text-[var(--mh-text)] min-w-[140px]">{bid === '_none' ? '(Chưa gắn Khối)' : blockName(c, bid)}</span>
+                            <span className="text-[12px] text-[var(--mh-text-2)]">{sub.length} dòng · {fmt(subAmount)} đ{subPending ? ` · chờ ${subPending}` : ''}</span>
+                          </button>
+                          {khoiActions({ rows: sub })}
+                        </div>
+                        {subOpen && (
+                          <div className="overflow-x-auto bg-[var(--mh-surface-2)]/80">
+                            <table data-mh-responsive className="w-full text-[13px]">
+                              <thead><tr className="text-left text-[11px] text-[var(--mh-text-2)]">
+                                <th className="p-2 pl-10">Người ĐK</th><th className="p-2">Kỳ</th>
+                                <th className="p-2 text-right">Số tiền cần duyệt (đ)</th><th className="p-2">Trạng thái Ban</th>
+                                {canApprove && allowLineActions && <th className="p-2" />}
+                              </tr></thead>
+                              <tbody>
+                                {sub.map((r) => (
+                                  <tr key={r.line.id} className="border-t border-[var(--mh-border)]" data-testid="vn-ban-approve-row" data-line={r.line.id} data-ban={r.ban}>
+                                    <td data-label="Người ĐK" className="p-2 pl-10 font-medium">{r.line.ownerName || userName(c, r.line.ownerUid)}{r.line.kind === 'khoi' ? <span className="ml-1 text-[10px] text-[var(--mh-text-2)]">NS Khối</span> : null}</td>
+                                    <td data-label="Kỳ" className="p-2 whitespace-nowrap">{periodLabel(r.line.period)}</td>
+                                    <td data-label="Số tiền cần duyệt" className="p-2 text-right tabular-nums font-bold text-[var(--mh-text)]">{fmt(r.line.amount)}</td>
+                                    <td data-label="Trạng thái Ban" className="p-2 whitespace-nowrap">
+                                      <span className={`text-[11px] font-semibold ${r.ban === 'rejected' ? 'text-[var(--mh-err)]' : r.ban === 'approved' ? 'text-[var(--mh-ok)]' : 'text-[var(--mh-pending,#7C3AED)]'}`}>{BAN_STATUS_LABEL[r.ban]}</span>
+                                      {(r.ban === 'rejected' || r.ban === 'pending') && banReasonText(r.s) ? <div className="text-[11px] max-w-[200px] text-[var(--mh-text-2)]">{banReasonText(r.s)}</div> : null}
+                                      {(r.s as any)?.banDecidedRole === 'leader' && approverRole === 'deputy' ? <div className="text-[10px] text-[var(--mh-text-3)]">Trưởng Ban đã quyết định</div> : null}
+                                      <ApproverLog hist={(r.s as any)?.history} />
+                                    </td>
+                                    {canApprove && allowLineActions && <td data-label="Thao tác" className="p-2 whitespace-nowrap">{lineActions(r)}</td>}
+                                  </tr>
+                                ))}
+                              </tbody>
+                            </table>
                           </div>
-                        );
-                      })}
-                    </div>
-                  )}
-                  <div className="overflow-x-auto">
-                    <table data-mh-responsive className="w-full text-[13px]">
-                      <thead><tr className="text-left text-[11px] text-[var(--mh-text-2)]">
-                        <th className="p-2 pl-4">Khối</th><th className="p-2">Dự án</th><th className="p-2">Người ĐK</th><th className="p-2">Kỳ</th>
-                        <th className="p-2 text-right">Số tiền cần duyệt (đ)</th><th className="p-2">Trạng thái Ban</th>
-                        {canApprove && allowLineActions && <th className="p-2" />}
-                      </tr></thead>
-                      <tbody>
-                        {p.rows.map((r) => (
-                          <tr key={r.line.id} className="border-t border-[var(--mh-border)]" data-testid="vn-ban-approve-row" data-line={r.line.id} data-ban={r.ban}>
-                            <td data-label="Khối" className="p-2 pl-4 font-semibold text-[var(--mh-text)]">{r.line.blockId ? blockName(c, r.line.blockId) : '(Chưa gắn Khối)'}</td>
-                            <td data-label="Dự án" className="p-2 text-[var(--mh-text)]">{p.label}</td>
-                            <td data-label="Người ĐK" className="p-2">{r.line.ownerName || userName(c, r.line.ownerUid)}{r.line.kind === 'khoi' ? <span className="ml-1 text-[10px] text-[var(--mh-text-2)]">NS Khối</span> : null}</td>
-                            <td data-label="Kỳ" className="p-2 whitespace-nowrap">{periodLabel(r.line.period)}</td>
-                            <td data-label="Số tiền cần duyệt" className="p-2 text-right tabular-nums font-bold text-[var(--mh-text)]">{fmt(r.line.amount)}</td>
-                            <td data-label="Trạng thái Ban" className="p-2 whitespace-nowrap">
-                              <span className={`text-[11px] font-semibold ${r.ban === 'rejected' ? 'text-[var(--mh-err)]' : r.ban === 'approved' ? 'text-[var(--mh-ok)]' : 'text-[var(--mh-pending,#7C3AED)]'}`}>{BAN_STATUS_LABEL[r.ban]}</span>
-                              {(r.ban === 'rejected' || r.ban === 'pending') && banReasonText(r.s) ? <div className="text-[11px] max-w-[200px] text-[var(--mh-text-2)]">{banReasonText(r.s)}</div> : null}
-                              {(r.s as any)?.banDecidedRole === 'leader' && approverRole === 'deputy' ? <div className="text-[10px] text-[var(--mh-text-3)]">Trưởng Ban đã quyết định</div> : null}
-                              <ApproverLog hist={(r.s as any)?.history} />
-                            </td>
-                            {canApprove && allowLineActions && <td data-label="Thao tác" className="p-2 whitespace-nowrap">{lineActions(r)}</td>}
-                          </tr>
-                        ))}
-                      </tbody>
-                    </table>
-                  </div>
+                        )}
+                      </div>
+                    );
+                  })}
                 </div>
               )}
             </div>

@@ -144,7 +144,7 @@ export function WeeklyForm({ c, period, lines, blockId }: { c: VCtx; period: str
       ) : (
         <>
           <Card className="overflow-hidden">
-            <div className="hidden md:block overflow-x-auto"><table data-mh-responsive className="w-full"><thead><tr><Th>Dự án</Th><Th r>NS</Th><Th r>Chi phí luỹ kế kỳ (đ)</Th><Th r>Chi đợt này</Th><Th r>Còn lại</Th><Th r>% dùng</Th><Th r>Lead</Th><Th r>Khách QT</Th><Th r>Số căn chốt</Th><Th>Khó khăn</Th></tr></thead><tbody>
+            <div className="hidden md:block overflow-x-auto"><table data-mh-responsive className="w-full min-w-[1060px]"><thead><tr><Th>Dự án</Th><Th r>NS</Th><Th r>Chi phí luỹ kế kỳ (đ)</Th><Th r>Chi đợt này</Th><Th r>Còn lại</Th><Th r>% dùng</Th><Th r>Lead</Th><Th r>Khách QT</Th><Th r>Số căn chốt</Th><Th>Khó khăn</Th></tr></thead><tbody>
               {projs.map((p) => {
                 const it = items[p.projectId]; if (!it) return null;
                 const m = itemMetrics(it, { liveNs: p.ns, prevCum: prevCum(reports, dot, p.projectId), submitted: !!cur?.submittedAt && cur.items.some((x) => x.projectId === p.projectId) });
@@ -156,9 +156,9 @@ export function WeeklyForm({ c, period, lines, blockId }: { c: VCtx; period: str
                     <Td r>{fmt(m.dotCost)}</Td>
                     <Td r className={m.remaining < 0 ? 'text-[var(--mh-err)] font-semibold' : ''}>{fmt(m.remaining)}</Td>
                     <Td r><Pct pct={m.pct} over={m.over} /></Td>
-                    <Td r><Input type="number" min={0} value={it.leads} onChange={(e: any) => set(p.projectId, 'leads', Number(e.target.value))} disabled={!canEdit} className="w-20 text-right ml-auto" /></Td>
-                    <Td r><Input type="number" min={0} value={it.interested} onChange={(e: any) => set(p.projectId, 'interested', Number(e.target.value))} disabled={!canEdit} className="w-20 text-right ml-auto" /></Td>
-                    <Td r><Input type="number" min={0} step={1} inputMode="numeric" value={it.closedUnits ?? 0} onChange={(e: any) => set(p.projectId, 'closedUnits', Number(String(e.target.value).replace(/\D/g, '')) || 0)} disabled={!canEdit} className="w-20 text-right ml-auto" data-testid="vn-weekly-closed" /></Td>
+                    <Td r><Input type="number" min={0} value={it.leads} onChange={(e: any) => set(p.projectId, 'leads', Number(e.target.value))} disabled={!canEdit} className="w-24 min-w-[80px] text-right ml-auto" /></Td>
+                    <Td r><Input type="number" min={0} value={it.interested} onChange={(e: any) => set(p.projectId, 'interested', Number(e.target.value))} disabled={!canEdit} className="w-24 min-w-[80px] text-right ml-auto" /></Td>
+                    <Td r><Input type="number" min={0} step={1} inputMode="numeric" value={it.closedUnits ?? 0} onChange={(e: any) => set(p.projectId, 'closedUnits', Number(String(e.target.value).replace(/\D/g, '')) || 0)} disabled={!canEdit} className="w-24 min-w-[80px] text-right ml-auto" data-testid="vn-weekly-closed" /></Td>
                     <Td><Input value={it.difficulty || ''} onChange={(e: any) => set(p.projectId, 'difficulty', e.target.value)} disabled={!canEdit} placeholder="Khó khăn đang gặp" className="min-w-[180px]" /></Td>
                   </tr>
                 );
