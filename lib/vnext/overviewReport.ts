@@ -9,9 +9,10 @@
  * Gộp theo Khối, Dự án, Ban KD.
  */
 import { isAccepted, normalizeMonth, recordCostBeforeVat } from './ntReport';
-import { isNsReportableLine, reportableNsAmount, type Support } from './support';
+import { type Support } from './support';
 import { baseSupportPctAtPeriod, banOfProject } from './supportPct';
 import { canBanOf, type CanBanLine } from './canBan';
+import { blockTeamIds, summarizeBlock, type NsLine } from './budget';
 
 const num = (v: unknown) => (Number.isFinite(Number(v)) ? Number(v) : 0);
 const PERIOD_RE = /^[0-9]{4}-[0-9]{2}$/;
@@ -95,14 +96,21 @@ export function buildOverview(input: OverviewInput): Overview {
     bump(byBan, banId, f, v);
   };
 
-  // NS đăng ký
-  for (const l of input.nsLines || []) {
-    if (!l || l.deleted || l.period !== period) continue;
-    if (!(num(l.amount) > 0)) continue;
-    if (!isNsReportableLine(l, l.id ? input.nsSupport?.[l.id] : undefined)) continue;
-    const amt = reportableNsAmount(l, l.id ? input.nsSupport?.[l.id] : undefined);
-    if (!(amt > 0)) continue;
-    add('nsReg', amt, blockIdOf(l), String(l.projectId || ''), banIdOfProject(String(l.projectId || '')));
+  // NS đăng ký = tổng Ngân sách MKT của Khối theo từng dự án (khớp màn "Ngân sách MKT Khối"):
+  // mỗi Khối gộp dòng user+gdkd của các Phòng thuộc Khối + dòng gdk/khoi của Khối (summarizeBlock).
+  const nsLinesArr = (input.nsLines || []) as NsLine[];
+  for (const b of blocks) {
+    const blockId = String(b.id || '');
+    if (!blockId) continue;
+    const currentTeamIds = teams.filter((t: any) => t.blockId === blockId).map((t: any) => String(t.id));
+    const teamIds = blockTeamIds(nsLinesArr, period, blockId, currentTeamIds);
+    const sb = summarizeBlock(nsLinesArr, period, blockId, teamIds);
+    for (const row of sb.rows) {
+      const amt = num(row.total);
+      if (!(amt > 0)) continue;
+      const pid = String(row.projectId || '');
+      add('nsReg', amt, blockId, pid, banIdOfProject(pid));
+    }
   }
 
   // NS thực chạy (NT) + lead + hỗ trợ dự kiến
