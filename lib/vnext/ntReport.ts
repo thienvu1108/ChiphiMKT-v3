@@ -184,7 +184,7 @@ export function buildReconcile(nsLines: any[], acceptances: any[], filter: { mon
     && (!filter.teamIds || filter.teamIds.includes(r.teamId))
     && (!filter.blockId || r.blockId === filter.blockId)
     && (!filter.projectId || r.projectId === filter.projectId));
-  const ns = (nsLines || []).filter((l) => l && !l.deleted && l.kind === 'user'
+  const ns = (nsLines || []).filter((l) => l && !l.deleted && (l.kind === 'user' || l.kind === 'khoi')
     && (!month || l.period === month)
     && (!filter.teamIds || filter.teamIds.includes(l.teamId))
     && (!filter.blockId || l.blockId === filter.blockId)

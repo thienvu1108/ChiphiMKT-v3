@@ -15,7 +15,9 @@ export type NtBudgetLine = {
   id?: string;
   period?: string;
   teamId?: string;
+  blockId?: string;
   ownerUid?: string;
+  ownerName?: string;
   projectId?: string;
   projectName?: string;
   kind?: string;
@@ -51,13 +53,18 @@ export function personAccountIds(user: { uid?: string; id?: string; migratedFrom
  * null: kỳ cũ — không lọc theo đăng ký.
  * []: kỳ mới nhưng chưa đủ Phòng/người, hoặc không có dòng hợp lệ.
  *
- * Dòng tính: kind user hoặc khoi, cùng period, cùng teamId, ownerUid thuộc id tài khoản,
- * chưa xoá, chưa bị GĐK từ chối và chưa bị Ban từ chối (cùng luật Báo cáo tuần).
- * Chờ duyệt / Cần duyệt lại / Chờ STK / Chờ Ban vẫn tính. Nhiều dòng cùng dự án gộp một mục.
+ * Dòng tính:
+ *  - Thành viên Phòng: kind user/khoi, cùng period + teamId.
+ *  - GĐ Khối / Trợ lý Khối (đăng ký 'khoi', gắn theo blockId, KHÔNG thuộc teamId nào):
+ *    cùng period + blockId. (Chỉ xét khi truyền blockId.)
+ * Thêm điều kiện: ownerUid thuộc id tài khoản, chưa xoá, chưa bị GĐK/Ban từ chối
+ * (cùng luật Báo cáo tuần). Chờ duyệt / Cần duyệt lại / Chờ STK / Chờ Ban vẫn tính.
+ * Nhiều dòng cùng dự án gộp một mục.
  */
 export function acceptanceBudgetProjects(args: {
   month: unknown;
   teamId?: string;
+  blockId?: string;
   personUid?: string;
   accountIds?: string[];
   lines?: NtBudgetLine[] | null;
@@ -66,13 +73,16 @@ export function acceptanceBudgetProjects(args: {
   if (!ntUsesBudgetProjects(args.month)) return null;
   const period = ntPeriodKey(args.month);
   const teamId = String(args.teamId || '');
+  const blockId = String(args.blockId || '');
   const personUid = String(args.personUid || '');
-  if (!period || !teamId || !personUid) return [];
+  if (!period || !personUid || (!teamId && !blockId)) return [];
+  const inScope = (l: NtBudgetLine) =>
+    (!!teamId && l.teamId === teamId) || (!!blockId && l.kind === 'khoi' && l.blockId === blockId);
   const ids = new Set(personAccountIds(null, personUid).concat(args.accountIds || []));
   const byProject = new Map<string, NtProjectChoice>();
   for (const l of args.lines || []) {
     if (!l || l.deleted) continue;
-    if (l.period !== period || l.teamId !== teamId) continue;
+    if (l.period !== period || !inScope(l)) continue;
     if (!l.ownerUid || !ids.has(l.ownerUid)) continue;
     if (l.kind !== 'user' && l.kind !== 'khoi') continue;
     if (!l.projectId) continue;
@@ -88,12 +98,13 @@ export function acceptanceBudgetProjects(args: {
   return [...byProject.values()].sort((a, b) => a.projectId.localeCompare(b.projectId));
 }
 
-export function acceptanceChoicesFor(row: { month?: unknown; teamId?: string; implementerUid?: string; implementerManual?: boolean }, lines: NtBudgetLine[] | null | undefined, support: Record<string, Partial<Support> | undefined> | undefined, users: { uid?: string; id?: string; migratedFromUid?: string; aliasUids?: string[] }[] = []) {
+export function acceptanceChoicesFor(row: { month?: unknown; teamId?: string; blockId?: string; implementerUid?: string; implementerManual?: boolean }, lines: NtBudgetLine[] | null | undefined, support: Record<string, Partial<Support> | undefined> | undefined, users: { uid?: string; id?: string; migratedFromUid?: string; aliasUids?: string[] }[] = []) {
   const personUid = row.implementerManual ? '' : String(row.implementerUid || '');
   const user = users.find((u) => (u.uid || u.id) === personUid);
   return acceptanceBudgetProjects({
     month: row.month,
     teamId: row.teamId,
+    blockId: row.blockId,
     personUid,
     accountIds: personAccountIds(user, personUid),
     lines,
@@ -140,6 +151,37 @@ export function acceptanceAssigneeUids(args: {
     uids.add(l.ownerUid);
   }
   return uids;
+}
+
+export type KhoiAssignee = { uid: string; name: string; role: 'khoi' };
+
+/**
+ * GĐ Khối / Trợ lý Khối có đăng ký NS 'khoi' hợp lệ cho đúng Khối (blockId) + kỳ (≥ 2026-11).
+ * Họ KHÔNG thuộc Phòng nào nên không có trong implementerOptions của Phòng; lấy thẳng uid + tên
+ * từ dòng NS 'khoi'. Dùng để bổ sung vào dropdown Người phụ trách sau khi đã chọn Phòng.
+ * null: kỳ cũ. []: chưa chọn Khối, hoặc Khối/kỳ này chưa có đăng ký 'khoi'.
+ */
+export function acceptanceKhoiAssignees(args: {
+  month: unknown;
+  blockId?: string;
+  lines?: NtBudgetLine[] | null;
+  support?: Record<string, Partial<Support> | undefined>;
+}): KhoiAssignee[] | null {
+  if (!ntUsesBudgetProjects(args.month)) return null;
+  const period = ntPeriodKey(args.month);
+  const blockId = String(args.blockId || '');
+  if (!period || !blockId) return [];
+  const byUid = new Map<string, KhoiAssignee>();
+  for (const l of args.lines || []) {
+    if (!l || l.deleted) continue;
+    if (l.period !== period || l.kind !== 'khoi' || l.blockId !== blockId) continue;
+    if (!l.ownerUid) continue;
+    if (!isNsReportableLine(l as NsLine, l.id ? args.support?.[l.id] : undefined)) continue;
+    const cur = byUid.get(l.ownerUid);
+    if (!cur) byUid.set(l.ownerUid, { uid: l.ownerUid, name: l.ownerName || l.ownerUid, role: 'khoi' });
+    else if ((cur.name === cur.uid) && l.ownerName) cur.name = l.ownerName;
+  }
+  return [...byUid.values()].sort((a, b) => a.name.localeCompare(b.name, 'vi', { sensitivity: 'base' }));
 }
 
 /**

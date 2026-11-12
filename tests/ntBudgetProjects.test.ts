@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import {
   acceptanceAssigneeUids,
   acceptanceBudgetProjects,
+  acceptanceKhoiAssignees,
   clearStaleProject,
   filterAssigneeOptions,
   ntUsesBudgetProjects,
@@ -149,5 +150,49 @@ describe('Người phụ trách theo đăng ký NS (kỳ ≥ 2026-11)', () => {
     const optsNew = [{ uid: 'new', name: 'B2' }];
     const users = [{ uid: 'new', id: 'new', migratedFromUid: 'u2' }];
     expect(filterAssigneeOptions(optsNew, uids, users).map((o) => o.uid)).toEqual(['new']);
+  });
+});
+
+describe('GĐ/Trợ lý Khối: đăng ký khoi gắn theo Khối (không teamId)', () => {
+  // Dòng khoi thực tế: có blockId, KHÔNG có teamId (GĐK không thuộc Phòng nào).
+  const kLine = (p: Partial<NtBudgetLine>): NtBudgetLine => ({
+    id: 'k1', period: '2026-11', kind: 'khoi', blockId: 'B1', ownerUid: 'g1', ownerName: 'GĐ Khối A', projectId: 'PK1', amount: 20, ...p,
+  });
+  const lines: NtBudgetLine[] = [
+    kLine({ id: 'k1', projectId: 'PK1' }),
+    kLine({ id: 'k2', projectId: 'PK2' }),
+    kLine({ id: 'kOtherBlock', blockId: 'B2', projectId: 'PK9' }),
+    kLine({ id: 'kOct', period: '2026-10', projectId: 'PKold' }),
+    line({ id: 'teamUser', teamId: 'T1', ownerUid: 'u1', projectId: 'P1' }), // thành viên Phòng
+  ];
+
+  it('acceptanceKhoiAssignees: liệt kê GĐK/TLK của đúng Khối + kỳ, lấy tên từ dòng', () => {
+    expect(acceptanceKhoiAssignees({ month: '2026-10', blockId: 'B1', lines })).toBeNull(); // kỳ cũ
+    expect(acceptanceKhoiAssignees({ month: '2026-11', blockId: '', lines })).toEqual([]); // chưa có Khối
+    const got = acceptanceKhoiAssignees({ month: '2026-11', blockId: 'B1', lines });
+    expect(got).toEqual([{ uid: 'g1', name: 'GĐ Khối A', role: 'khoi' }]);
+    // Khối khác không lẫn vào
+    expect(acceptanceKhoiAssignees({ month: '2026-11', blockId: 'B2', lines })?.map((k) => k.uid)).toEqual(['g1']);
+  });
+
+  it('dự án của GĐK lấy theo blockId (dòng khoi không có teamId)', () => {
+    // Có blockId → gộp dự án khoi của đúng Khối
+    const got = acceptanceBudgetProjects({ month: '2026-11', blockId: 'B1', personUid: 'g1', lines });
+    expect(got?.map((c) => c.projectId)).toEqual(['PK1', 'PK2']);
+    // teamId='' nhưng có blockId (bản ghi GĐK đã xoá Phòng) vẫn ra dự án
+    const got2 = acceptanceBudgetProjects({ month: '2026-11', teamId: '', blockId: 'B1', personUid: 'g1', lines });
+    expect(got2?.map((c) => c.projectId)).toEqual(['PK1', 'PK2']);
+  });
+
+  it('không truyền blockId thì dòng khoi (không teamId) bị bỏ qua', () => {
+    expect(acceptanceBudgetProjects({ month: '2026-11', teamId: 'T1', personUid: 'g1', lines })).toEqual([]);
+  });
+
+  it('chọn Phòng T1 vẫn chỉ ra thành viên Phòng; GĐK đến từ danh sách khoi riêng', () => {
+    // assignee theo Phòng không gồm GĐK (khoi không teamId)
+    const teamUids = acceptanceAssigneeUids({ month: '2026-11', teamId: 'T1', lines });
+    expect([...(teamUids as Set<string>)]).toEqual(['u1']);
+    // GĐK đến từ acceptanceKhoiAssignees theo blockId
+    expect(acceptanceKhoiAssignees({ month: '2026-11', blockId: 'B1', lines })?.map((k) => k.uid)).toEqual(['g1']);
   });
 });

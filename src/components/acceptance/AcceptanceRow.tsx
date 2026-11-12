@@ -20,7 +20,7 @@ import { AcceptanceSearchableSelect, SearchableItem } from './AcceptanceSearchab
 import { ManualAssigneeDialog } from './ManualAssigneeDialog';
 import { suppBadge, suppStatus, SUPP_STATUS_LABEL } from '../../../lib/vnext/ntSupplement';
 import { NT_MANUAL_LABEL, NT_MANUAL_VALUE, ntManualAllowed, isManualImplementer, implementerLabel } from '../../../lib/vnext/ntManual';
-import { acceptanceAssigneeUids, acceptanceChoicesFor, clearStaleProject, filterAssigneeOptions, type NtBudgetLine } from '../../../lib/vnext/ntBudgetProjects';
+import { acceptanceAssigneeUids, acceptanceChoicesFor, acceptanceKhoiAssignees, clearStaleProject, filterAssigneeOptions, type NtBudgetLine } from '../../../lib/vnext/ntBudgetProjects';
 import type { Support } from '../../../lib/vnext/support';
 
 interface RowProps {
@@ -260,6 +260,10 @@ export const AcceptanceRow: React.FC<RowProps> = React.memo(({
         );
     const currentEditTeamId = currentEditTeam?.id || localEditState.teamId || '';
     const editResolvedBlock = resolveBlockForTeam(currentEditTeam || localEditState, blocks, teams, findTeam);
+    const editBlockId = editResolvedBlock.blockId || localEditState.blockId || '';
+    // GĐ/TL Khối (đăng ký 'khoi' theo Khối, không thuộc Phòng) — bổ sung vào Người phụ trách.
+    const editKhoiAssignees = acceptanceKhoiAssignees({ month: localEditState.month, blockId: editBlockId, lines: nsLines, support: nsSupport });
+    const editKhoiUidSet = new Set((editKhoiAssignees || []).map((k) => k.uid));
 
     const currentEditProj = resolveAcceptanceProject(localEditState, projects);
     const currentEditProjId = currentEditProj?.id || localEditState.projectId || '';
@@ -385,7 +389,7 @@ export const AcceptanceRow: React.FC<RowProps> = React.memo(({
 
         {/* Col D: NGƯỜI PHỤ TRÁCH — searchable, thành viên đã duyệt của Phòng */}
         <TableCell className="p-1 min-w-[160px] relative z-20 overflow-visible">
-          {!currentEditTeamId ? (
+          {!currentEditTeamId && !editBlockId ? (
             <span className="text-[11px] text-amber-700 italic px-1">Chọn Phòng trước</span>
           ) : (
             <AcceptanceSearchableSelect
@@ -394,6 +398,7 @@ export const AcceptanceRow: React.FC<RowProps> = React.memo(({
                 const tm = currentEditTeam || (teams || []).find((t: any) => t.id === currentEditTeamId);
                 const opts = filterAssigneeOptions(implementerOptions(allUsers, currentEditTeamId, tm), assigneeUids, allUsers);
                 const items = opts.map((o) => ({ value: o.uid, label: o.name + (o.role === 'gdkd' ? ' · GĐKD' : ''), searchString: o.name }));
+                (editKhoiAssignees || []).forEach((k) => { if (!items.some((i) => i.value === k.uid)) items.push({ value: k.uid, label: k.name + ' · GĐ/TL Khối', searchString: k.name }); });
                 if (localEditState.implementerUid && !items.some((i) => i.value === localEditState.implementerUid)) {
                   items.unshift({ value: localEditState.implementerUid, label: (localEditState.implementerName || localEditState.implementerUid) + ' (ngoài Phòng)', searchString: localEditState.implementerName || '' });
                 } else if (!localEditState.implementerUid && localEditState.implementerName) {
@@ -402,20 +407,25 @@ export const AcceptanceRow: React.FC<RowProps> = React.memo(({
                 if (onAssignManual && ntManualAllowed(localEditState.month || item.month)) items.unshift({ value: NT_MANUAL_VALUE, label: NT_MANUAL_LABEL, searchString: 'khac tu nhap' });
                 return items;
               })()}
-              placeholder={assigneeUids && assigneeUids.size === 0 ? 'Chưa có đăng ký NS kỳ này' : (filterAssigneeOptions(implementerOptions(allUsers, currentEditTeamId), assigneeUids, allUsers).length ? 'Chọn người phụ trách' : 'Phòng chưa có thành viên')}
+              placeholder={(assigneeUids && assigneeUids.size === 0 && !(editKhoiAssignees && editKhoiAssignees.length)) ? 'Chưa có đăng ký NS kỳ này' : ((filterAssigneeOptions(implementerOptions(allUsers, currentEditTeamId), assigneeUids, allUsers).length || (editKhoiAssignees && editKhoiAssignees.length)) ? 'Chọn người phụ trách' : 'Phòng chưa có thành viên')}
               searchPlaceholder="Tìm tên (không cần dấu)…"
               triggerClassName="h-7 text-[11px] font-bold border-indigo-200 bg-[var(--mh-surface)] rounded"
               contentClassName="max-h-72 w-[280px] sm:w-[320px] z-[2000]"
               onValueChange={(uid, raw) => {
                 if (uid === NT_MANUAL_VALUE) { setManualOpen('edit'); return; }
-                const name = raw?.label?.replace(/ · GĐKD$/, '') || (allUsers.find((u: any) => (u.uid || u.id) === uid)?.fullName) || uid;
+                const isKhoi = editKhoiUidSet.has(uid);
+                const kk = (editKhoiAssignees || []).find((x) => x.uid === uid);
+                const name = raw?.label?.replace(/ · (GĐKD|GĐ\/TL Khối)$/, '') || (allUsers.find((u: any) => (u.uid || u.id) === uid)?.fullName) || uid;
                 const u = allUsers.find((x: any) => (x.uid || x.id) === uid);
+                // GĐ/TL Khối không thuộc Phòng: xoá teamId, giữ blockId để bản ghi gộp theo Khối.
+                const teamPatch = isKhoi ? { teamId: '', teamCode: '', teamName: '' } : {};
                 setLocalEditState((prev: any) => clearStaleProject({
                   ...prev,
+                  ...teamPatch,
                   implementerUid: uid,
-                  implementerName: (u?.fullName || u?.displayName || u?.email || name || '').replace(/ · GĐKD$/, ''),
+                  implementerName: isKhoi ? (kk?.name || uid) : (u?.fullName || u?.displayName || u?.email || name || '').replace(/ · (GĐKD|GĐ\/TL Khối)$/, ''),
                   implementerManual: false,
-                }, acceptanceChoicesFor({ ...prev, implementerUid: uid, implementerManual: false }, nsLines, nsSupport, allUsers)));
+                }, acceptanceChoicesFor({ ...prev, ...teamPatch, implementerUid: uid, implementerManual: false }, nsLines, nsSupport, allUsers)));
               }}
             />
           )}
@@ -432,7 +442,7 @@ export const AcceptanceRow: React.FC<RowProps> = React.memo(({
             value={budgetChoices && !budgetChoices.some((c) => c.projectId === currentEditProjId) ? '' : currentEditProjId}
             items={projectItems}
             disabled={!!budgetChoices && (!(localEditState?.implementerUid) || projectItems.length === 0)}
-            placeholder={!currentEditTeamId ? 'Chọn Phòng trước' : !(localEditState?.implementerUid) ? 'Chọn người phụ trách trước' : budgetChoices && projectItems.length === 0 ? 'Chưa có đăng ký NS kỳ này' : 'Chọn Dự án'}
+            placeholder={!currentEditTeamId && !editBlockId ? 'Chọn Phòng trước' : !(localEditState?.implementerUid) ? 'Chọn người phụ trách trước' : budgetChoices && projectItems.length === 0 ? 'Chưa có đăng ký NS kỳ này' : 'Chọn Dự án'}
             searchPlaceholder="Tìm kiếm dự án, mã dự án..."
             triggerClassName="h-7 text-[11px] font-bold border-indigo-200 bg-[var(--mh-surface)] rounded"
             triggerDisplay={
@@ -690,7 +700,7 @@ export const AcceptanceRow: React.FC<RowProps> = React.memo(({
       {/* Col D: NGƯỜI PHỤ TRÁCH — picker trên mọi dòng (Admin/Mod); chưa có Phòng → chọn Phòng trước */}
       <TableCell className="p-1 text-xs text-[var(--mh-text)] min-w-[170px] max-w-[220px]" title={item.implementerName || ''} data-testid="nt-implementer-cell">
         {canEdit && onAssignImplementer ? (
-          !(matchedTeam?.id || item.teamId) ? (
+          !(matchedTeam?.id || item.teamId || item.blockId) ? (
             onAssignTeam ? (
               <AcceptanceSearchableSelect
                 value=""
@@ -709,6 +719,8 @@ export const AcceptanceRow: React.FC<RowProps> = React.memo(({
                 const assignUids = acceptanceAssigneeUids({ month: item.month, teamId: tid, lines: nsLines, support: nsSupport });
                 const opts = filterAssigneeOptions(implementerOptions(allUsers, tid, matchedTeam), assignUids, allUsers);
                 const items: any[] = opts.map((o) => ({ value: o.uid, label: o.name + (o.role === 'gdkd' ? ' · GĐKD' : ''), searchString: o.name }));
+                const kAssignees = acceptanceKhoiAssignees({ month: item.month, blockId: matchedTeam?.blockId || item.blockId, lines: nsLines, support: nsSupport });
+                (kAssignees || []).forEach((k) => { if (!items.some((i) => i.value === k.uid)) items.push({ value: k.uid, label: k.name + ' · GĐ/TL Khối', searchString: k.name }); });
                 if (item.implementerUid && !items.some((i) => i.value === item.implementerUid)) items.unshift({ value: item.implementerUid, label: `${item.implementerName || item.implementerUid} (ngoài Phòng)`, searchString: item.implementerName || '' });
                 if (onAssignManual && ntManualAllowed(item.month)) items.unshift({ value: NT_MANUAL_VALUE, label: NT_MANUAL_LABEL, searchString: 'khac tu nhap' });
                 return items;

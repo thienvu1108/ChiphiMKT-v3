@@ -12,7 +12,7 @@ import { ManualAssigneeDialog } from './ManualAssigneeDialog';
 import { suppMonths } from '../../../lib/vnext/ntSupplement';
 import { normalizeMonth } from '../../../lib/vnext/ntReport';
 import { NT_MANUAL_LABEL, NT_MANUAL_VALUE, ntManualAllowed, isManualImplementer, implementerLabel } from '../../../lib/vnext/ntManual';
-import { acceptanceAssigneeUids, acceptanceChoicesFor, clearStaleProject, filterAssigneeOptions, ntUsesBudgetProjects, type NtBudgetLine } from '../../../lib/vnext/ntBudgetProjects';
+import { acceptanceAssigneeUids, acceptanceChoicesFor, acceptanceKhoiAssignees, clearStaleProject, filterAssigneeOptions, ntUsesBudgetProjects, type NtBudgetLine } from '../../../lib/vnext/ntBudgetProjects';
 import type { Support } from '../../../lib/vnext/support';
 
 interface DraftRowProps {
@@ -132,6 +132,11 @@ export const AcceptanceDraftRow: React.FC<DraftRowProps> = React.memo(({
 
   // Kỳ ≥ 2026-11: Người phụ trách chỉ còn user đã đăng ký NS cho Phòng + kỳ này.
   const assigneeUids = useMemo(() => acceptanceAssigneeUids({ month: localDraft.month, teamId: localDraft.teamId, lines: nsLines, support: nsSupport }), [localDraft.month, localDraft.teamId, nsLines, nsSupport]);
+
+  const currentDraftBlockId = draftResolvedBlock.blockId || localDraft.blockId || '';
+  // GĐ Khối / Trợ lý Khối (đăng ký 'khoi' theo Khối, không thuộc Phòng) — bổ sung vào dropdown Người phụ trách.
+  const khoiAssignees = useMemo(() => acceptanceKhoiAssignees({ month: localDraft.month, blockId: currentDraftBlockId, lines: nsLines, support: nsSupport }), [localDraft.month, currentDraftBlockId, nsLines, nsSupport]);
+  const khoiUidSet = useMemo(() => new Set((khoiAssignees || []).map((k) => k.uid)), [khoiAssignees]);
 
   const projectItems = useMemo(() => {
     const catalog = (list: any[]) => list.map((p: any) => {
@@ -323,7 +328,7 @@ export const AcceptanceDraftRow: React.FC<DraftRowProps> = React.memo(({
 
       {/* Col D: NGƯỜI PHỤ TRÁCH */}
       <TableCell className="p-1 min-w-[160px] overflow-visible">
-        {!currentDraftTeamId ? (
+        {!currentDraftTeamId && !currentDraftBlockId ? (
           <span className="text-[11px] text-amber-700 italic px-1">Chọn Phòng trước</span>
         ) : (
           <AcceptanceSearchableSelect
@@ -335,14 +340,20 @@ export const AcceptanceDraftRow: React.FC<DraftRowProps> = React.memo(({
                 assigneeUids,
                 allUsers,
               ).map((o)=>({ value:o.uid, label:o.name+(o.role==='gdkd'?' · GĐKD':''), searchString:o.name })),
+              ...(khoiAssignees || []).map((k)=>({ value:k.uid, label:k.name+' · GĐ/TL Khối', searchString:k.name })),
             ]}
-            placeholder={isManualImplementer(localDraft) ? implementerLabel(localDraft) : (assigneeUids && assigneeUids.size === 0 ? 'Chưa có đăng ký NS kỳ này' : 'Chọn người phụ trách')}
+            placeholder={isManualImplementer(localDraft) ? implementerLabel(localDraft) : ((assigneeUids && assigneeUids.size === 0 && !(khoiAssignees && khoiAssignees.length)) ? 'Chưa có đăng ký NS kỳ này' : 'Chọn người phụ trách')}
             searchPlaceholder="Tìm tên (không cần dấu)…"
             triggerClassName="h-7 text-[11px] font-semibold border-[var(--mh-border)] bg-[var(--mh-surface)] rounded"
             onValueChange={(uid)=>{
               if (uid === NT_MANUAL_VALUE) { setManualOpen(true); return; }
+              const isKhoi = khoiUidSet.has(uid);
+              const k = (khoiAssignees || []).find((x)=>x.uid===uid);
               const u=allUsers.find((x:any)=>(x.uid||x.id)===uid);
-              setLocalDraft((prev: any) => clearStaleProject({ ...prev, implementerUid: uid, implementerName: u?.fullName||u?.displayName||u?.email||uid, implementerManual: false }, acceptanceChoicesFor({ ...prev, implementerUid: uid, implementerManual: false }, nsLines, nsSupport, allUsers)));
+              // GĐ/TL Khối không thuộc Phòng: xoá teamId, giữ blockId để bản ghi gộp theo Khối.
+              const teamPatch = isKhoi ? { teamId: '', teamCode: '', teamName: '' } : {};
+              const name = isKhoi ? (k?.name || uid) : (u?.fullName||u?.displayName||u?.email||uid);
+              setLocalDraft((prev: any) => clearStaleProject({ ...prev, ...teamPatch, implementerUid: uid, implementerName: name, implementerManual: false }, acceptanceChoicesFor({ ...prev, ...teamPatch, implementerUid: uid, implementerManual: false }, nsLines, nsSupport, allUsers)));
             }}
           />
         )}
@@ -360,7 +371,7 @@ export const AcceptanceDraftRow: React.FC<DraftRowProps> = React.memo(({
           value={budgetChoices && !budgetChoices.some((c) => c.projectId === currentDraftProjId) ? '' : (currentDraftProjId || '')}
           items={projectItems}
           disabled={!!budgetChoices && (!localDraft.implementerUid || projectItems.length === 0)}
-          placeholder={!currentDraftTeamId ? 'Chọn Phòng trước' : !localDraft.implementerUid ? 'Chọn người phụ trách trước' : budgetChoices && projectItems.length === 0 ? 'Chưa có đăng ký NS kỳ này' : 'Chọn Dự án'}
+          placeholder={!currentDraftTeamId && !currentDraftBlockId ? 'Chọn Phòng trước' : !localDraft.implementerUid ? 'Chọn người phụ trách trước' : budgetChoices && projectItems.length === 0 ? 'Chưa có đăng ký NS kỳ này' : 'Chọn Dự án'}
           searchPlaceholder="Tìm kiếm dự án, mã dự án..."
           triggerDisplay={
             selectedProj ? (
