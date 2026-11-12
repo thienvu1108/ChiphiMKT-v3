@@ -257,6 +257,20 @@ describe('buildReconcile NS ↔ NT', () => {
     expect(p2.ns).toBe(50); expect(p2.cost).toBe(80); expect(p2.diff).toBe(-30); expect(p2.pct).toBe(160);
   });
   it('recordCostBeforeVat', () => expect(recordCostBeforeVat({ digitalFb: 10, visaFb: 5, caNhanFb: 3 })).toBe(18));
+
+  it('gồm cả đăng ký khoi của GĐ Khối (gắn theo blockId, không teamId), bỏ gdkd', () => {
+    const ns2 = [
+      { kind: 'khoi', period: '2026-11', ownerUid: 'g1', ownerName: 'GĐ Khối', blockId: 'B1', projectId: 'PK', amount: 200 },
+      { kind: 'gdkd', period: '2026-11', teamId: 'T1', blockId: 'B1', projectId: 'PK', amount: 999 }, // không tính
+    ];
+    const acc2 = [
+      { id: 'K1', status: 'Đã nghiệm thu', month: '2026-11', implementerUid: 'g1', implementerName: 'GĐ Khối', blockId: 'B1', projectId: 'PK', digitalFb: 120 },
+    ];
+    // Lọc theo Khối B1 → NS khoi + NT của GĐK khớp theo uid×dự án
+    const rows = buildReconcile(ns2, acc2, { month: '2026-11', blockId: 'B1' });
+    const pk = rows.find((r) => r.projectId === 'PK')!;
+    expect(pk.ns).toBe(200); expect(pk.cost).toBe(120); expect(pk.blockId).toBe('B1');
+  });
 });
 
 describe('Xoá Khối + ẩn Phòng Ngừng hoạt động', () => {
