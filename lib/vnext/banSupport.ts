@@ -73,6 +73,48 @@ export function isBanTodo(st: BanEffectiveStatus) {
   return st === 'pending';
 }
 
+/** Dòng này Ban đã từng duyệt (history có layer 'ban' + status 'approved'). */
+export function banApprovedBefore(s?: Partial<Support> | null): boolean {
+  const h = Array.isArray(s?.history) ? (s!.history as any[]) : [];
+  return h.some((x) => x?.layer === 'ban' && x?.status === 'approved');
+}
+
+/** Phân loại dòng đang «Chờ Ban duyệt»: 'first' (lần đầu) | 'reapproval' (đã duyệt rồi bị sửa → duyệt lại) | null. */
+export function banPendingKind(line: NsLine, s?: Partial<Support> | null): 'first' | 'reapproval' | null {
+  if (effectiveBanStatus(line, s) !== 'pending') return null;
+  return banApprovedBefore(s) ? 'reapproval' : 'first';
+}
+
+export type BanReapprovalChange = { before: number; after: number; byUid: string; byName: string; at: string };
+
+/**
+ * Chi tiết thay đổi khiến phải «duyệt lại»: số tiền Ban đã duyệt gần nhất (trước) → số tiền hiện tại (sau),
+ * kèm người sửa + thời điểm (lấy từ lịch sử sửa dòng NS). null nếu không phải trường hợp duyệt lại.
+ */
+export function banReapprovalChange(line: NsLine, s?: Partial<Support> | null): BanReapprovalChange | null {
+  if (banPendingKind(line, s) !== 'reapproval') return null;
+  const lh = Array.isArray(line.history) ? (line.history as any[]) : [];
+  let edit: any = null;
+  for (const x of lh) {
+    if (x?.action === 'update' && Number(x.from) !== Number(x.to) && (!edit || String(x.at) > String(edit.at))) edit = x;
+  }
+  const sh = Array.isArray(s?.history) ? (s!.history as any[]) : [];
+  let before: number | null = null;
+  for (let i = sh.length - 1; i >= 0; i--) {
+    const x = sh[i];
+    if (x?.layer === 'ban' && x?.status === 'approved' && Number.isFinite(Number(x.amount))) { before = Number(x.amount); break; }
+  }
+  if (before == null && edit) before = Number(edit.from);
+  if (before == null) return null;
+  return {
+    before,
+    after: Number(line.amount) || 0,
+    byUid: edit ? String(edit.byUid || '') : '',
+    byName: edit ? String(edit.byName || '') : '',
+    at: edit ? String(edit.at || '') : '',
+  };
+}
+
 /** true khi Ban đã duyệt (grandfather tính là approved). Dùng UI / audit; báo cáo tuần không còn bắt buộc. */
 export function isBanApprovedForWeekly(line: NsLine, s?: Partial<Support> | null): boolean {
   return effectiveBanStatus(line, s) === 'approved';

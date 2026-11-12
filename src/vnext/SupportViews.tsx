@@ -19,7 +19,7 @@ import { baseSupportPctAtPeriod, fmtPct, excelSupportPctFields } from '../../lib
 import { exportFileName, blockCodeOf, teamCodeOf } from '../../lib/vnext/exportName';
 import type { NsLine } from '../../lib/vnext/budget';
 import { SUPPORT_COLLECTION, SUPPORT_LABEL, SUPPORT_TONE, type Support, type SupportStatus, type StoredStatus, buildDecision, effectiveStatus, payOf, supportable, filterRows, isAutoApproved, isAutoNow, AUTO_APPROVED_NOTE, splitByStatus, ALL_STATUSES, HISTORY_COLLECTION, HIST_LABEL, timeline, type LineHist, type StatusSplit } from '../../lib/vnext/support';
-import { BAN_STATUS_LABEL, buildBanDecision, effectiveBanStatus, banReasonText } from '../../lib/vnext/banSupport';
+import { BAN_STATUS_LABEL, buildBanDecision, effectiveBanStatus, banReasonText, banPendingKind } from '../../lib/vnext/banSupport';
 import { useKycMap, useAllKyc, KycCells, useMyKyc } from './KycViews';
 import { canSeeOthersKyc, type Kyc, accountForLine, hasPayInfo } from '../../lib/vnext/kyc';
 import { kycRequired } from '../../lib/vnext/onboarding';
@@ -233,7 +233,7 @@ function Filters({ c, rows, f, setF, showStatus = true, buckets = false }: { c: 
     <Field label="Phòng"><SearchSelect value={f.teamId || ''} onChange={(v: string) => setF({ ...f, teamId: v, ownerUid: '' })} options={[{ value: '', label: 'Tất cả' }, ...teams.map((t) => ({ value: t, label: teamName(c, t) }))]} data-testid="vn-sup-f-team" /></Field>
     <Field label="User"><SearchSelect value={f.ownerUid || ''} onChange={(v: string) => setF({ ...f, ownerUid: v })} options={[{ value: '', label: 'Tất cả' }, ...users.map(([u, n]) => ({ value: u as string, label: n as string }))]} data-testid="vn-sup-f-user" /></Field>
     <Field label="Dự án"><SearchSelect value={f.projectId || ''} onChange={(v: string) => setF({ ...f, projectId: v })} options={[{ value: '', label: 'Tất cả' }, ...projects.map((p) => ({ value: p, label: projectName(c, p) }))]} data-testid="vn-sup-f-project" /></Field>
-    {showStatus && <Field label="Trạng thái"><SearchSelect sort={false} value={f.status || ''} onChange={(v: string) => setF({ ...f, status: v })} options={[{ value: '', label: 'Tất cả' }, { value: 'todo', label: 'Cần xử lý (chờ + duyệt lại)' }, ...(buckets ? (['pending', 'reapproval', 'need_pay', 'khoi_ok', 'approved', 'rejected'] as Bucket[]).map((s) => ({ value: s, label: BUCKET_LABEL[s] })) : (['pending', 'reapproval', 'need_pay', 'approved', 'rejected'] as SupportStatus[]).map((s) => ({ value: s, label: SUPPORT_LABEL[s] })))]} data-testid="vn-sup-f-status" /></Field>}
+    {showStatus && <Field label="Trạng thái"><SearchSelect sort={false} value={f.status || ''} onChange={(v: string) => setF({ ...f, status: v })} options={[{ value: '', label: 'Tất cả' }, { value: 'todo', label: 'Cần xử lý (chờ + duyệt lại)' }, ...(buckets ? (['pending', 'reapproval', 'need_pay', 'khoi_ok', 'approved', 'rejected'] as Bucket[]).map((s) => ({ value: s, label: BUCKET_LABEL[s] })) : (['pending', 'reapproval', 'need_pay', 'approved', 'rejected'] as SupportStatus[]).map((s) => ({ value: s, label: SUPPORT_LABEL[s] }))), { value: 'ban_pending', label: 'Chờ Ban KD duyệt' }, { value: 'ban_reapproval', label: 'Chờ Ban KD duyệt lại' }]} data-testid="vn-sup-f-status" /></Field>}
   </>;
   return <FilterSheet activeCount={active}>{fields}</FilterSheet>;
 }
@@ -259,7 +259,10 @@ export function SupportReviewPanel({ c, blockId, period, lines }: { c: VCtx; blo
   useEffect(() => { if (!focus) return; const h = setTimeout(() => document.querySelector(`[data-line="${focus}"]`)?.scrollIntoView({ block: 'center' }), 600); return () => clearTimeout(h); }, [focus]);
   const all: Row[] = useMemo(() => own.map((line) => { const s = sup[line.id]; return { line, s, status: effectiveStatus(line, s, payOf(pay, line.ownerUid)), kyc: lineKyc(kycs[line.ownerUid || ''], line) }; })
     .sort((a, b) => String(a.line.ownerName || '').localeCompare(String(b.line.ownerName || ''), 'vi') || projectName(c, a.line.projectId).localeCompare(projectName(c, b.line.projectId), 'vi')), [own, sup, kycs, pay, c.blocks]);
-  const rows = filterRows(all, f);
+  const banKind = f.status === 'ban_pending' ? 'first' : f.status === 'ban_reapproval' ? 'reapproval' : null;
+  const rows = banKind
+    ? filterRows(all, { ...f, status: '' }).filter((r) => banPendingKind(r.line, r.s) === banKind)
+    : filterRows(all, f);
   const split = useMemo(() => splitByStatus(own, sup, pay), [own, sup, pay, c.blocks]);
   if (!blockId) return <Card className="p-5 text-[13px]">Bạn chưa được gán Khối.</Card>;
 
@@ -382,8 +385,11 @@ export function AdminNsRecords({ c }: { c: VCtx }) {
   const [mode, setMode] = useViewMode('admin-ns', c.uid);
   const all: Row[] = useMemo(() => lines.filter((l) => supportable(l) && l.period === period && (!blockId || l.blockId === blockId))
     .map((line) => ({ line, s: sup[line.id], status: effectiveStatus(line, sup[line.id], payOf(pay, line.ownerUid)), kyc: lineKyc(kycAll[line.ownerUid || ''], line) })), [lines, sup, period, blockId, kycAll, pay, c.blocks]);
-  const isBucket = BUCKET_ORDER.includes(f.status) && f.status !== 'pending' && f.status !== 'reapproval' && f.status !== 'need_pay';
-  const rows = filterRows(all, isBucket ? { ...f, status: '' } : f).filter((r) => !isBucket || bucketOf(stageOf(r.status as St5, r.line, r.s)) === f.status);
+  const banKind = f.status === 'ban_pending' ? 'first' : f.status === 'ban_reapproval' ? 'reapproval' : null;
+  const isBucket = !banKind && BUCKET_ORDER.includes(f.status) && f.status !== 'pending' && f.status !== 'reapproval' && f.status !== 'need_pay';
+  const rows = banKind
+    ? filterRows(all, { ...f, status: '' }).filter((r) => banPendingKind(r.line, r.s) === banKind)
+    : filterRows(all, isBucket ? { ...f, status: '' } : f).filter((r) => !isBucket || bucketOf(stageOf(r.status as St5, r.line, r.s)) === f.status);
   const groups = useMemo(() => {
     const m = new Map<string, Row[]>();
     for (const r of rows) { if (!m.has(r.line.projectId)) m.set(r.line.projectId, []); m.get(r.line.projectId)!.push(r); }
