@@ -5,6 +5,7 @@ import {
   acceptanceKhoiAssignees,
   clearStaleProject,
   filterAssigneeOptions,
+  khoiManagerBlockId,
   ntUsesBudgetProjects,
   personAccountIds,
   projectAllowedForAcceptance,
@@ -166,13 +167,24 @@ describe('GĐ/Trợ lý Khối: đăng ký khoi gắn theo Khối (không teamId
     line({ id: 'teamUser', teamId: 'T1', ownerUid: 'u1', projectId: 'P1' }), // thành viên Phòng
   ];
 
-  it('acceptanceKhoiAssignees: liệt kê GĐK/TLK của đúng Khối + kỳ, lấy tên từ dòng', () => {
+  it('acceptanceKhoiAssignees: liệt kê GĐK/TLK của đúng Khối + kỳ, kèm blockId + tên từ dòng', () => {
     expect(acceptanceKhoiAssignees({ month: '2026-10', blockId: 'B1', lines })).toBeNull(); // kỳ cũ
     expect(acceptanceKhoiAssignees({ month: '2026-11', blockId: '', lines })).toEqual([]); // chưa có Khối
     const got = acceptanceKhoiAssignees({ month: '2026-11', blockId: 'B1', lines });
-    expect(got).toEqual([{ uid: 'g1', name: 'GĐ Khối A', role: 'khoi' }]);
+    expect(got).toEqual([{ uid: 'g1', name: 'GĐ Khối A', blockId: 'B1', role: 'khoi' }]);
     // Khối khác không lẫn vào
-    expect(acceptanceKhoiAssignees({ month: '2026-11', blockId: 'B2', lines })?.map((k) => k.uid)).toEqual(['g1']);
+    expect(acceptanceKhoiAssignees({ month: '2026-11', blockId: 'B2', lines })?.map((k) => k.blockId)).toEqual(['B2']);
+  });
+
+  it('khoiManagerBlockId: trả Khối chuẩn của GĐK (sửa được blockId lưu sai)', () => {
+    expect(khoiManagerBlockId({ month: '2026-10', uid: 'g1', lines })).toBe(''); // kỳ cũ
+    expect(khoiManagerBlockId({ month: '2026-11', uid: 'u1', lines })).toBe(''); // không phải GĐK
+    // Không có preferBlockId → lấy dòng khoi đầu tiên của g1 (B1)
+    expect(khoiManagerBlockId({ month: '2026-11', uid: 'g1', lines })).toBe('B1');
+    // preferBlockId khớp đăng ký → giữ
+    expect(khoiManagerBlockId({ month: '2026-11', uid: 'g1', lines, preferBlockId: 'B2' })).toBe('B2');
+    // preferBlockId SAI (BO không có đăng ký) → bỏ qua, lấy Khối thật của g1
+    expect(khoiManagerBlockId({ month: '2026-11', uid: 'g1', lines, preferBlockId: 'BO' })).toBe('B1');
   });
 
   it('dự án của GĐK lấy theo blockId (dòng khoi không có teamId)', () => {

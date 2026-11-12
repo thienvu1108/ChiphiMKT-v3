@@ -77,9 +77,6 @@ export const AcceptanceTableHeader: React.FC<HeaderProps> = React.memo(({
         {/* Col B: MÃ TEAM */}
         {renderSortableCell('teamCode', 'MÃ TEAM', 'w-24 bg-[var(--mh-surface-2)] text-[var(--mh-text)] border-[var(--mh-border-strong)] text-[11px]')}
 
-        {/* Col C: GĐKD */}
-        {renderSortableCell('gdkdName', 'GĐKD', 'min-w-[130px] bg-[var(--mh-surface-2)] text-[var(--mh-text)] border-[var(--mh-border-strong)] text-[11px]')}
-
         {/* Col D: NGƯỜI PHỤ TRÁCH */}
         {renderSortableCell('implementerName', 'NGƯỜI PHỤ TRÁCH', 'min-w-[120px] bg-[var(--mh-surface-2)] text-[var(--mh-text)] border-[var(--mh-border-strong)] text-[11px]')}
 

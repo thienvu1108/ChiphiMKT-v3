@@ -133,7 +133,9 @@ export const AcceptanceDraftRow: React.FC<DraftRowProps> = React.memo(({
   // Kỳ ≥ 2026-11: Người phụ trách chỉ còn user đã đăng ký NS cho Phòng + kỳ này.
   const assigneeUids = useMemo(() => acceptanceAssigneeUids({ month: localDraft.month, teamId: localDraft.teamId, lines: nsLines, support: nsSupport }), [localDraft.month, localDraft.teamId, nsLines, nsSupport]);
 
-  const currentDraftBlockId = draftResolvedBlock.blockId || localDraft.blockId || '';
+  // Ưu tiên blockId đã lưu (giá trị khớp dòng NS khoi) hơn giá trị resolveBlockForTeam chuẩn hoá,
+  // để danh sách GĐ/TL Khối (khớp theo blockId) không lệch sau khi chọn.
+  const currentDraftBlockId = localDraft.blockId || draftResolvedBlock.blockId || '';
   // GĐ Khối / Trợ lý Khối (đăng ký 'khoi' theo Khối, không thuộc Phòng) — bổ sung vào dropdown Người phụ trách.
   const khoiAssignees = useMemo(() => acceptanceKhoiAssignees({ month: localDraft.month, blockId: currentDraftBlockId, lines: nsLines, support: nsSupport }), [localDraft.month, currentDraftBlockId, nsLines, nsSupport]);
   const khoiUidSet = useMemo(() => new Set((khoiAssignees || []).map((k) => k.uid)), [khoiAssignees]);
@@ -316,16 +318,6 @@ export const AcceptanceDraftRow: React.FC<DraftRowProps> = React.memo(({
         />
       </TableCell>
 
-      {/* Col C: GĐKD */}
-      <TableCell className="p-1 min-w-[120px]">
-        <Input
-          value={localDraft.gdkdName || ''}
-          placeholder="GĐKD"
-          onChange={(e) => handleUpdateLocalField('gdkdName', e.target.value)}
-          className="h-7 text-xs font-semibold border-[var(--mh-border)] rounded bg-[var(--mh-surface)]"
-        />
-      </TableCell>
-
       {/* Col D: NGƯỜI PHỤ TRÁCH */}
       <TableCell className="p-1 min-w-[160px] overflow-visible">
         {!currentDraftTeamId && !currentDraftBlockId ? (
@@ -350,8 +342,9 @@ export const AcceptanceDraftRow: React.FC<DraftRowProps> = React.memo(({
               const isKhoi = khoiUidSet.has(uid);
               const k = (khoiAssignees || []).find((x)=>x.uid===uid);
               const u=allUsers.find((x:any)=>(x.uid||x.id)===uid);
-              // GĐ/TL Khối không thuộc Phòng: xoá teamId, giữ blockId để bản ghi gộp theo Khối.
-              const teamPatch = isKhoi ? { teamId: '', teamCode: '', teamName: '' } : {};
+              // GĐ/TL Khối không thuộc Phòng: xoá teamId, ghim blockId theo đúng Khối của dòng NS khoi
+              // (không để blockId của Phòng điều hướng/heuristic ghi sai Khối khi lưu).
+              const teamPatch = isKhoi ? { teamId: '', teamCode: '', teamName: '', ...(k?.blockId ? { blockId: k.blockId, blockCode: '', blockName: '' } : {}) } : {};
               const name = isKhoi ? (k?.name || uid) : (u?.fullName||u?.displayName||u?.email||uid);
               setLocalDraft((prev: any) => clearStaleProject({ ...prev, ...teamPatch, implementerUid: uid, implementerName: name, implementerManual: false }, acceptanceChoicesFor({ ...prev, ...teamPatch, implementerUid: uid, implementerManual: false }, nsLines, nsSupport, allUsers)));
             }}

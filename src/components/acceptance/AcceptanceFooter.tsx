@@ -60,8 +60,8 @@ export const AcceptanceFooter: React.FC<FooterProps> = React.memo(({ records, fo
   return (
     <TableFooter className="bg-[var(--mh-surface-2)] font-black border-t-2 border-[var(--mh-border-strong)] z-10 sticky bottom-0">
       <TableRow className="border-t border-[var(--mh-border-strong)] text-[11px]">
-        {/* Col STT + THÁNG + KHỐI + MÃ TEAM + GĐKD + NGƯỜI PHỤ TRÁCH + DỰ ÁN = 7 cols */}
-        <TableCell colSpan={7} className="text-right font-black text-[var(--mh-text)] text-xs px-3 bg-[var(--mh-surface-2)] md:sticky md:left-0 md:z-20">
+        {/* Col STT + THÁNG + KHỐI + MÃ TEAM + NGƯỜI PHỤ TRÁCH + DỰ ÁN = 6 cols */}
+        <TableCell colSpan={6} className="text-right font-black text-[var(--mh-text)] text-xs px-3 bg-[var(--mh-surface-2)] md:sticky md:left-0 md:z-20">
           <div data-testid="vn-acc-footer-total">TỔNG CỘNG ({records.length} bản ghi đang lọc):</div>
           <div className="text-[10px] font-semibold text-[var(--mh-text-2)]">Trước VAT {fmt(totals.dTotalChuaVat + totals.vTotalChuaVat + totals.dtCtyChuaVat + totals.cnTotal + totals.cnNapTienCty)} · VAT {fmt(totals.grandTotal - (totals.dTotalChuaVat + totals.vTotalChuaVat + totals.dtCtyChuaVat + totals.cnTotal + totals.cnNapTienCty))}</div>
         </TableCell>
