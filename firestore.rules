@@ -1000,7 +1000,7 @@ service cloud.firestore {
       allow read: if isInternalStaff() && !isGDKD();
       allow create, update: if (isAdmin() || isSuperAdmin() || isMod() || isAccountant())
         && incoming().month is string && incoming().blockId is string && incoming().projectId is string
-        && incoming().soLuong is int && incoming().soLuong >= 0 && incoming().soLuong <= 1000000;
+        && incoming().soLuong is number && incoming().soLuong >= 0 && incoming().soLuong <= 1000000;
       allow delete: if isAdmin() || isSuperAdmin() || isMod() || isAccountant();
     }
 
