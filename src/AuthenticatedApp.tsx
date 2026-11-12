@@ -179,6 +179,9 @@ const AdminReciprocalBudgets = lazyRetry(() =>
 const CanBanManager = lazyRetry(() =>
   import('./components/CanBanManager').then((m) => ({ default: m.CanBanManager }))
 );
+const OverviewReportManager = lazyRetry(() =>
+  import('./components/OverviewReportManager').then((m) => ({ default: m.OverviewReportManager }))
+);
 const BanKdManager = lazyRetry(() =>
   import('./components/BanKdManager').then((m) => ({ default: m.BanKdManager }))
 );
@@ -3975,6 +3978,9 @@ export default function AuthenticatedApp() {
     }
     if (isAdmin || isSuperAdmin || isAccountant) {
       items.push({ value: 'can-ban', label: 'Căn bán', icon: Building2, group: 'ops', isAdminLink: true, adminSubTab: 'can-ban', visible: true });
+    }
+    if (isAdmin || isSuperAdmin || isAccountant) {
+      items.push({ value: 'overview-report', label: 'Báo cáo Tổng quan', icon: PieChart, group: 'ops', isAdminLink: true, adminSubTab: 'overview-report', visible: true });
     }
     push(byVal('block-mgmt') && { ...byVal('block-mgmt'), group: 'mgmt' });
     push(byVal('bankd-mgmt') && { ...byVal('bankd-mgmt'), group: 'mgmt' });
@@ -13661,6 +13667,16 @@ export default function AuthenticatedApp() {
                           <Building2 className="mr-2 h-4 w-4" /> Căn bán
                         </Button>
                       )}
+                      {(isAdmin || isSuperAdmin || isAccountant) && (
+                        <Button
+                          variant={adminSubTab === 'overview-report' ? 'secondary' : 'ghost'}
+                          size="sm"
+                          className={`rounded-xl h-10 px-4 font-bold ${adminSubTab === 'overview-report' ? 'bg-indigo-600 text-white shadow-md' : 'text-[var(--mh-text-2)]'}`}
+                          onClick={() => setAdminSubTab('overview-report')}
+                        >
+                          <PieChart className="mr-2 h-4 w-4" /> Báo cáo Tổng quan
+                        </Button>
+                      )}
                       <Button 
                         variant={(adminSubTab === 'projects' && projectSubTab !== 'project-ban-kd') ? 'secondary' : 'ghost'} 
                         size="sm"
@@ -19132,6 +19148,20 @@ export default function AuthenticatedApp() {
                       acceptances={acceptancesAll}
                       user={user}
                       isAdmin={isAdmin || isSuperAdmin || isAccountant}
+                    />
+                  )}
+                </TabsContent>
+
+                {/* Báo cáo Tổng quan MKT (6 mục) */}
+                <TabsContent value="overview-report" className="space-y-6">
+                  {adminSubTab === 'overview-report' && (isAdmin || isSuperAdmin || isAccountant) && (
+                    <OverviewReportManager
+                      acceptances={acceptancesAll}
+                      projects={projects}
+                      blocks={blocks}
+                      teams={teams}
+                      bans={banKdList}
+                      user={user}
                     />
                   )}
                 </TabsContent>
