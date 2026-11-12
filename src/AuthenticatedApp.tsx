@@ -176,6 +176,9 @@ const BlockReciprocalRegistration = lazyRetry(() =>
 const AdminReciprocalBudgets = lazyRetry(() =>
   import('./components/AdminReciprocalBudgets').then((m) => ({ default: m.AdminReciprocalBudgets }))
 );
+const CanBanManager = lazyRetry(() =>
+  import('./components/CanBanManager').then((m) => ({ default: m.CanBanManager }))
+);
 const BanKdManager = lazyRetry(() =>
   import('./components/BanKdManager').then((m) => ({ default: m.BanKdManager }))
 );
@@ -3969,6 +3972,9 @@ export default function AuthenticatedApp() {
     }
     if (canViewReciprocalBudget) {
       items.push({ value: 'reciprocal-budgets', label: 'Ngân sách đối ứng', icon: Receipt, group: 'ops', isAdminLink: true, adminSubTab: 'reciprocal-budgets', visible: true });
+    }
+    if (isAdmin || isSuperAdmin || isAccountant) {
+      items.push({ value: 'can-ban', label: 'Căn bán', icon: Building2, group: 'ops', isAdminLink: true, adminSubTab: 'can-ban', visible: true });
     }
     push(byVal('block-mgmt') && { ...byVal('block-mgmt'), group: 'mgmt' });
     push(byVal('bankd-mgmt') && { ...byVal('bankd-mgmt'), group: 'mgmt' });
@@ -13645,6 +13651,16 @@ export default function AuthenticatedApp() {
                           <Receipt className="mr-2 h-4 w-4" /> Ngân sách đối ứng
                         </Button>
                       )}
+                      {(isAdmin || isSuperAdmin || isAccountant) && (
+                        <Button
+                          variant={adminSubTab === 'can-ban' ? 'secondary' : 'ghost'}
+                          size="sm"
+                          className={`rounded-xl h-10 px-4 font-bold ${adminSubTab === 'can-ban' ? 'bg-indigo-600 text-white shadow-md' : 'text-[var(--mh-text-2)]'}`}
+                          onClick={() => setAdminSubTab('can-ban')}
+                        >
+                          <Building2 className="mr-2 h-4 w-4" /> Căn bán
+                        </Button>
+                      )}
                       <Button 
                         variant={(adminSubTab === 'projects' && projectSubTab !== 'project-ban-kd') ? 'secondary' : 'ghost'} 
                         size="sm"
@@ -19103,6 +19119,19 @@ export default function AuthenticatedApp() {
                       safeFormat={safeFormat}
                       logAction={logAction}
                       db={db}
+                    />
+                  )}
+                </TabsContent>
+
+                {/* Căn bán (Tháng × Khối × Dự án) */}
+                <TabsContent value="can-ban" className="space-y-6">
+                  {adminSubTab === 'can-ban' && (isAdmin || isSuperAdmin || isAccountant) && (
+                    <CanBanManager
+                      blocks={blocks}
+                      projects={projects}
+                      acceptances={acceptancesAll}
+                      user={user}
+                      isAdmin={isAdmin || isSuperAdmin || isAccountant}
                     />
                   )}
                 </TabsContent>
