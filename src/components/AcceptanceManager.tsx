@@ -82,7 +82,7 @@ import {
 } from './acceptance/acceptanceUtils';
 import { exportFileName, blockCodeOf, teamCodeOf } from '../../lib/vnext/exportName';
 import { getPeriodOf } from '../../lib/vnext/period';
-import { acceptanceChoicesFor, acceptanceKhoiAssignees, ntUsesBudgetProjects, projectAllowedForAcceptance } from '../../lib/vnext/ntBudgetProjects';
+import { acceptanceChoicesFor, acceptanceKhoiAssignees, khoiManagerBlockId, ntUsesBudgetProjects, projectAllowedForAcceptance } from '../../lib/vnext/ntBudgetProjects';
 
 import { showNtImageUpload, showNtInvoiceUpload } from '../lib/ntUploadGate';
 export const AcceptanceManager = React.memo(({ 
@@ -281,13 +281,18 @@ export const AcceptanceManager = React.memo(({
     if (!projectAllowedForAcceptance(choices, row?.projectId)) return 'Dự án không nằm trong đăng ký NS của người phụ trách tại Phòng và kỳ này.';
     return '';
   }, [ntCtx, nsReady, nsLines, nsSupport, allUsers]);
-  // Người phụ trách là GĐ Khối / Trợ lý Khối (đăng ký 'khoi' theo Khối, không thuộc Phòng) của bản ghi này?
-  const isKhoiManagerRow = useCallback((row: any) => {
-    const uid = row?.implementerManual ? '' : String(row?.implementerUid || '');
-    if (!uid || !row?.blockId) return false;
-    const ks = acceptanceKhoiAssignees({ month: row?.month, blockId: row.blockId, lines: nsLines, support: nsSupport });
-    return !!ks && ks.some((k) => k.uid === uid);
-  }, [nsLines, nsSupport]);
+  // Khối chuẩn nếu Người phụ trách là GĐ/TL Khối (đăng ký 'khoi'); '' nếu không phải. Nguồn: dòng NS khoi.
+  const khoiBlockIdOf = useCallback((row: any) => khoiManagerBlockId({
+    month: row?.month,
+    uid: row?.implementerManual ? '' : row?.implementerUid,
+    lines: nsLines, support: nsSupport, preferBlockId: row?.blockId,
+  }), [nsLines, nsSupport]);
+  const isKhoiManagerRow = useCallback((row: any) => !!khoiBlockIdOf(row), [khoiBlockIdOf]);
+  // Tra {blockId, blockCode, blockName} từ danh mục Khối theo id/code.
+  const blockFieldsFor = useCallback((bid: string) => {
+    const b = (blocks || []).find((x: any) => x.id === bid || x.blockCode === bid);
+    return { blockId: bid, blockCode: b?.blockCode || '', blockName: b?.name || b?.blockName || '' };
+  }, [blocks]);
   const [mobileViewMode, setMobileViewMode] = useState<'cards' | 'table'>('cards');
   // Design system: mobile always cards (no horizontal NT table).
   React.useEffect(() => {
@@ -761,23 +766,26 @@ export const AcceptanceManager = React.memo(({
       const resolvedProjectName = pr?.name || (draftRow.projectName && !draftRow.projectName.startsWith('draft-') ? draftRow.projectName : pr?.projectCode || '');
       const resolvedProjectCode = pr?.projectCode || (draftRow.projectCode && !draftRow.projectCode.startsWith('draft-') ? draftRow.projectCode : '');
       const resolvedBlock = resolveBlockForTeam(tm || draftRow, blocks, teams, teamLookup.findTeam);
-      // GĐ/TL Khối: bản ghi gắn theo Khối, KHÔNG thuộc Phòng → xoá teamId.
-      const khoiMgr = isKhoiManagerRow(draftRow);
+      // GĐ/TL Khối: bản ghi gắn theo Khối (nguồn = dòng NS khoi), KHÔNG thuộc Phòng → xoá teamId,
+      // ghim blockId theo dòng khoi (không để resolveBlockForTeam suy ra Khối sai từ Phòng/heuristic).
+      const khoiBid = khoiBlockIdOf(draftRow);
+      const khoiMgr = !!khoiBid;
+      const khoiBlk = khoiMgr ? blockFieldsFor(khoiBid) : null;
 
       const payload: any = {
         ...storeAcceptanceMonth(formatAcceptanceMonth(draftRow.month) || getCurrentDefaultMonth()),
         teamId: khoiMgr ? '' : (tm?.id || draftRow.teamId || ''),
         teamName: khoiMgr ? '' : resolvedTeamName,
         teamCode: khoiMgr ? '' : resolvedTeamCode,
-        blockId: resolvedBlock.blockId || tm?.blockId || draftRow.blockId || '',
-        blockCode: resolvedBlock.blockCode || tm?.blockCode || draftRow.blockCode || '',
-        blockName: resolvedBlock.blockName || tm?.blockName || draftRow.blockName || '',
+        blockId: khoiMgr ? khoiBlk!.blockId : (resolvedBlock.blockId || tm?.blockId || draftRow.blockId || ''),
+        blockCode: khoiMgr ? khoiBlk!.blockCode : (resolvedBlock.blockCode || tm?.blockCode || draftRow.blockCode || ''),
+        blockName: khoiMgr ? khoiBlk!.blockName : (resolvedBlock.blockName || tm?.blockName || draftRow.blockName || ''),
         gdkdName: draftRow.gdkdName || tm?.name || '',
         implementerName: draftRow.implementerName || '',
         implementerUid: draftRow.implementerManual ? '' : (draftRow.implementerUid || ''),
         ntMonth: draftRow.implementerUid && !draftRow.implementerManual ? (normalizeMonth(draftRow.month) || '') : '',
         ntTeamId: khoiMgr ? '' : (tm?.id || draftRow.teamId || ''),
-        ntBlockId: resolvedBlock.blockId || tm?.blockId || '',
+        ntBlockId: khoiMgr ? khoiBlk!.blockId : (resolvedBlock.blockId || tm?.blockId || ''),
         projectId: pr?.id || draftRow.projectId || '',
         projectName: resolvedProjectName,
         projectCode: resolvedProjectCode,
@@ -915,7 +923,7 @@ export const AcceptanceManager = React.memo(({
       console.error('Error saving draft:', err);
       toast.error(ntDeniedMsg(err, normalizeMonth(draftRow?.month)) || 'Lỗi khi lưu bản ghi nghiệm thu');
     }
-  }, [user, teamLookup, projectLookup, teams, projects, acceptanceMonthFilter, unregisteredProjectReason, isKhoiManagerRow]);
+  }, [user, teamLookup, projectLookup, teams, projects, acceptanceMonthFilter, unregisteredProjectReason, khoiBlockIdOf, blockFieldsFor]);
 
   // Start Edit
   const handleStartEdit = useCallback((item: any) => {
@@ -971,23 +979,26 @@ export const AcceptanceManager = React.memo(({
       const resolvedProjectName = pr?.name || (updatedState.projectName && !updatedState.projectName.startsWith('draft-') ? updatedState.projectName : oldItem?.projectName || pr?.projectCode || '');
       const resolvedProjectCode = pr?.projectCode || (updatedState.projectCode && !updatedState.projectCode.startsWith('draft-') ? updatedState.projectCode : oldItem?.projectCode || '');
       const resolvedBlock = resolveBlockForTeam(tm || updatedState, blocks, teams, teamLookup.findTeam);
-      // GĐ/TL Khối: bản ghi gắn theo Khối, KHÔNG thuộc Phòng → xoá teamId (không để oldItem kéo Phòng cũ về).
-      const khoiMgr = isKhoiManagerRow(updatedState);
+      // GĐ/TL Khối: bản ghi gắn theo Khối (nguồn = dòng NS khoi), KHÔNG thuộc Phòng → xoá teamId
+      // (không để oldItem kéo Phòng cũ về) và ghim blockId theo dòng khoi (sửa cả bản ghi đã lưu sai Khối).
+      const khoiBid = khoiBlockIdOf(updatedState);
+      const khoiMgr = !!khoiBid;
+      const khoiBlk = khoiMgr ? blockFieldsFor(khoiBid) : null;
 
       const payload: any = {
         ...storeAcceptanceMonth(updatedState.month || oldItem?.month || getCurrentDefaultMonth()),
         teamId: khoiMgr ? '' : (tm?.id || updatedState.teamId || oldItem?.teamId || ''),
         teamName: khoiMgr ? '' : resolvedTeamName,
         teamCode: khoiMgr ? '' : resolvedTeamCode,
-        blockId: resolvedBlock.blockId || tm?.blockId || updatedState.blockId || oldItem?.blockId || '',
-        blockCode: resolvedBlock.blockCode || tm?.blockCode || updatedState.blockCode || oldItem?.blockCode || '',
-        blockName: resolvedBlock.blockName || tm?.blockName || updatedState.blockName || oldItem?.blockName || '',
+        blockId: khoiMgr ? khoiBlk!.blockId : (resolvedBlock.blockId || tm?.blockId || updatedState.blockId || oldItem?.blockId || ''),
+        blockCode: khoiMgr ? khoiBlk!.blockCode : (resolvedBlock.blockCode || tm?.blockCode || updatedState.blockCode || oldItem?.blockCode || ''),
+        blockName: khoiMgr ? khoiBlk!.blockName : (resolvedBlock.blockName || tm?.blockName || updatedState.blockName || oldItem?.blockName || ''),
         gdkdName: updatedState.gdkdName || tm?.name || oldItem?.gdkdName || '',
         implementerName: updatedState.implementerName || oldItem?.implementerName || '',
         implementerUid: updatedState.implementerManual ? '' : (updatedState.implementerUid || oldItem?.implementerUid || ''),
         ntMonth: updatedState.implementerManual ? (oldItem?.ntMonth || '') : (updatedState.implementerUid || oldItem?.implementerUid) ? (normalizeMonth(updatedState.month) || normalizeMonth(oldItem?.month) || '') : (oldItem?.ntMonth || ''),
         ntTeamId: khoiMgr ? '' : (tm?.id || updatedState.teamId || oldItem?.teamId || ''),
-        ntBlockId: resolvedBlock.blockId || tm?.blockId || updatedState.blockId || oldItem?.blockId || '',
+        ntBlockId: khoiMgr ? khoiBlk!.blockId : (resolvedBlock.blockId || tm?.blockId || updatedState.blockId || oldItem?.blockId || ''),
         projectId: pr?.id || updatedState.projectId || oldItem?.projectId || '',
         projectName: resolvedProjectName,
         projectCode: resolvedProjectCode,
@@ -1111,7 +1122,7 @@ export const AcceptanceManager = React.memo(({
       console.error('Error updating acceptance:', err);
       toast.error(ntDeniedMsg(err, normalizeMonth(updatedState?.month)) || 'Lỗi khi cập nhật bản ghi');
     }
-  }, [canEdit, canCreate, user, teamLookup, projectLookup, teams, projects, blocks, openNtKy, isSuperAdmin, unregisteredProjectReason, isKhoiManagerRow]);
+  }, [canEdit, canCreate, user, teamLookup, projectLookup, teams, projects, blocks, openNtKy, isSuperAdmin, unregisteredProjectReason, khoiBlockIdOf, blockFieldsFor]);
 
   /** Bản kỳ đã khoá không sửa được: tạo dòng nháp «Nghiệm thu bổ sung» MỚI (điền sẵn từ bản này, Phòng/Dự án/Người phụ trách vẫn đổi được). */
   const prefillSuppFromLocked = (src: any, om: string) => {
@@ -1138,15 +1149,17 @@ export const AcceptanceManager = React.memo(({
     const scopeErr = unregisteredProjectReason({ ...item, implementerUid: uid, implementerManual: false });
     if (scopeErr) return toast.error(scopeErr);
     const tm = teamLookup.findTeam?.(item.teamId) || teams.find((t: any) => t.id === item.teamId);
-    const blockId = item.blockId || tm?.blockId || '';
+    // Nếu người được gán là GĐ/TL Khối → ghim blockId theo dòng NS khoi, teamId để trống.
+    const khoiBid = khoiManagerBlockId({ month, uid, lines: nsLines, support: nsSupport, preferBlockId: item.blockId });
+    const blockId = khoiBid || item.blockId || tm?.blockId || '';
     try {
-      await assignImplementer(db, acceptancesRef.current || acceptances, item, { uid, name, teamId: item.teamId || tm?.id || '', blockId, month, projectId: item.projectId }, { uid: user?.uid, email: user?.email });
+      await assignImplementer(db, acceptancesRef.current || acceptances, item, { uid, name, teamId: khoiBid ? '' : (item.teamId || tm?.id || ''), blockId, month, projectId: item.projectId }, { uid: user?.uid, email: user?.email });
       toast.success(`Đã gán ${name}`);
     } catch (e: any) {
       if (e?.code === 'dup') toast.error(`Trùng: ${name} đã có bản ghi dự án này trong tháng (#${String(e.dup?.id || '').slice(-6).toUpperCase()})`);
       else { console.error(e); toast.error('Không gán được: ' + (e?.code || e?.message || e)); }
     }
-  }, [canEdit, user, teams, teamLookup, acceptances, unregisteredProjectReason]);
+  }, [canEdit, user, teams, teamLookup, acceptances, unregisteredProjectReason, nsLines, nsSupport]);
 
   const handleAssignManual = useCallback(async (item: any, name: string) => {
     if (!canManualAssignee) throw new Error('Không có quyền tự nhập Người phụ trách');

@@ -260,7 +260,7 @@ export const AcceptanceRow: React.FC<RowProps> = React.memo(({
         );
     const currentEditTeamId = currentEditTeam?.id || localEditState.teamId || '';
     const editResolvedBlock = resolveBlockForTeam(currentEditTeam || localEditState, blocks, teams, findTeam);
-    const editBlockId = editResolvedBlock.blockId || localEditState.blockId || '';
+    const editBlockId = localEditState.blockId || editResolvedBlock.blockId || '';
     // GĐ/TL Khối (đăng ký 'khoi' theo Khối, không thuộc Phòng) — bổ sung vào Người phụ trách.
     const editKhoiAssignees = acceptanceKhoiAssignees({ month: localEditState.month, blockId: editBlockId, lines: nsLines, support: nsSupport });
     const editKhoiUidSet = new Set((editKhoiAssignees || []).map((k) => k.uid));
@@ -378,15 +378,6 @@ export const AcceptanceRow: React.FC<RowProps> = React.memo(({
           />
         </TableCell>
 
-        {/* Col C: GĐKD */}
-        <TableCell className="p-1 min-w-[120px]">
-          <Input
-            value={localEditState.gdkdName || ''}
-            onChange={(e) => handleUpdateEditField('gdkdName', e.target.value)}
-            className="h-7 text-xs font-semibold border-indigo-200 rounded bg-[var(--mh-surface)]"
-          />
-        </TableCell>
-
         {/* Col D: NGƯỜI PHỤ TRÁCH — searchable, thành viên đã duyệt của Phòng */}
         <TableCell className="p-1 min-w-[160px] relative z-20 overflow-visible">
           {!currentEditTeamId && !editBlockId ? (
@@ -417,8 +408,8 @@ export const AcceptanceRow: React.FC<RowProps> = React.memo(({
                 const kk = (editKhoiAssignees || []).find((x) => x.uid === uid);
                 const name = raw?.label?.replace(/ · (GĐKD|GĐ\/TL Khối)$/, '') || (allUsers.find((u: any) => (u.uid || u.id) === uid)?.fullName) || uid;
                 const u = allUsers.find((x: any) => (x.uid || x.id) === uid);
-                // GĐ/TL Khối không thuộc Phòng: xoá teamId, giữ blockId để bản ghi gộp theo Khối.
-                const teamPatch = isKhoi ? { teamId: '', teamCode: '', teamName: '' } : {};
+                // GĐ/TL Khối không thuộc Phòng: xoá teamId, ghim blockId theo đúng Khối của dòng NS khoi.
+                const teamPatch = isKhoi ? { teamId: '', teamCode: '', teamName: '', ...(kk?.blockId ? { blockId: kk.blockId, blockCode: '', blockName: '' } : {}) } : {};
                 setLocalEditState((prev: any) => clearStaleProject({
                   ...prev,
                   ...teamPatch,
@@ -690,11 +681,6 @@ export const AcceptanceRow: React.FC<RowProps> = React.memo(({
         <Badge variant="outline" className="bg-indigo-50/70 text-indigo-700 border-indigo-200 font-mono font-extrabold text-[11px] px-1.5 py-0.5" title={displayTeamName}>
           {displayTeamCode}
         </Badge>
-      </TableCell>
-
-      {/* Col C: GĐKD */}
-      <TableCell className="font-semibold text-xs text-[var(--mh-text)] whitespace-nowrap">
-        {item.gdkdName || displayTeamName || '-'}
       </TableCell>
 
       {/* Col D: NGƯỜI PHỤ TRÁCH — picker trên mọi dòng (Admin/Mod); chưa có Phòng → chọn Phòng trước */}

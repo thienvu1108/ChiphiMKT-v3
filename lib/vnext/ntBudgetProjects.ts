@@ -153,7 +153,7 @@ export function acceptanceAssigneeUids(args: {
   return uids;
 }
 
-export type KhoiAssignee = { uid: string; name: string; role: 'khoi' };
+export type KhoiAssignee = { uid: string; name: string; blockId: string; role: 'khoi' };
 
 /**
  * GĐ Khối / Trợ lý Khối có đăng ký NS 'khoi' hợp lệ cho đúng Khối (blockId) + kỳ (≥ 2026-11).
@@ -178,10 +178,40 @@ export function acceptanceKhoiAssignees(args: {
     if (!l.ownerUid) continue;
     if (!isNsReportableLine(l as NsLine, l.id ? args.support?.[l.id] : undefined)) continue;
     const cur = byUid.get(l.ownerUid);
-    if (!cur) byUid.set(l.ownerUid, { uid: l.ownerUid, name: l.ownerName || l.ownerUid, role: 'khoi' });
+    if (!cur) byUid.set(l.ownerUid, { uid: l.ownerUid, name: l.ownerName || l.ownerUid, blockId, role: 'khoi' });
     else if ((cur.name === cur.uid) && l.ownerName) cur.name = l.ownerName;
   }
   return [...byUid.values()].sort((a, b) => a.name.localeCompare(b.name, 'vi', { sensitivity: 'base' }));
+}
+
+/**
+ * blockId (Khối) chuẩn của dòng NS 'khoi' do uid này đăng ký trong kỳ (≥ 2026-11).
+ * Đây là NGUỒN SỰ THẬT cho Khối của bản ghi GĐ/TL Khối — không suy ra từ Phòng/heuristic.
+ * Ưu tiên preferBlockId nếu uid có đăng ký đúng Khối đó; nếu không, lấy blockId của dòng
+ * khoi hợp lệ đầu tiên (giúp sửa lại bản ghi đã lưu sai Khối).
+ * '' nếu uid không phải GĐ/TL Khối có đăng ký ở kỳ này.
+ */
+export function khoiManagerBlockId(args: {
+  month: unknown;
+  uid?: string;
+  lines?: NtBudgetLine[] | null;
+  support?: Record<string, Partial<Support> | undefined>;
+  preferBlockId?: string;
+}): string {
+  if (!ntUsesBudgetProjects(args.month)) return '';
+  const period = ntPeriodKey(args.month);
+  const uid = String(args.uid || '');
+  if (!period || !uid) return '';
+  const prefer = String(args.preferBlockId || '');
+  let first = '';
+  for (const l of args.lines || []) {
+    if (!l || l.deleted) continue;
+    if (l.period !== period || l.kind !== 'khoi' || l.ownerUid !== uid || !l.blockId) continue;
+    if (!isNsReportableLine(l as NsLine, l.id ? args.support?.[l.id] : undefined)) continue;
+    if (prefer && l.blockId === prefer) return prefer;
+    if (!first) first = l.blockId;
+  }
+  return first;
 }
 
 /**
