@@ -5,7 +5,7 @@ import React, { useEffect, useMemo, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { decideBanSupportBatch } from './SupportViews';
 import { BAN_NS_FILTER_SS, BAN_NS_FOCUS_BLOCK_SS } from './BanPendingGate';
-import { BAN_STATUS_LABEL, effectiveBanStatus, banReasonText, type BanEffectiveStatus, type BanStoredStatus } from '../../lib/vnext/banSupport';
+import { BAN_STATUS_LABEL, effectiveBanStatus, banReasonText, banPendingKind, banReapprovalChange, type BanEffectiveStatus, type BanStoredStatus } from '../../lib/vnext/banSupport';
 import { supportable, type Support } from '../../lib/vnext/support';
 import type { NsLine } from '../../lib/vnext/budget';
 import { periodLabel, VNEXT_PERIOD_CUTOVER } from '../../lib/vnext/period';
@@ -246,6 +246,24 @@ export function BanNsApprovePanel({
 
   if (!allRows.length) return null;
 
+  const banLabel = (r: Row) => (banPendingKind(r.line, r.s) === 'reapproval' ? 'Chờ Ban duyệt lại' : BAN_STATUS_LABEL[r.ban]);
+  /** Chi tiết thay đổi khiến phải duyệt lại: trước (Ban đã duyệt) → sau (hiện tại) · người sửa · thời gian. */
+  const reapprovalNode = (r: Row) => {
+    const ch = banReapprovalChange(r.line, r.s);
+    if (!ch) return null;
+    const t = ch.at ? new Date(ch.at).toLocaleString('vi-VN', { hour12: false }) : '';
+    return (
+      <div className="mt-1 text-[11px] leading-snug" data-testid="vn-ban-reapproval">
+        <span className="font-semibold text-[var(--mh-warn,#B45309)]">Đã sửa sau khi duyệt: </span>
+        <span className="tabular-nums line-through text-[var(--mh-text-3)]">{fmt(ch.before)}</span>
+        <span className="mx-0.5 text-[var(--mh-text-2)]">→</span>
+        <span className="tabular-nums font-bold text-[var(--mh-text)]">{fmt(ch.after)}</span>
+        <span className="text-[var(--mh-text-2)]"> đ</span>
+        {(ch.byName || t) ? <div className="text-[var(--mh-text-3)]">{ch.byName ? `Người sửa: ${ch.byName}` : ''}{ch.byName && t ? ' · ' : ''}{t}</div> : null}
+      </div>
+    );
+  };
+
   const lineActions = (r: Row) => {
     if (!canApprove || !allowLineActions) return null;
     if (deputyBlocked(approverRole, r.s as any)) return <span className="text-[11px] text-[var(--mh-text-3)]" data-testid="vn-ban-leader-locked">Trưởng Ban đã quyết định</span>;
@@ -406,10 +424,10 @@ export function BanNsApprovePanel({
                                     <td data-label="Kỳ" className="p-2 whitespace-nowrap">{periodLabel(r.line.period)}</td>
                                     <td data-label="Số tiền cần duyệt" className="p-2 text-right tabular-nums font-bold text-[var(--mh-text)]">{fmt(r.line.amount)}</td>
                                     <td data-label="Trạng thái Ban" className="p-2 whitespace-nowrap">
-                                      <span className={`text-[11px] font-semibold ${r.ban === 'rejected' ? 'text-[var(--mh-err)]' : r.ban === 'approved' ? 'text-[var(--mh-ok)]' : 'text-[var(--mh-pending,#7C3AED)]'}`}>{BAN_STATUS_LABEL[r.ban]}</span>
+                                      <span className={`text-[11px] font-semibold ${r.ban === 'rejected' ? 'text-[var(--mh-err)]' : r.ban === 'approved' ? 'text-[var(--mh-ok)]' : 'text-[var(--mh-pending,#7C3AED)]'}`}>{banLabel(r)}</span>
                                       {(r.ban === 'rejected' || r.ban === 'pending') && banReasonText(r.s) ? <div className="text-[11px] max-w-[200px] text-[var(--mh-text-2)]">{banReasonText(r.s)}</div> : null}
                                       {(r.s as any)?.banDecidedRole === 'leader' && approverRole === 'deputy' ? <div className="text-[10px] text-[var(--mh-text-3)]">Trưởng Ban đã quyết định</div> : null}
-                                      <ApproverLog hist={(r.s as any)?.history} />
+                                      <ApproverLog hist={(r.s as any)?.history} />{reapprovalNode(r)}
                                     </td>
                                     {canApprove && allowLineActions && <td data-label="Thao tác" className="p-2 whitespace-nowrap">{lineActions(r)}</td>}
                                   </tr>
@@ -483,9 +501,9 @@ export function BanNsApprovePanel({
                                     <td className="p-2 whitespace-nowrap">{periodLabel(r.line.period)}</td>
                                     <td className="p-2 text-right tabular-nums font-semibold">{fmt(r.line.amount)}</td>
                                     <td className="p-2 whitespace-nowrap">
-                                      <span className={`text-[11px] font-semibold ${r.ban === 'rejected' ? 'text-[var(--mh-err)]' : r.ban === 'approved' ? 'text-[#0F7B4A]' : 'text-[var(--mh-warn)]'}`}>{BAN_STATUS_LABEL[r.ban]}</span>
+                                      <span className={`text-[11px] font-semibold ${r.ban === 'rejected' ? 'text-[var(--mh-err)]' : r.ban === 'approved' ? 'text-[#0F7B4A]' : 'text-[var(--mh-warn)]'}`}>{banLabel(r)}</span>
                                       {(r.ban === 'rejected' || r.ban === 'pending') && banReasonText(r.s) ? <div className={`text-[11px] max-w-[200px] ${r.ban === 'rejected' ? 'text-[var(--mh-err,var(--mh-err))]' : 'text-[var(--mh-pending,#7C3AED)]'}`}>{banReasonText(r.s)}</div> : null}
-                                      <ApproverLog hist={(r.s as any)?.history} />
+                                      <ApproverLog hist={(r.s as any)?.history} />{reapprovalNode(r)}
                                     </td>
                                     {canApprove && allowLineActions && <td className="p-2 whitespace-nowrap">{lineActions(r)}</td>}
                                   </tr>
