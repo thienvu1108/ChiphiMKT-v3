@@ -195,10 +195,6 @@ service cloud.firestore {
       return hasUserData() && normalizedUserRole() in ['gd_khoi', 'tro_ly_khoi'];
     }
 
-    function isGDKDRole() {
-      return hasUserData() && normalizedUserRole() == 'gdkd';
-    }
-
     // Trưởng ban KD (explicit role). Scope = the ban_kd doc(s) they lead
     // (leaderUid / legacy leaderId == uid, or leaderEmail == verified token email).
     function isTruongBanKdRole() {
@@ -229,10 +225,6 @@ service cloud.firestore {
         'gdkd': ['home.view', 'history.view', 'actual.view', 'register.view', 'mkt_efficiency.view', 'report_nt.view'],
         'assistant': ['home.view', 'history.view', 'actual.view', 'actual.create', 'actual.edit', 'register.view', 'register.create', 'register.edit', 'mkt_efficiency.view', 'report_nt.view', 'block.view', 'block_budget.view', 'block_budget.create', 'block_budget.edit', 'block_budget.delete', 'reciprocal_budget.view', 'reciprocal_budget.create', 'reciprocal_budget.edit', 'reciprocal_budget.delete']
       }.get(role, []);
-    }
-
-    function defaultHasPerm(role, key) {
-      return key in defaultPermsFor(role);
     }
 
     // One rolePermissions read + one role normalization per call (keeps rules under the
@@ -459,11 +451,6 @@ service cloud.firestore {
     function renameUserOk(userId) {
       let role = renameRole();
       return renameShapeOk() && renameAuditOk(userId) && vnPermAs(role, 'vn.users.rename') && renameScopeOk(role);
-    }
-
-    function targetIsPlainUser() {
-      return existing().get('role', 'user') is string
-        && existing().get('role', 'user').lower() in ['user', 'người dùng', 'nguoi dung', ''];
     }
 
     function targetIsAdminLevel() {
@@ -1288,9 +1275,6 @@ service cloud.firestore {
     function reqPath(uid) {
       return /databases/$(database)/documents/accessRequests/$(uid);
     }
-    function isGdkOfBlock(blockId) {
-      return normalizedUserRole() in ['gd_khoi', 'tro_ly_khoi'] && blockInMyKhoi(blockId);
-    }
     function teamBlockMatches(teamId, blockId) {
       return teamExists(teamId) && (teamDoc(teamId).get('blockId', '') == blockId
         || teamDoc(teamId).get('blockCode', '_NONE_') == blockCodeOf(blockId));
@@ -1641,10 +1625,6 @@ service cloud.firestore {
     // Giữ số lượt truy cập tài liệu của nsSupport ≤ 10 (exists + get tính 2 lượt trên emulator).
     function payOkGetOnly(uid) {
       return uid is string && uid != '' && kycHasBank(get(/databases/$(database)/documents/userKyc/$(uid)).data);
-    }
-    function payOkNow(uid) {
-      let p = /databases/$(database)/documents/userKyc/$(uid);
-      return uid is string && uid != '' && exists(p) && kycHasBank(get(p).data);
     }
     // ---------------------------------------------------------------
     // Khoá theo ngày (giờ VN, nhiều khoảng, tuỳ chọn theo tháng NS). vnLocks/current = { nsCreate, nsEdit, nt: [{from,to,period}] ≤5 }.
