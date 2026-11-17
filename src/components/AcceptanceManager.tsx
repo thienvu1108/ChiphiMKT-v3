@@ -158,6 +158,13 @@ export const AcceptanceManager = React.memo(({
   const [acceptanceSearch, setAcceptanceSearch] = useState('');
   const [debouncedAcceptanceSearch, setDebouncedAcceptanceSearch] = useState('');
   const [acceptanceMonthFilter, setAcceptanceMonthFilter] = useState('all');
+  // Bố cục cột theo tháng đang lọc: ≥ 2026-11 (hoặc "Tất cả") → bố cục mới; < 2026-11 → bố cục cũ.
+  const ntNewLayout = useMemo(() => {
+    const f = acceptanceMonthFilter;
+    if (!f || f === 'all') return true;
+    const m = normalizeMonth(formatAcceptanceMonth(f) || f);
+    return /^[0-9]{4}-[0-9]{2}$/.test(m) ? m >= '2026-11' : true;
+  }, [acceptanceMonthFilter]);
   const [acceptanceProjectFilter, setAcceptanceProjectFilter] = useState('all');
   const [acceptanceTeamFilter, setAcceptanceTeamFilter] = useState('all');
   const [acceptanceBlockFilter, setAcceptanceBlockFilter] = useState('all');
@@ -213,8 +220,10 @@ export const AcceptanceManager = React.memo(({
       caNhanTiktok: '',
       caNhanNativeAds: '',
       caNhanUCall: '',
+      caNhanKhac: '',
       hoaDonTien: '',
       hoaDonLines: [],
+      hoaDonFb: '', hoaDonZalo: '', hoaDonTiktok: '', hoaDonGoogle: '', hoaDonDangTin: '', hoaDonUCall: '', hoaDonNativeAds: '', hoaDonKhac: '',
       caNhanNapTienQuaCty: '',
       caNhanNopTien: '',
       status: 'Đã nghiệm thu',
@@ -818,6 +827,7 @@ export const AcceptanceManager = React.memo(({
         caNhanTiktok: comp.cnTiktok,
         caNhanNativeAds: comp.cnNativeAds,
         caNhanUCall: comp.cnUCall,
+        caNhanKhac: comp.cnKhac,
         caNhanTotal: comp.cnTotal, // Cột Y
 
         // Cột: Cá Nhân nạp tiền qua công ty
@@ -829,6 +839,9 @@ export const AcceptanceManager = React.memo(({
         afterAcceptanceCost: comp.grandTotal,
         hoaDonTien: comp.hoaDonTien,
         hoaDonNo: comp.hoaDonNo,
+        hoaDonFb: comp.hoaDonFb, hoaDonZalo: comp.hoaDonZalo, hoaDonTiktok: comp.hoaDonTiktok, hoaDonGoogle: comp.hoaDonGoogle, hoaDonDangTin: comp.hoaDonDangTin, hoaDonUCall: comp.hoaDonUCall, hoaDonNativeAds: comp.hoaDonNativeAds, hoaDonKhac: comp.hoaDonKhac,
+        hoaDonTong: comp.hoaDonTong,
+        chenhLechHD: comp.chenhLechHD,
 
         // Group 6
         caNhanNopTien: comp.cnNopTien,
@@ -1031,6 +1044,7 @@ export const AcceptanceManager = React.memo(({
         caNhanTiktok: comp.cnTiktok,
         caNhanNativeAds: comp.cnNativeAds,
         caNhanUCall: comp.cnUCall,
+        caNhanKhac: comp.cnKhac,
         caNhanTotal: comp.cnTotal, // Cột Y
 
         // Cột: Cá Nhân nạp tiền qua công ty
@@ -1042,6 +1056,9 @@ export const AcceptanceManager = React.memo(({
         afterAcceptanceCost: comp.grandTotal,
         hoaDonTien: comp.hoaDonTien,
         hoaDonNo: comp.hoaDonNo,
+        hoaDonFb: comp.hoaDonFb, hoaDonZalo: comp.hoaDonZalo, hoaDonTiktok: comp.hoaDonTiktok, hoaDonGoogle: comp.hoaDonGoogle, hoaDonDangTin: comp.hoaDonDangTin, hoaDonUCall: comp.hoaDonUCall, hoaDonNativeAds: comp.hoaDonNativeAds, hoaDonKhac: comp.hoaDonKhac,
+        hoaDonTong: comp.hoaDonTong,
+        chenhLechHD: comp.chenhLechHD,
 
         // Group 6
         caNhanNopTien: comp.cnNopTien,
@@ -2181,6 +2198,7 @@ export const AcceptanceManager = React.memo(({
           >
             <table className="w-full text-left border-collapse min-w-[1800px] sm:min-w-[2400px] caption-bottom text-[11px] sm:text-sm [&_th]:px-1.5 [&_td]:px-1 sm:[&_th]:px-2 sm:[&_td]:px-2">
               <AcceptanceTableHeader
+                newLayout={ntNewLayout}
                 sortConfig={sortConfig}
                 onSort={handleSort}
                 selectedAcceptanceIds={selectedAcceptanceIds}
@@ -2200,6 +2218,7 @@ export const AcceptanceManager = React.memo(({
                 {draftRows.map((draft, idx) => (
                   <AcceptanceDraftRow
                     key={draft.id}
+                    newLayout={ntNewLayout}
                     draftRow={draft}
                     index={idx}
                     teams={teams}
@@ -2235,6 +2254,7 @@ export const AcceptanceManager = React.memo(({
                     return (
                       <AcceptanceRow
                         key={item.id}
+                        newLayout={ntNewLayout}
                         item={item}
                         index={globalIdx}
                         isFinalizedView={false}
@@ -2278,6 +2298,7 @@ export const AcceptanceManager = React.memo(({
               </TableBody>
 
               <AcceptanceFooter
+                newLayout={ntNewLayout}
                 records={displayedRecords.filter(ntCountsInTotals)}
                 formatCurrency={formatCurrency}
               />

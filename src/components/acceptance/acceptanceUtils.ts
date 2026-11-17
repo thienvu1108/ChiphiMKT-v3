@@ -105,9 +105,11 @@ export const getRowComputed = (row: any): ComputedRowValues => {
       dFb: 0, dZalo: 0, dTiktok: 0, dKhac: 0, dTotalChuaVat: 0, dTotalSauVat: 0,
       vFb: 0, vZalo: 0, vTiktok: 0, vDangTin: 0, vTotalChuaVat: 0, vTotalSauVat: 0,
       dtCtyChuaVat: 0, dtCtySauVat: 0,
-      cnFb: 0, cnDangTin: 0, cnZalo: 0, cnGoogle: 0, cnTiktok: 0, cnNativeAds: 0, cnUCall: 0, cnTotal: 0,
+      cnFb: 0, cnDangTin: 0, cnZalo: 0, cnGoogle: 0, cnTiktok: 0, cnNativeAds: 0, cnUCall: 0, cnKhac: 0, cnTotal: 0,
       cnNapTienCty: 0,
-      grandTotal: 0, hoaDonTien: 0, hoaDonNo: 0, cnNopTien: 0
+      grandTotal: 0, hoaDonTien: 0, hoaDonNo: 0, cnNopTien: 0,
+      hoaDonFb: 0, hoaDonZalo: 0, hoaDonTiktok: 0, hoaDonGoogle: 0, hoaDonDangTin: 0, hoaDonUCall: 0, hoaDonNativeAds: 0, hoaDonKhac: 0,
+      hoaDonTong: 0, chenhLechHD: 0
     };
   }
 
@@ -146,7 +148,8 @@ export const getRowComputed = (row: any): ComputedRowValues => {
   // Cột Y: Cá nhân chạy ngoài tổng
   const cnNativeAds = parseCurrencyFormula(row.caNhanNativeAds).total;
   const cnUCall = parseCurrencyFormula(row.caNhanUCall).total;
-  const cnTotal = cnFb + cnDangTin + cnZalo + cnGoogle + cnTiktok + cnNativeAds + cnUCall;
+  const cnKhac = parseCurrencyFormula(row.caNhanKhac).total; // (từ T11) Cá nhân · Khác
+  const cnTotal = cnFb + cnDangTin + cnZalo + cnGoogle + cnTiktok + cnNativeAds + cnUCall + cnKhac;
 
   // Cột: Cá Nhân nạp tiền qua công ty (vị trí bên trái cột TỔNG và được cộng vào TỔNG)
   const cnNapTienCty = parseCurrencyFormula(row.caNhanNapTienQuaCty ?? row.caNhanNapTienCty ?? row.personalDepositViaCompany).total;
@@ -164,6 +167,22 @@ export const getRowComputed = (row: any): ComputedRowValues => {
   else hoaDonTien = parseCurrencyFormula(hdRaw).total;
   const hoaDonNo = hoaDonTien - grandTotal;
 
+  // Tiền trên Hóa đơn theo từng kênh (bố cục từ T11/2026)
+  const hoaDonFb = parseCurrencyFormula(row.hoaDonFb).total;
+  const hoaDonZalo = parseCurrencyFormula(row.hoaDonZalo).total;
+  const hoaDonTiktok = parseCurrencyFormula(row.hoaDonTiktok).total;
+  const hoaDonGoogle = parseCurrencyFormula(row.hoaDonGoogle).total;
+  const hoaDonDangTin = parseCurrencyFormula(row.hoaDonDangTin).total;
+  const hoaDonUCall = parseCurrencyFormula(row.hoaDonUCall).total;
+  const hoaDonNativeAds = parseCurrencyFormula(row.hoaDonNativeAds).total;
+  const hoaDonKhac = parseCurrencyFormula(row.hoaDonKhac).total;
+  const hoaDonChannelsSum = hoaDonFb + hoaDonZalo + hoaDonTiktok + hoaDonGoogle + hoaDonDangTin + hoaDonUCall + hoaDonNativeAds + hoaDonKhac;
+  const hasHoaDonChannels = [row.hoaDonFb, row.hoaDonZalo, row.hoaDonTiktok, row.hoaDonGoogle, row.hoaDonDangTin, row.hoaDonUCall, row.hoaDonNativeAds, row.hoaDonKhac]
+    .some((v) => v != null && v !== '' && v !== 0 && v !== '0');
+  // Tổng tiền trên hóa đơn: bản ghi mới (có kênh) = Σ kênh; bản cũ = hoaDonTien.
+  const hoaDonTong = hasHoaDonChannels ? hoaDonChannelsSum : hoaDonTien;
+  const chenhLechHD = grandTotal - hoaDonTong;
+
   // Cột AA: Số Lead
   const cnNopTien = parseCurrencyFormula(row.caNhanNopTien ?? row.personalPaidToCompany).total;
 
@@ -171,12 +190,14 @@ export const getRowComputed = (row: any): ComputedRowValues => {
     dFb, dZalo, dTiktok, dKhac, dTotalChuaVat, dTotalSauVat,
     vFb, vZalo, vTiktok, vDangTin, vTotalChuaVat, vTotalSauVat,
     dtCtyChuaVat, dtCtySauVat,
-    cnFb, cnDangTin, cnZalo, cnGoogle, cnTiktok, cnNativeAds, cnUCall, cnTotal,
+    cnFb, cnDangTin, cnZalo, cnGoogle, cnTiktok, cnNativeAds, cnUCall, cnKhac, cnTotal,
     cnNapTienCty,
     grandTotal,
     hoaDonTien,
     hoaDonNo,
-    cnNopTien
+    cnNopTien,
+    hoaDonFb, hoaDonZalo, hoaDonTiktok, hoaDonGoogle, hoaDonDangTin, hoaDonUCall, hoaDonNativeAds, hoaDonKhac,
+    hoaDonTong, chenhLechHD
   };
 };
 

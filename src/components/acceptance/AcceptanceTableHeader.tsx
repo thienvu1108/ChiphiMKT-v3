@@ -9,6 +9,8 @@ interface HeaderProps {
   onSelectAll: (checked: boolean) => void;
   isAllSelected: boolean;
   canDelete?: boolean;
+  /** Bố cục từ T11/2026: ẩn Digital/Visa/Đăng tin cty/Nạp tiền; thêm Cá nhân·Khác + Tiền HĐ theo kênh + Chênh lệch HĐ. */
+  newLayout?: boolean;
 }
 
 export const AcceptanceTableHeader: React.FC<HeaderProps> = React.memo(({
@@ -17,7 +19,8 @@ export const AcceptanceTableHeader: React.FC<HeaderProps> = React.memo(({
   selectedAcceptanceIds,
   onSelectAll,
   isAllSelected,
-  canDelete = true
+  canDelete = true,
+  newLayout = false,
 }) => {
   const isSorted = (key: string) => sortConfig.key === key;
   const isAsc = (key: string) => sortConfig.key === key && sortConfig.direction === 'asc';
@@ -91,6 +94,7 @@ export const AcceptanceTableHeader: React.FC<HeaderProps> = React.memo(({
           </div>
         </TableHead>
 
+        {!newLayout && (<>
         {/* Tiền trên Hóa đơn — user-entered, NOT in TỔNG */}
         <TableHead rowSpan={2} onClick={() => onSort('hoaDonTien')} className="cursor-pointer hover:bg-orange-200 text-center font-black uppercase bg-orange-100 text-orange-950 border-b border-r border-orange-300 px-2 py-1 min-w-[130px] text-[10px]">
           <div className="flex items-center justify-center gap-1 font-black">
@@ -146,14 +150,31 @@ export const AcceptanceTableHeader: React.FC<HeaderProps> = React.memo(({
         {/* GROUP 3: ĐĂNG TIN CÔNG TY - Col R, S */}
         {renderSortableCell('dangTinCtyChuaVat', 'ĐĂNG TIN CÔNG TY (Chưa VAT)', 'bg-indigo-50/90 text-indigo-950 border-indigo-200 min-w-[115px] text-[10px]')}
         {renderSortableCell('dangTinCtySauVat', 'ĐĂNG TIN CÔNG TY (SAU VAT 8%)', 'bg-indigo-100 text-indigo-950 border-indigo-300 min-w-[120px] text-[10px]')}
+        </>)}
 
-        {/* GROUP 4: CÁ NHÂN CHẠY NGOÀI (TẤT CẢ LẤY SỐ TRƯỚC VAT) - Col T, U, V, W, X, Y */}
-        <TableHead colSpan={8} className="text-center font-black uppercase bg-amber-100/90 text-amber-950 border-b border-r border-amber-300 py-1.5 text-[11px] tracking-wide">
+        {/* GROUP 4: CÁ NHÂN CHẠY NGOÀI (TẤT CẢ LẤY SỐ TRƯỚC VAT) */}
+        <TableHead colSpan={newLayout ? 9 : 8} className="text-center font-black uppercase bg-amber-100/90 text-amber-950 border-b border-r border-amber-300 py-1.5 text-[11px] tracking-wide">
           CÁ NHÂN CHẠY NGOÀI (TẤT CẢ LẤY SỐ TRƯỚC VAT)
         </TableHead>
 
-        {/* CỘT: CÁ NHÂN NẠP TIỀN QUA CÔNG TY */}
-        {renderSortableCell('caNhanNapTienQuaCty', 'CÁ NHÂN NẠP TIỀN QUA CÔNG TY', 'bg-violet-100/90 text-violet-950 border-violet-300 min-w-[130px] text-[10px]')}
+        {!newLayout && (
+        /* CỘT: CÁ NHÂN NẠP TIỀN QUA CÔNG TY */
+        renderSortableCell('caNhanNapTienQuaCty', 'CÁ NHÂN NẠP TIỀN QUA CÔNG TY', 'bg-violet-100/90 text-violet-950 border-violet-300 min-w-[130px] text-[10px]')
+        )}
+
+        {newLayout && (<>
+        {/* TIỀN TRÊN HÓA ĐƠN theo kênh (8 kênh + Tổng) */}
+        <TableHead colSpan={9} className="text-center font-black uppercase bg-orange-100 text-orange-950 border-b border-r border-orange-300 py-1.5 text-[11px] tracking-wide">
+          TIỀN TRÊN HÓA ĐƠN
+        </TableHead>
+        {/* CHÊNH LỆCH HĐ = TỔNG − Tổng tiền trên hóa đơn */}
+        <TableHead rowSpan={2} onClick={() => onSort('chenhLechHD')} className="cursor-pointer hover:bg-orange-300/80 text-center font-black uppercase bg-orange-200 text-orange-950 border-b border-r border-orange-400 px-2 py-1 min-w-[120px] text-[10px]">
+          <div className="flex items-center justify-center gap-1 font-black">
+            <span>CHÊNH LỆCH HĐ</span>
+            <ArrowUpDown className="w-3 h-3 text-orange-900" />
+          </div>
+        </TableHead>
+        </>)}
 
         {/* Col AA: SỐ LEAD */}
         {renderSortableCell('caNhanNopTien', 'SỐ LEAD', 'bg-cyan-100/90 text-cyan-950 border-cyan-300 min-w-[95px] text-[10px]')}
@@ -172,6 +193,7 @@ export const AcceptanceTableHeader: React.FC<HeaderProps> = React.memo(({
 
       {/* Row 2: Sub-column Headers */}
       <TableRow className="border-b-2 border-[var(--mh-border-strong)] text-[10px] font-bold">
+        {!newLayout && (<>
         {/* Under Group 1: DIGITAL CHẠY (Chưa VAT) */}
         <TableHead onClick={() => onSort('digitalFb')} className="cursor-pointer text-right bg-sky-50 text-sky-900 border-r border-sky-200 min-w-[85px] py-1">FACEBOOK</TableHead>
         <TableHead onClick={() => onSort('digitalZalo')} className="cursor-pointer text-right bg-sky-50 text-sky-900 border-r border-sky-200 min-w-[85px] py-1">ZALO</TableHead>
@@ -185,16 +207,31 @@ export const AcceptanceTableHeader: React.FC<HeaderProps> = React.memo(({
         <TableHead onClick={() => onSort('visaTiktok')} className="cursor-pointer text-right bg-emerald-50/60 text-emerald-900 border-r border-emerald-200 min-w-[85px] py-1">TIKTOK</TableHead>
         <TableHead onClick={() => onSort('visaDangTin')} className="cursor-pointer text-right bg-emerald-50/60 text-emerald-900 border-r border-emerald-200 min-w-[85px] py-1">ĐĂNG TIN</TableHead>
         <TableHead onClick={() => onSort('visaTotalChuaVat')} className="cursor-pointer text-right bg-emerald-100/80 text-emerald-950 font-extrabold border-r border-emerald-300 min-w-[95px] py-1">TỔNG</TableHead>
+        </>)}
 
         {/* Under Group 4: CÁ NHÂN CHẠY NGOÀI */}
         <TableHead onClick={() => onSort('caNhanFb')} className="cursor-pointer text-right bg-amber-50/70 text-amber-900 border-r border-amber-200 min-w-[85px] py-1">FACEBOOK</TableHead>
         <TableHead onClick={() => onSort('caNhanDangTin')} className="cursor-pointer text-right bg-amber-50/70 text-amber-900 border-r border-amber-200 min-w-[85px] py-1">ĐĂNG TIN</TableHead>
         <TableHead onClick={() => onSort('caNhanZalo')} className="cursor-pointer text-right bg-amber-50/70 text-amber-900 border-r border-amber-200 min-w-[85px] py-1">ZALO</TableHead>
-        <TableHead onClick={() => onSort('caNhanGoogle')} className="cursor-pointer text-right bg-amber-50/70 text-amber-900 border-r border-amber-200 min-w-[85px] py-1">GOOGLE</TableHead>
+        <TableHead onClick={() => onSort('caNhanGoogle')} className="cursor-pointer text-right bg-amber-50/70 text-amber-900 border-r border-amber-200 min-w-[85px] py-1">GOOGLE ADS</TableHead>
         <TableHead onClick={() => onSort('caNhanTiktok')} className="cursor-pointer text-right bg-amber-50/70 text-amber-900 border-r border-amber-200 min-w-[85px] py-1">TIKTOK</TableHead>
         <TableHead onClick={() => onSort('caNhanNativeAds')} className="cursor-pointer text-right bg-amber-50/70 text-amber-900 border-r border-amber-200 min-w-[95px] py-1">NATIVE ADS</TableHead>
         <TableHead onClick={() => onSort('caNhanUCall')} className="cursor-pointer text-right bg-amber-50/70 text-amber-900 border-r border-amber-200 min-w-[95px] py-1">UCALL</TableHead>
+        {newLayout && <TableHead onClick={() => onSort('caNhanKhac')} className="cursor-pointer text-right bg-amber-50/70 text-amber-900 border-r border-amber-200 min-w-[85px] py-1">KHÁC</TableHead>}
         <TableHead onClick={() => onSort('caNhanTotal')} className="cursor-pointer text-right bg-amber-100/90 text-amber-950 font-extrabold border-r border-amber-300 min-w-[95px] py-1">TỔNG</TableHead>
+
+        {newLayout && (<>
+        {/* Under: TIỀN TRÊN HÓA ĐƠN theo kênh */}
+        <TableHead onClick={() => onSort('hoaDonFb')} className="cursor-pointer text-right bg-orange-50 text-orange-900 border-r border-orange-200 min-w-[85px] py-1">FACEBOOK</TableHead>
+        <TableHead onClick={() => onSort('hoaDonZalo')} className="cursor-pointer text-right bg-orange-50 text-orange-900 border-r border-orange-200 min-w-[85px] py-1">ZALO</TableHead>
+        <TableHead onClick={() => onSort('hoaDonTiktok')} className="cursor-pointer text-right bg-orange-50 text-orange-900 border-r border-orange-200 min-w-[85px] py-1">TIKTOK</TableHead>
+        <TableHead onClick={() => onSort('hoaDonGoogle')} className="cursor-pointer text-right bg-orange-50 text-orange-900 border-r border-orange-200 min-w-[85px] py-1">GOOGLE ADS</TableHead>
+        <TableHead onClick={() => onSort('hoaDonDangTin')} className="cursor-pointer text-right bg-orange-50 text-orange-900 border-r border-orange-200 min-w-[85px] py-1">ĐĂNG TIN</TableHead>
+        <TableHead onClick={() => onSort('hoaDonUCall')} className="cursor-pointer text-right bg-orange-50 text-orange-900 border-r border-orange-200 min-w-[85px] py-1">UCALL</TableHead>
+        <TableHead onClick={() => onSort('hoaDonNativeAds')} className="cursor-pointer text-right bg-orange-50 text-orange-900 border-r border-orange-200 min-w-[95px] py-1">NATIVE ADS</TableHead>
+        <TableHead onClick={() => onSort('hoaDonKhac')} className="cursor-pointer text-right bg-orange-50 text-orange-900 border-r border-orange-200 min-w-[85px] py-1">KHÁC</TableHead>
+        <TableHead onClick={() => onSort('hoaDonTong')} className="cursor-pointer text-right bg-orange-100 text-orange-950 font-extrabold border-r border-orange-300 min-w-[100px] py-1">TỔNG HĐ</TableHead>
+        </>)}
       </TableRow>
     </TableHeader>
   );

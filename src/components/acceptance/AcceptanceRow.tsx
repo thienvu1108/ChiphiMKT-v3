@@ -64,6 +64,8 @@ interface RowProps {
   onAssignManual?: (item: any, name: string) => Promise<void> | void;
   nsLines?: NtBudgetLine[];
   nsSupport?: Record<string, Partial<Support> | undefined>;
+  /** Bố cục cột từ T11/2026. */
+  newLayout?: boolean;
 }
 
 export const AcceptanceRow: React.FC<RowProps> = React.memo(({
@@ -105,6 +107,7 @@ export const AcceptanceRow: React.FC<RowProps> = React.memo(({
   onAssignManual,
   nsLines = [],
   nsSupport,
+  newLayout = false,
 }) => {
   const [manualOpen, setManualOpen] = useState<'' | 'view' | 'edit'>('');
   // Local edit state to ensure typing inside edit row is 100% instant and doesn't re-render parent/other rows
@@ -143,15 +146,18 @@ export const AcceptanceRow: React.FC<RowProps> = React.memo(({
         caNhanTiktok: item.caNhanTiktok ?? item.tiktokCost ?? '',
         caNhanNativeAds: item.caNhanNativeAds ?? '',
         caNhanUCall: item.caNhanUCall ?? '',
+        caNhanKhac: item.caNhanKhac ?? '',
         caNhanNapTienQuaCty: item.caNhanNapTienQuaCty ?? item.caNhanNapTienCty ?? '',
         caNhanNopTien: item.caNhanNopTien ?? item.personalPaidToCompany ?? '',
         hoaDonTien: item.hoaDonTien ?? '',
         hoaDonLines: item.hoaDonLines || [],
+        hoaDonFb: item.hoaDonFb ?? '', hoaDonZalo: item.hoaDonZalo ?? '', hoaDonTiktok: item.hoaDonTiktok ?? '', hoaDonGoogle: item.hoaDonGoogle ?? '',
+        hoaDonDangTin: item.hoaDonDangTin ?? '', hoaDonUCall: item.hoaDonUCall ?? '', hoaDonNativeAds: item.hoaDonNativeAds ?? '', hoaDonKhac: item.hoaDonKhac ?? '',
         status: item.status || 'Đã nghiệm thu',
         notes: item.notes || ''
       };
       // Khôi phục công thức/chi tiết từ costBreakdowns (sửa lỗi chỉ hiện tổng sau khi lưu).
-      const COST = ['digitalFb','digitalZalo','digitalTiktok','digitalKhac','visaFb','visaZalo','visaTiktok','visaDangTin','dangTinCtyChuaVat','caNhanFb','caNhanDangTin','caNhanZalo','caNhanGoogle','caNhanTiktok','caNhanNativeAds','caNhanUCall','caNhanNapTienQuaCty','caNhanNopTien','hoaDonTien'];
+      const COST = ['digitalFb','digitalZalo','digitalTiktok','digitalKhac','visaFb','visaZalo','visaTiktok','visaDangTin','dangTinCtyChuaVat','caNhanFb','caNhanDangTin','caNhanZalo','caNhanGoogle','caNhanTiktok','caNhanNativeAds','caNhanUCall','caNhanKhac','caNhanNapTienQuaCty','caNhanNopTien','hoaDonTien','hoaDonFb','hoaDonZalo','hoaDonTiktok','hoaDonGoogle','hoaDonDangTin','hoaDonUCall','hoaDonNativeAds','hoaDonKhac'];
       const restored: any = { ...base };
       for (const f of COST) restored[f] = resolveEditRaw(f, { ...item, ...base }, parseCurrencyFormula);
       setLocalEditState(restored);
@@ -464,6 +470,7 @@ export const AcceptanceRow: React.FC<RowProps> = React.memo(({
         <TableCell className="p-1 text-right font-mono text-xs font-black text-rose-900 bg-rose-100/70">
           {formatCurrency(editComp.grandTotal).replace(' đ', '')}
         </TableCell>
+        {!newLayout && (<>
         <TableCell className="p-1 bg-orange-50/40">{renderEditInput('hoaDonTien', 'Tiền trên Hóa đơn', localEditState.hoaDonTien)}</TableCell>
         <TableCell className="p-1 text-right font-mono text-[11px] font-bold text-fuchsia-950 bg-fuchsia-50/50">
           {formatCurrency(editComp.hoaDonNo).replace(' đ', '')}
@@ -506,6 +513,7 @@ export const AcceptanceRow: React.FC<RowProps> = React.memo(({
         <TableCell className="p-1 text-right font-mono text-[11px] font-black text-indigo-950 bg-indigo-100/60">
           {formatCurrency(editComp.dtCtySauVat).replace(' đ', '')}
         </TableCell>
+        </>)}
 
         {/* Group 4: CÁ NHÂN */}
         <TableCell className="p-1 bg-amber-50/40">{renderEditInput('caNhanFb', 'Cá nhân FB', localEditState.caNhanFb)}</TableCell>
@@ -515,14 +523,30 @@ export const AcceptanceRow: React.FC<RowProps> = React.memo(({
         <TableCell className="p-1 bg-amber-50/40">{renderEditInput('caNhanTiktok', 'Cá nhân Tiktok', localEditState.caNhanTiktok)}</TableCell>
         <TableCell className="p-1 bg-amber-50/40">{renderEditInput('caNhanNativeAds', 'Cá nhân Native Ads', localEditState.caNhanNativeAds)}</TableCell>
         <TableCell className="p-1 bg-amber-50/40">{renderEditInput('caNhanUCall', 'Cá nhân UCall', localEditState.caNhanUCall)}</TableCell>
+        {newLayout && <TableCell className="p-1 bg-amber-50/40">{renderEditInput('caNhanKhac', 'Cá nhân Khác', localEditState.caNhanKhac)}</TableCell>}
 
         {/* Col Y: CÁ NHÂN TỔNG */}
         <TableCell className="p-1 text-right font-mono text-[11px] font-extrabold text-amber-950 bg-amber-100/60">
           {formatCurrency(editComp.cnTotal).replace(' đ', '')}
         </TableCell>
 
-        {/* Cột: CÁ NHÂN NẠP TIỀN QUA CÔNG TY */}
+        {!newLayout && (
+        /* Cột: CÁ NHÂN NẠP TIỀN QUA CÔNG TY */
         <TableCell className="p-1 bg-violet-50/40">{renderEditInput('caNhanNapTienQuaCty', 'Cá nhân nạp tiền qua CTY', localEditState.caNhanNapTienQuaCty)}</TableCell>
+        )}
+
+        {newLayout && (<>
+        <TableCell className="p-1 bg-orange-50/40">{renderEditInput('hoaDonFb', 'HĐ Facebook', localEditState.hoaDonFb)}</TableCell>
+        <TableCell className="p-1 bg-orange-50/40">{renderEditInput('hoaDonZalo', 'HĐ Zalo', localEditState.hoaDonZalo)}</TableCell>
+        <TableCell className="p-1 bg-orange-50/40">{renderEditInput('hoaDonTiktok', 'HĐ Tiktok', localEditState.hoaDonTiktok)}</TableCell>
+        <TableCell className="p-1 bg-orange-50/40">{renderEditInput('hoaDonGoogle', 'HĐ Google Ads', localEditState.hoaDonGoogle)}</TableCell>
+        <TableCell className="p-1 bg-orange-50/40">{renderEditInput('hoaDonDangTin', 'HĐ Đăng tin', localEditState.hoaDonDangTin)}</TableCell>
+        <TableCell className="p-1 bg-orange-50/40">{renderEditInput('hoaDonUCall', 'HĐ UCall', localEditState.hoaDonUCall)}</TableCell>
+        <TableCell className="p-1 bg-orange-50/40">{renderEditInput('hoaDonNativeAds', 'HĐ Native Ads', localEditState.hoaDonNativeAds)}</TableCell>
+        <TableCell className="p-1 bg-orange-50/40">{renderEditInput('hoaDonKhac', 'HĐ Khác', localEditState.hoaDonKhac)}</TableCell>
+        <TableCell className="p-1 text-right font-mono text-[11px] font-extrabold text-orange-950 bg-orange-100/60">{formatCurrency(editComp.hoaDonTong).replace(' đ', '')}</TableCell>
+        <TableCell className="p-1 text-right font-mono text-[11px] font-bold text-fuchsia-950 bg-fuchsia-50/50">{formatCurrency(editComp.chenhLechHD).replace(' đ', '')}</TableCell>
+        </>)}
 
         {/* Col AA: SỐ LEAD */}
         <TableCell className="p-1 bg-cyan-50/40">{renderEditInput('caNhanNopTien', 'Số Lead', localEditState.caNhanNopTien)}</TableCell>
@@ -752,6 +776,7 @@ export const AcceptanceRow: React.FC<RowProps> = React.memo(({
       <TableCell className="text-right font-mono text-xs font-black text-rose-900 bg-rose-100/60">
         {formatCurrency(comp.grandTotal).replace(' đ', '')}
       </TableCell>
+      {!newLayout && (<>
       <TableCell className="text-right font-mono text-xs text-orange-950 bg-orange-50/30">
         {renderBreakdownTooltip(comp.hoaDonTien, item.costBreakdowns?.hoaDonTien || (Array.isArray(item.hoaDonLines) && item.hoaDonLines.length ? { items: item.hoaDonLines.map((x: any) => ({ amount: Number(x.amount) || 0, label: x.note || 'Khoản chi' })), total: comp.hoaDonTien } : null), 'Tiền trên Hóa đơn')}
       </TableCell>
@@ -815,6 +840,7 @@ export const AcceptanceRow: React.FC<RowProps> = React.memo(({
       <TableCell className="text-right font-mono text-xs font-black text-indigo-950 bg-indigo-100/50">
         {formatCurrency(comp.dtCtySauVat).replace(' đ', '')}
       </TableCell>
+      </>)}
 
       {/* Group 4: CÁ NHÂN CHẠY NGOÀI */}
       <TableCell className="text-right font-mono text-xs text-[var(--mh-text-2)] bg-amber-50/20">
@@ -838,16 +864,37 @@ export const AcceptanceRow: React.FC<RowProps> = React.memo(({
       <TableCell className="text-right font-mono text-xs text-[var(--mh-text-2)] bg-amber-50/20">
         {renderBreakdownTooltip(comp.cnUCall, item.costBreakdowns?.caNhanUCall, 'Cá nhân UCall')}
       </TableCell>
+      {newLayout && (
+      <TableCell className="text-right font-mono text-xs text-[var(--mh-text-2)] bg-amber-50/20">
+        {renderBreakdownTooltip(comp.cnKhac, item.costBreakdowns?.caNhanKhac, 'Cá nhân Khác')}
+      </TableCell>
+      )}
 
       {/* Col Y: CÁ NHÂN TỔNG */}
       <TableCell className="text-right font-mono text-xs font-extrabold text-amber-950 bg-amber-100/50">
         {formatCurrency(comp.cnTotal).replace(' đ', '')}
       </TableCell>
 
-      {/* Cột: CÁ NHÂN NẠP TIỀN QUA CÔNG TY */}
+      {!newLayout && (
+      /* Cột: CÁ NHÂN NẠP TIỀN QUA CÔNG TY */
       <TableCell className="text-right font-mono text-xs font-bold text-violet-950 bg-violet-50/30">
         {renderBreakdownTooltip(comp.cnNapTienCty, item.costBreakdowns?.caNhanNapTienQuaCty || item.costBreakdowns?.caNhanNapTienCty, 'Cá nhân nạp qua Cty')}
       </TableCell>
+      )}
+
+      {newLayout && (<>
+      {/* TIỀN TRÊN HÓA ĐƠN theo kênh */}
+      <TableCell className="text-right font-mono text-xs text-orange-950 bg-orange-50/20">{formatCurrency(comp.hoaDonFb).replace(' đ', '')}</TableCell>
+      <TableCell className="text-right font-mono text-xs text-orange-950 bg-orange-50/20">{formatCurrency(comp.hoaDonZalo).replace(' đ', '')}</TableCell>
+      <TableCell className="text-right font-mono text-xs text-orange-950 bg-orange-50/20">{formatCurrency(comp.hoaDonTiktok).replace(' đ', '')}</TableCell>
+      <TableCell className="text-right font-mono text-xs text-orange-950 bg-orange-50/20">{formatCurrency(comp.hoaDonGoogle).replace(' đ', '')}</TableCell>
+      <TableCell className="text-right font-mono text-xs text-orange-950 bg-orange-50/20">{formatCurrency(comp.hoaDonDangTin).replace(' đ', '')}</TableCell>
+      <TableCell className="text-right font-mono text-xs text-orange-950 bg-orange-50/20">{formatCurrency(comp.hoaDonUCall).replace(' đ', '')}</TableCell>
+      <TableCell className="text-right font-mono text-xs text-orange-950 bg-orange-50/20">{formatCurrency(comp.hoaDonNativeAds).replace(' đ', '')}</TableCell>
+      <TableCell className="text-right font-mono text-xs text-orange-950 bg-orange-50/20">{formatCurrency(comp.hoaDonKhac).replace(' đ', '')}</TableCell>
+      <TableCell className="text-right font-mono text-xs font-extrabold text-orange-950 bg-orange-100/50">{formatCurrency(comp.hoaDonTong).replace(' đ', '')}</TableCell>
+      <TableCell className="text-right font-mono text-xs font-bold text-fuchsia-950 bg-fuchsia-50/40">{formatCurrency(comp.chenhLechHD).replace(' đ', '')}</TableCell>
+      </>)}
 
       {/* Col AA: SỐ LEAD */}
       <TableCell className="text-right font-mono text-xs font-bold text-cyan-950 bg-cyan-50/30">
