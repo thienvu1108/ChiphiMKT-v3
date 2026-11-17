@@ -120,6 +120,7 @@ export interface ComputedRowValues {
   cnTiktok: number;
   cnNativeAds: number;
   cnUCall: number;
+  cnKhac: number;      // (từ T11) Cá nhân · Khác
   cnTotal: number; // Y (Tổng cá nhân)
 
   cnNapTienCty: number; // Cá Nhân nạp tiền qua công ty
@@ -128,4 +129,16 @@ export interface ComputedRowValues {
   hoaDonTien: number;
   hoaDonNo: number;
   cnNopTien: number; // AA
+
+  // Tiền trên Hóa đơn theo kênh (bố cục từ T11/2026)
+  hoaDonFb: number;
+  hoaDonZalo: number;
+  hoaDonTiktok: number;
+  hoaDonGoogle: number;
+  hoaDonDangTin: number;
+  hoaDonUCall: number;
+  hoaDonNativeAds: number;
+  hoaDonKhac: number;
+  hoaDonTong: number;   // Tổng tiền trên hóa đơn (Σ kênh; bản cũ: dùng lại hoaDonTien)
+  chenhLechHD: number;  // = grandTotal - hoaDonTong
 }

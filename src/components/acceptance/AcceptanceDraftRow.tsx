@@ -37,6 +37,8 @@ interface DraftRowProps {
   suppAllowed?: boolean;
   nsLines?: NtBudgetLine[];
   nsSupport?: Record<string, Partial<Support> | undefined>;
+  /** Bố cục cột từ T11/2026. */
+  newLayout?: boolean;
 }
 
 export const AcceptanceDraftRow: React.FC<DraftRowProps> = React.memo(({
@@ -59,6 +61,7 @@ export const AcceptanceDraftRow: React.FC<DraftRowProps> = React.memo(({
   canManualAssignee = false,
   nsLines = [],
   nsSupport,
+  newLayout = false,
 }) => {
   const [manualOpen, setManualOpen] = useState(false);
   // Local state keeps typing 100% fluid without triggering parent table re-renders
@@ -392,6 +395,7 @@ export const AcceptanceDraftRow: React.FC<DraftRowProps> = React.memo(({
       <TableCell className="p-1 text-right font-mono text-xs font-black text-rose-900 bg-rose-100/70">
         {formatCurrency(comp.grandTotal).replace(' đ', '')}
       </TableCell>
+      {!newLayout && (<>
       <TableCell className="p-1 bg-orange-50/30">
         {renderCalcInput('hoaDonTien', 'Tiền trên Hóa đơn', localDraft.hoaDonTien)}
       </TableCell>
@@ -456,6 +460,7 @@ export const AcceptanceDraftRow: React.FC<DraftRowProps> = React.memo(({
       <TableCell className="p-1 text-right font-mono text-[11px] font-black text-indigo-950 bg-indigo-100/60">
         {formatCurrency(comp.dtCtySauVat).replace(' đ', '')}
       </TableCell>
+      </>)}
 
       {/* Group 4: CÁ NHÂN CHẠY NGOÀI */}
       <TableCell className="p-1 bg-amber-50/30">
@@ -479,16 +484,43 @@ export const AcceptanceDraftRow: React.FC<DraftRowProps> = React.memo(({
       <TableCell className="p-1 bg-amber-50/30">
         {renderCalcInput('caNhanUCall', 'Cá nhân UCall', localDraft.caNhanUCall)}
       </TableCell>
+      {newLayout && (
+      <TableCell className="p-1 bg-amber-50/30">
+        {renderCalcInput('caNhanKhac', 'Cá nhân Khác', localDraft.caNhanKhac)}
+      </TableCell>
+      )}
 
       {/* Col Y: CÁ NHÂN TỔNG */}
       <TableCell className="p-1 text-right font-mono text-[11px] font-extrabold text-amber-950 bg-amber-100/60">
         {formatCurrency(comp.cnTotal).replace(' đ', '')}
       </TableCell>
 
-      {/* Cột: CÁ NHÂN NẠP TIỀN QUA CÔNG TY */}
+      {!newLayout && (
+      /* Cột: CÁ NHÂN NẠP TIỀN QUA CÔNG TY */
       <TableCell className="p-1 bg-violet-50/30">
         {renderCalcInput('caNhanNapTienQuaCty', 'Cá nhân nạp tiền qua CTY', localDraft.caNhanNapTienQuaCty)}
       </TableCell>
+      )}
+
+      {newLayout && (<>
+      {/* TIỀN TRÊN HÓA ĐƠN theo kênh */}
+      <TableCell className="p-1 bg-orange-50/30">{renderCalcInput('hoaDonFb', 'HĐ Facebook', localDraft.hoaDonFb)}</TableCell>
+      <TableCell className="p-1 bg-orange-50/30">{renderCalcInput('hoaDonZalo', 'HĐ Zalo', localDraft.hoaDonZalo)}</TableCell>
+      <TableCell className="p-1 bg-orange-50/30">{renderCalcInput('hoaDonTiktok', 'HĐ Tiktok', localDraft.hoaDonTiktok)}</TableCell>
+      <TableCell className="p-1 bg-orange-50/30">{renderCalcInput('hoaDonGoogle', 'HĐ Google Ads', localDraft.hoaDonGoogle)}</TableCell>
+      <TableCell className="p-1 bg-orange-50/30">{renderCalcInput('hoaDonDangTin', 'HĐ Đăng tin', localDraft.hoaDonDangTin)}</TableCell>
+      <TableCell className="p-1 bg-orange-50/30">{renderCalcInput('hoaDonUCall', 'HĐ UCall', localDraft.hoaDonUCall)}</TableCell>
+      <TableCell className="p-1 bg-orange-50/30">{renderCalcInput('hoaDonNativeAds', 'HĐ Native Ads', localDraft.hoaDonNativeAds)}</TableCell>
+      <TableCell className="p-1 bg-orange-50/30">{renderCalcInput('hoaDonKhac', 'HĐ Khác', localDraft.hoaDonKhac)}</TableCell>
+      {/* Tổng tiền trên hóa đơn */}
+      <TableCell className="p-1 text-right font-mono text-[11px] font-extrabold text-orange-950 bg-orange-100/60">
+        {formatCurrency(comp.hoaDonTong).replace(' đ', '')}
+      </TableCell>
+      {/* Chênh lệch HĐ = TỔNG − Tổng HĐ */}
+      <TableCell className="p-1 text-right font-mono text-[11px] font-bold text-fuchsia-950 bg-fuchsia-50/40">
+        {formatCurrency(comp.chenhLechHD).replace(' đ', '')}
+      </TableCell>
+      </>)}
 
       {/* Col AA: SỐ LEAD */}
       <TableCell className="p-1 bg-cyan-50/40">

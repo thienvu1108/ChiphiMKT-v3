@@ -5,9 +5,10 @@ import { getRowComputed } from './acceptanceUtils';
 interface FooterProps {
   records: any[];
   formatCurrency: (amount: number) => string;
+  newLayout?: boolean;
 }
 
-export const AcceptanceFooter: React.FC<FooterProps> = React.memo(({ records, formatCurrency }) => {
+export const AcceptanceFooter: React.FC<FooterProps> = React.memo(({ records, formatCurrency, newLayout = false }) => {
   const totals = React.useMemo(() => {
     return (records || []).reduce((acc, item) => {
       const comp = getRowComputed(item);
@@ -36,6 +37,7 @@ export const AcceptanceFooter: React.FC<FooterProps> = React.memo(({ records, fo
         cnTiktok: acc.cnTiktok + comp.cnTiktok,
         cnNativeAds: acc.cnNativeAds + comp.cnNativeAds,
         cnUCall: acc.cnUCall + comp.cnUCall,
+        cnKhac: acc.cnKhac + comp.cnKhac,
         cnTotal: acc.cnTotal + comp.cnTotal,
 
         cnNapTienCty: acc.cnNapTienCty + comp.cnNapTienCty,
@@ -43,15 +45,21 @@ export const AcceptanceFooter: React.FC<FooterProps> = React.memo(({ records, fo
         grandTotal: acc.grandTotal + comp.grandTotal,
         hoaDonTien: acc.hoaDonTien + comp.hoaDonTien,
         hoaDonNo: acc.hoaDonNo + comp.hoaDonNo,
-        cnNopTien: acc.cnNopTien + comp.cnNopTien
+        cnNopTien: acc.cnNopTien + comp.cnNopTien,
+        hoaDonFb: acc.hoaDonFb + comp.hoaDonFb, hoaDonZalo: acc.hoaDonZalo + comp.hoaDonZalo, hoaDonTiktok: acc.hoaDonTiktok + comp.hoaDonTiktok,
+        hoaDonGoogle: acc.hoaDonGoogle + comp.hoaDonGoogle, hoaDonDangTin: acc.hoaDonDangTin + comp.hoaDonDangTin, hoaDonUCall: acc.hoaDonUCall + comp.hoaDonUCall,
+        hoaDonNativeAds: acc.hoaDonNativeAds + comp.hoaDonNativeAds, hoaDonKhac: acc.hoaDonKhac + comp.hoaDonKhac,
+        hoaDonTong: acc.hoaDonTong + comp.hoaDonTong, chenhLechHD: acc.chenhLechHD + comp.chenhLechHD
       };
     }, {
       dFb: 0, dZalo: 0, dTiktok: 0, dKhac: 0, dTotalChuaVat: 0, dTotalSauVat: 0,
       vFb: 0, vZalo: 0, vTiktok: 0, vDangTin: 0, vTotalChuaVat: 0, vTotalSauVat: 0,
       dtCtyChuaVat: 0, dtCtySauVat: 0,
-      cnFb: 0, cnDangTin: 0, cnZalo: 0, cnGoogle: 0, cnTiktok: 0, cnNativeAds: 0, cnUCall: 0, cnTotal: 0,
+      cnFb: 0, cnDangTin: 0, cnZalo: 0, cnGoogle: 0, cnTiktok: 0, cnNativeAds: 0, cnUCall: 0, cnKhac: 0, cnTotal: 0,
       cnNapTienCty: 0,
-      grandTotal: 0, hoaDonTien: 0, hoaDonNo: 0, cnNopTien: 0
+      grandTotal: 0, hoaDonTien: 0, hoaDonNo: 0, cnNopTien: 0,
+      hoaDonFb: 0, hoaDonZalo: 0, hoaDonTiktok: 0, hoaDonGoogle: 0, hoaDonDangTin: 0, hoaDonUCall: 0, hoaDonNativeAds: 0, hoaDonKhac: 0,
+      hoaDonTong: 0, chenhLechHD: 0
     });
   }, [records]);
 
@@ -68,6 +76,7 @@ export const AcceptanceFooter: React.FC<FooterProps> = React.memo(({ records, fo
 
         {/* Col TỔNG — after DỰ ÁN */}
         <TableCell className="text-right font-mono text-xs font-black text-rose-900 bg-rose-100">{fmt(totals.grandTotal)}</TableCell>
+        {!newLayout && (<>
         <TableCell className="text-right font-mono text-xs font-black text-orange-950 bg-orange-100">{fmt(totals.hoaDonTien)}</TableCell>
         <TableCell className="text-right font-mono text-xs font-black text-orange-950 bg-orange-200">{fmt(totals.hoaDonNo)}</TableCell>
 
@@ -93,6 +102,7 @@ export const AcceptanceFooter: React.FC<FooterProps> = React.memo(({ records, fo
         <TableCell className="text-right font-mono text-xs font-bold text-indigo-900 bg-indigo-50/50">{fmt(totals.dtCtyChuaVat)}</TableCell>
         {/* Col S: ĐĂNG TIN CÔNG TY (SAU VAT 8%) */}
         <TableCell className="text-right font-mono text-xs font-black text-indigo-950 bg-indigo-100/80">{fmt(totals.dtCtySauVat)}</TableCell>
+        </>)}
 
         {/* Group 4: CÁ NHÂN CHẠY NGOÀI */}
         <TableCell className="text-right font-mono text-xs font-bold text-amber-900 bg-amber-50/50">{fmt(totals.cnFb)}</TableCell>
@@ -102,11 +112,27 @@ export const AcceptanceFooter: React.FC<FooterProps> = React.memo(({ records, fo
         <TableCell className="text-right font-mono text-xs font-bold text-amber-900 bg-amber-50/50">{fmt(totals.cnTiktok)}</TableCell>
         <TableCell className="text-right font-mono text-xs font-bold text-amber-900 bg-amber-50/50">{fmt(totals.cnNativeAds)}</TableCell>
         <TableCell className="text-right font-mono text-xs font-bold text-amber-900 bg-amber-50/50">{fmt(totals.cnUCall)}</TableCell>
+        {newLayout && <TableCell className="text-right font-mono text-xs font-bold text-amber-900 bg-amber-50/50">{fmt(totals.cnKhac)}</TableCell>}
         {/* Col Y: CÁ NHÂN TỔNG */}
         <TableCell className="text-right font-mono text-xs font-black text-amber-950 bg-amber-100/80">{fmt(totals.cnTotal)}</TableCell>
 
-        {/* CỘT: CÁ NHÂN NẠP TIỀN QUA CÔNG TY */}
+        {!newLayout && (
+        /* CỘT: CÁ NHÂN NẠP TIỀN QUA CÔNG TY */
         <TableCell className="text-right font-mono text-xs font-black text-violet-950 bg-violet-100/80">{fmt(totals.cnNapTienCty)}</TableCell>
+        )}
+
+        {newLayout && (<>
+        <TableCell className="text-right font-mono text-xs font-bold text-orange-900 bg-orange-50/50">{fmt(totals.hoaDonFb)}</TableCell>
+        <TableCell className="text-right font-mono text-xs font-bold text-orange-900 bg-orange-50/50">{fmt(totals.hoaDonZalo)}</TableCell>
+        <TableCell className="text-right font-mono text-xs font-bold text-orange-900 bg-orange-50/50">{fmt(totals.hoaDonTiktok)}</TableCell>
+        <TableCell className="text-right font-mono text-xs font-bold text-orange-900 bg-orange-50/50">{fmt(totals.hoaDonGoogle)}</TableCell>
+        <TableCell className="text-right font-mono text-xs font-bold text-orange-900 bg-orange-50/50">{fmt(totals.hoaDonDangTin)}</TableCell>
+        <TableCell className="text-right font-mono text-xs font-bold text-orange-900 bg-orange-50/50">{fmt(totals.hoaDonUCall)}</TableCell>
+        <TableCell className="text-right font-mono text-xs font-bold text-orange-900 bg-orange-50/50">{fmt(totals.hoaDonNativeAds)}</TableCell>
+        <TableCell className="text-right font-mono text-xs font-bold text-orange-900 bg-orange-50/50">{fmt(totals.hoaDonKhac)}</TableCell>
+        <TableCell className="text-right font-mono text-xs font-black text-orange-950 bg-orange-100/70">{fmt(totals.hoaDonTong)}</TableCell>
+        <TableCell className="text-right font-mono text-xs font-black text-fuchsia-950 bg-fuchsia-100/60">{fmt(totals.chenhLechHD)}</TableCell>
+        </>)}
 
         {/* Col AA: SỐ LEAD */}
         <TableCell className="text-right font-mono text-xs font-black text-cyan-950 bg-cyan-100/70">{(totals.cnNopTien || 0).toLocaleString('vi-VN')}</TableCell>

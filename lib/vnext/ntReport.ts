@@ -12,7 +12,7 @@ export const GROUP_LABEL: Record<GroupKey, string> = { caNhan: 'Cá nhân', visa
 export const GROUP_ORDER: GroupKey[] = ['caNhan', 'visa', 'digital', 'congTy'];
 
 export const GROUP_CHANNELS: Record<GroupKey, { key: string; label: string }[]> = {
-  caNhan: [{ key: 'caNhanFb', label: 'Facebook' }, { key: 'caNhanZalo', label: 'Zalo' }, { key: 'caNhanTiktok', label: 'TikTok' }, { key: 'caNhanGoogle', label: 'Google' }, { key: 'caNhanNativeAds', label: 'Native Ads' }, { key: 'caNhanUCall', label: 'UCall' }, { key: 'caNhanDangTin', label: 'Đăng tin' }],
+  caNhan: [{ key: 'caNhanFb', label: 'Facebook' }, { key: 'caNhanZalo', label: 'Zalo' }, { key: 'caNhanTiktok', label: 'TikTok' }, { key: 'caNhanGoogle', label: 'Google Ads' }, { key: 'caNhanNativeAds', label: 'Native Ads' }, { key: 'caNhanUCall', label: 'UCall' }, { key: 'caNhanDangTin', label: 'Đăng tin' }, { key: 'caNhanKhac', label: 'Khác' }],
   visa: [{ key: 'visaFb', label: 'Facebook' }, { key: 'visaZalo', label: 'Zalo' }, { key: 'visaTiktok', label: 'TikTok' }, { key: 'visaDangTin', label: 'Đăng tin' }],
   digital: [{ key: 'digitalFb', label: 'Facebook' }, { key: 'digitalZalo', label: 'Zalo' }, { key: 'digitalTiktok', label: 'TikTok' }, { key: 'digitalKhac', label: 'Khác' }],
   congTy: [{ key: 'dangTinCtyChuaVat', label: 'Đăng tin công ty' }, { key: 'caNhanNapTienQuaCty', label: 'Cá nhân nạp qua công ty' }, { key: 'hoaDonTien', label: 'Tiền trên Hóa đơn' }, { key: 'hoaDonNo', label: 'Tiền Hóa đơn Nợ' }],
