@@ -83,6 +83,9 @@ export const AcceptanceTableHeader: React.FC<HeaderProps> = React.memo(({
         {/* Col D: NGƯỜI PHỤ TRÁCH */}
         {renderSortableCell('implementerName', 'NGƯỜI PHỤ TRÁCH', 'min-w-[120px] bg-[var(--mh-surface-2)] text-[var(--mh-text)] border-[var(--mh-border-strong)] text-[11px]')}
 
+        {/* Col: NGƯỜI CÙNG TRIỂN KHAI — đồng bộ từ Đăng ký MKT (từ T12) */}
+        {newLayout && renderSortableCell('coImplementer', 'NGƯỜI CÙNG TRIỂN KHAI', 'min-w-[130px] bg-[var(--mh-surface-2)] text-[var(--mh-text)] border-[var(--mh-border-strong)] text-[11px]')}
+
         {/* Col E: DỰ ÁN */}
         {renderSortableCell('projectName', 'DỰ ÁN', 'min-w-[170px] bg-[var(--mh-surface-2)] text-[var(--mh-text)] border-[var(--mh-border-strong)] text-[11px]')}
 
@@ -93,6 +96,23 @@ export const AcceptanceTableHeader: React.FC<HeaderProps> = React.memo(({
             <ArrowUpDown className="w-3.5 h-3.5 text-rose-700" />
           </div>
         </TableHead>
+
+        {newLayout && (<>
+        {/* TỔNG HĐ = Σ Tiền trên hóa đơn (chuyển sang phải cột TỔNG) */}
+        <TableHead rowSpan={2} onClick={() => onSort('hoaDonTong')} className="cursor-pointer hover:bg-orange-200 text-center font-black uppercase bg-orange-100 text-orange-950 border-b border-r border-orange-300 px-2 py-1 min-w-[110px] text-[10px]">
+          <div className="flex items-center justify-center gap-1 font-black">
+            <span>TỔNG HĐ</span>
+            <ArrowUpDown className="w-3 h-3 text-orange-800" />
+          </div>
+        </TableHead>
+        {/* CHÊNH LỆCH HĐ = TỔNG − Tổng tiền trên hóa đơn (chuyển sang phải cột TỔNG) */}
+        <TableHead rowSpan={2} onClick={() => onSort('chenhLechHD')} className="cursor-pointer hover:bg-orange-300/80 text-center font-black uppercase bg-orange-200 text-orange-950 border-b border-r border-orange-400 px-2 py-1 min-w-[120px] text-[10px]">
+          <div className="flex items-center justify-center gap-1 font-black">
+            <span>CHÊNH LỆCH HĐ</span>
+            <ArrowUpDown className="w-3 h-3 text-orange-900" />
+          </div>
+        </TableHead>
+        </>)}
 
         {!newLayout && (<>
         {/* Tiền trên Hóa đơn — user-entered, NOT in TỔNG */}
@@ -162,19 +182,12 @@ export const AcceptanceTableHeader: React.FC<HeaderProps> = React.memo(({
         renderSortableCell('caNhanNapTienQuaCty', 'CÁ NHÂN NẠP TIỀN QUA CÔNG TY', 'bg-violet-100/90 text-violet-950 border-violet-300 min-w-[130px] text-[10px]')
         )}
 
-        {newLayout && (<>
-        {/* TIỀN TRÊN HÓA ĐƠN theo kênh (8 kênh + Tổng) */}
-        <TableHead colSpan={9} className="text-center font-black uppercase bg-orange-100 text-orange-950 border-b border-r border-orange-300 py-1.5 text-[11px] tracking-wide">
+        {newLayout && (
+        /* TIỀN TRÊN HÓA ĐƠN theo kênh (8 kênh; TỔNG HĐ đã chuyển sang phải cột TỔNG) */
+        <TableHead colSpan={8} className="text-center font-black uppercase bg-orange-100 text-orange-950 border-b border-r border-orange-300 py-1.5 text-[11px] tracking-wide">
           TIỀN TRÊN HÓA ĐƠN
         </TableHead>
-        {/* CHÊNH LỆCH HĐ = TỔNG − Tổng tiền trên hóa đơn */}
-        <TableHead rowSpan={2} onClick={() => onSort('chenhLechHD')} className="cursor-pointer hover:bg-orange-300/80 text-center font-black uppercase bg-orange-200 text-orange-950 border-b border-r border-orange-400 px-2 py-1 min-w-[120px] text-[10px]">
-          <div className="flex items-center justify-center gap-1 font-black">
-            <span>CHÊNH LỆCH HĐ</span>
-            <ArrowUpDown className="w-3 h-3 text-orange-900" />
-          </div>
-        </TableHead>
-        </>)}
+        )}
 
         {/* Col AA: SỐ LEAD */}
         {renderSortableCell('caNhanNopTien', 'SỐ LEAD', 'bg-cyan-100/90 text-cyan-950 border-cyan-300 min-w-[95px] text-[10px]')}
@@ -230,7 +243,6 @@ export const AcceptanceTableHeader: React.FC<HeaderProps> = React.memo(({
         <TableHead onClick={() => onSort('hoaDonUCall')} className="cursor-pointer text-right bg-orange-50 text-orange-900 border-r border-orange-200 min-w-[85px] py-1">UCALL</TableHead>
         <TableHead onClick={() => onSort('hoaDonNativeAds')} className="cursor-pointer text-right bg-orange-50 text-orange-900 border-r border-orange-200 min-w-[95px] py-1">NATIVE ADS</TableHead>
         <TableHead onClick={() => onSort('hoaDonKhac')} className="cursor-pointer text-right bg-orange-50 text-orange-900 border-r border-orange-200 min-w-[85px] py-1">KHÁC</TableHead>
-        <TableHead onClick={() => onSort('hoaDonTong')} className="cursor-pointer text-right bg-orange-100 text-orange-950 font-extrabold border-r border-orange-300 min-w-[100px] py-1">TỔNG HĐ</TableHead>
         </>)}
       </TableRow>
     </TableHeader>

@@ -12,7 +12,7 @@ import {
   History,
   Loader2
 } from 'lucide-react';
-import { getRowComputed, handleCostInputChange, resolveBlockForTeam, formatAcceptanceMonth, resolveAcceptanceProject, parseCurrencyFormula } from './acceptanceUtils';
+import { getRowComputed, handleCostInputChange, resolveBlockForTeam, formatAcceptanceMonth, resolveAcceptanceProject, parseCurrencyFormula, coImplementerOf } from './acceptanceUtils';
 import { resolveEditRaw, resolveLines, debtOf, sumLines, linesToFormula } from '../../lib/amountLines';
 import { AmountLinesEditor, AmountCellButton } from './AmountLinesEditor';
 import { implementerOptions } from '../../../lib/vnext/onboarding';
@@ -430,6 +430,13 @@ export const AcceptanceRow: React.FC<RowProps> = React.memo(({
             onSave={(n) => { handleUpdateEditFields({ implementerUid: '', implementerName: n, implementerManual: true }); }} />
         </TableCell>
 
+        {/* Col: NGƯỜI CÙNG TRIỂN KHAI — tự đồng bộ từ Đăng ký MKT */}
+        {newLayout && (
+        <TableCell className="p-1 min-w-[130px] text-xs text-[var(--mh-text)]" data-testid="nt-coimpl-cell">
+          {(() => { const v = coImplementerOf(localEditState, nsLines); return v ? <span className="font-semibold">{v}</span> : <span className="text-[var(--mh-text-3)] italic">—</span>; })()}
+        </TableCell>
+        )}
+
         {/* Col E: DỰ ÁN */}
         <TableCell className="p-1 min-w-[180px]">
           <AcceptanceSearchableSelect
@@ -470,6 +477,10 @@ export const AcceptanceRow: React.FC<RowProps> = React.memo(({
         <TableCell className="p-1 text-right font-mono text-xs font-black text-rose-900 bg-rose-100/70">
           {formatCurrency(editComp.grandTotal).replace(' đ', '')}
         </TableCell>
+        {newLayout && (<>
+        <TableCell className="p-1 text-right font-mono text-[11px] font-extrabold text-orange-950 bg-orange-100/60">{formatCurrency(editComp.hoaDonTong).replace(' đ', '')}</TableCell>
+        <TableCell className="p-1 text-right font-mono text-[11px] font-bold text-fuchsia-950 bg-fuchsia-50/50">{formatCurrency(editComp.chenhLechHD).replace(' đ', '')}</TableCell>
+        </>)}
         {!newLayout && (<>
         <TableCell className="p-1 bg-orange-50/40">{renderEditInput('hoaDonTien', 'Tiền trên Hóa đơn', localEditState.hoaDonTien)}</TableCell>
         <TableCell className="p-1 text-right font-mono text-[11px] font-bold text-fuchsia-950 bg-fuchsia-50/50">
@@ -544,8 +555,6 @@ export const AcceptanceRow: React.FC<RowProps> = React.memo(({
         <TableCell className="p-1 bg-orange-50/40">{renderEditInput('hoaDonUCall', 'HĐ UCall', localEditState.hoaDonUCall)}</TableCell>
         <TableCell className="p-1 bg-orange-50/40">{renderEditInput('hoaDonNativeAds', 'HĐ Native Ads', localEditState.hoaDonNativeAds)}</TableCell>
         <TableCell className="p-1 bg-orange-50/40">{renderEditInput('hoaDonKhac', 'HĐ Khác', localEditState.hoaDonKhac)}</TableCell>
-        <TableCell className="p-1 text-right font-mono text-[11px] font-extrabold text-orange-950 bg-orange-100/60">{formatCurrency(editComp.hoaDonTong).replace(' đ', '')}</TableCell>
-        <TableCell className="p-1 text-right font-mono text-[11px] font-bold text-fuchsia-950 bg-fuchsia-50/50">{formatCurrency(editComp.chenhLechHD).replace(' đ', '')}</TableCell>
         </>)}
 
         {/* Col AA: SỐ LEAD */}
@@ -751,6 +760,13 @@ export const AcceptanceRow: React.FC<RowProps> = React.memo(({
         {onAssignManual && <ManualAssigneeDialog open={manualOpen === 'view'} initial={isManualImplementer(item) ? item.implementerName : ''} onClose={() => setManualOpen('')} onSave={(n) => onAssignManual(item, n)} />}
       </TableCell>
 
+      {/* Col: NGƯỜI CÙNG TRIỂN KHAI — đồng bộ từ Đăng ký MKT (ưu tiên giá trị đã lưu) */}
+      {newLayout && (
+      <TableCell className="p-1 text-xs text-[var(--mh-text)] min-w-[130px] max-w-[180px]" data-testid="nt-coimpl-cell">
+        {(() => { const v = item.coImplementer || coImplementerOf(item, nsLines); return v ? <span className="font-semibold truncate block" title={v}>{v}</span> : <span className="text-[var(--mh-text-3)] italic">—</span>; })()}
+      </TableCell>
+      )}
+
       {/* Col E: DỰ ÁN */}
       <TableCell className="font-bold text-xs text-[var(--mh-text)] min-w-[170px]" title={displayProjectName}>
         <div className="flex flex-col gap-0.5">
@@ -776,6 +792,10 @@ export const AcceptanceRow: React.FC<RowProps> = React.memo(({
       <TableCell className="text-right font-mono text-xs font-black text-rose-900 bg-rose-100/60">
         {formatCurrency(comp.grandTotal).replace(' đ', '')}
       </TableCell>
+      {newLayout && (<>
+      <TableCell className="text-right font-mono text-xs font-extrabold text-orange-950 bg-orange-100/50">{formatCurrency(comp.hoaDonTong).replace(' đ', '')}</TableCell>
+      <TableCell className="text-right font-mono text-xs font-bold text-fuchsia-950 bg-fuchsia-50/40">{formatCurrency(comp.chenhLechHD).replace(' đ', '')}</TableCell>
+      </>)}
       {!newLayout && (<>
       <TableCell className="text-right font-mono text-xs text-orange-950 bg-orange-50/30">
         {renderBreakdownTooltip(comp.hoaDonTien, item.costBreakdowns?.hoaDonTien || (Array.isArray(item.hoaDonLines) && item.hoaDonLines.length ? { items: item.hoaDonLines.map((x: any) => ({ amount: Number(x.amount) || 0, label: x.note || 'Khoản chi' })), total: comp.hoaDonTien } : null), 'Tiền trên Hóa đơn')}
@@ -892,8 +912,6 @@ export const AcceptanceRow: React.FC<RowProps> = React.memo(({
       <TableCell className="text-right font-mono text-xs text-orange-950 bg-orange-50/20">{formatCurrency(comp.hoaDonUCall).replace(' đ', '')}</TableCell>
       <TableCell className="text-right font-mono text-xs text-orange-950 bg-orange-50/20">{formatCurrency(comp.hoaDonNativeAds).replace(' đ', '')}</TableCell>
       <TableCell className="text-right font-mono text-xs text-orange-950 bg-orange-50/20">{formatCurrency(comp.hoaDonKhac).replace(' đ', '')}</TableCell>
-      <TableCell className="text-right font-mono text-xs font-extrabold text-orange-950 bg-orange-100/50">{formatCurrency(comp.hoaDonTong).replace(' đ', '')}</TableCell>
-      <TableCell className="text-right font-mono text-xs font-bold text-fuchsia-950 bg-fuchsia-50/40">{formatCurrency(comp.chenhLechHD).replace(' đ', '')}</TableCell>
       </>)}
 
       {/* Col AA: SỐ LEAD */}

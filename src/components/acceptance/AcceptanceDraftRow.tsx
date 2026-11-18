@@ -5,7 +5,7 @@ import { Button } from '@/components/ui/button';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Badge } from '@/components/ui/badge';
 import { Calculator, Save, Trash2, Loader2 } from 'lucide-react';
-import { getRowComputed, handleCostInputChange, resolveBlockForTeam, formatAcceptanceMonth, resolveAcceptanceProject } from './acceptanceUtils';
+import { getRowComputed, handleCostInputChange, resolveBlockForTeam, formatAcceptanceMonth, resolveAcceptanceProject, coImplementerOf } from './acceptanceUtils';
 import { implementerOptions } from '../../../lib/vnext/onboarding';
 import { AcceptanceSearchableSelect, SearchableItem } from './AcceptanceSearchableSelect';
 import { ManualAssigneeDialog } from './ManualAssigneeDialog';
@@ -90,6 +90,8 @@ export const AcceptanceDraftRow: React.FC<DraftRowProps> = React.memo(({
   };
 
   const comp = useMemo(() => getRowComputed(localDraft), [localDraft]);
+  // Người cùng triển khai — tự lấy từ Đăng ký MKT theo Người phụ trách + Dự án + kỳ.
+  const coImpl = useMemo(() => coImplementerOf(localDraft, nsLines), [localDraft.implementerUid, localDraft.projectId, localDraft.month, localDraft.implementerManual, nsLines]);
 
   const selectedTeam = useMemo(() => {
     return (findTeam
@@ -357,6 +359,13 @@ export const AcceptanceDraftRow: React.FC<DraftRowProps> = React.memo(({
           onSave={(n) => { setLocalDraft((prev: any) => clearStaleProject({ ...prev, implementerUid: '', implementerName: n, implementerManual: true }, acceptanceChoicesFor({ ...prev, implementerUid: '', implementerManual: true }, nsLines, nsSupport, allUsers))); }} />
       </TableCell>
 
+      {/* Col: NGƯỜI CÙNG TRIỂN KHAI — tự đồng bộ từ Đăng ký MKT */}
+      {newLayout && (
+      <TableCell className="p-1 min-w-[130px] text-xs text-[var(--mh-text)]" data-testid="nt-coimpl-cell">
+        {coImpl ? <span className="font-semibold">{coImpl}</span> : <span className="text-[var(--mh-text-3)] italic">—</span>}
+      </TableCell>
+      )}
+
       {/* Col E: DỰ ÁN */}
       <TableCell className="p-1 min-w-[190px]">
         <AcceptanceSearchableSelect
@@ -395,6 +404,15 @@ export const AcceptanceDraftRow: React.FC<DraftRowProps> = React.memo(({
       <TableCell className="p-1 text-right font-mono text-xs font-black text-rose-900 bg-rose-100/70">
         {formatCurrency(comp.grandTotal).replace(' đ', '')}
       </TableCell>
+      {newLayout && (<>
+      {/* TỔNG HĐ + CHÊNH LỆCH HĐ — chuyển sang phải cột TỔNG */}
+      <TableCell className="p-1 text-right font-mono text-[11px] font-extrabold text-orange-950 bg-orange-100/60">
+        {formatCurrency(comp.hoaDonTong).replace(' đ', '')}
+      </TableCell>
+      <TableCell className="p-1 text-right font-mono text-[11px] font-bold text-fuchsia-950 bg-fuchsia-50/40">
+        {formatCurrency(comp.chenhLechHD).replace(' đ', '')}
+      </TableCell>
+      </>)}
       {!newLayout && (<>
       <TableCell className="p-1 bg-orange-50/30">
         {renderCalcInput('hoaDonTien', 'Tiền trên Hóa đơn', localDraft.hoaDonTien)}
@@ -512,14 +530,6 @@ export const AcceptanceDraftRow: React.FC<DraftRowProps> = React.memo(({
       <TableCell className="p-1 bg-orange-50/30">{renderCalcInput('hoaDonUCall', 'HĐ UCall', localDraft.hoaDonUCall)}</TableCell>
       <TableCell className="p-1 bg-orange-50/30">{renderCalcInput('hoaDonNativeAds', 'HĐ Native Ads', localDraft.hoaDonNativeAds)}</TableCell>
       <TableCell className="p-1 bg-orange-50/30">{renderCalcInput('hoaDonKhac', 'HĐ Khác', localDraft.hoaDonKhac)}</TableCell>
-      {/* Tổng tiền trên hóa đơn */}
-      <TableCell className="p-1 text-right font-mono text-[11px] font-extrabold text-orange-950 bg-orange-100/60">
-        {formatCurrency(comp.hoaDonTong).replace(' đ', '')}
-      </TableCell>
-      {/* Chênh lệch HĐ = TỔNG − Tổng HĐ */}
-      <TableCell className="p-1 text-right font-mono text-[11px] font-bold text-fuchsia-950 bg-fuchsia-50/40">
-        {formatCurrency(comp.chenhLechHD).replace(' đ', '')}
-      </TableCell>
       </>)}
 
       {/* Col AA: SỐ LEAD */}

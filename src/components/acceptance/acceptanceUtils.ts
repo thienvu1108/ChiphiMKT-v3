@@ -1,4 +1,20 @@
 import { ComputedRowValues, ParsedFormulaResult } from './acceptanceTypes';
+import { normalizeMonth } from '../../../lib/vnext/ntReport';
+
+/**
+ * Người cùng triển khai — đồng bộ với Đăng ký MKT.
+ * Tra dòng Đăng ký NS (ns_lines) khớp Người phụ trách (ownerUid) + Dự án + kỳ (period),
+ * trả về trường coImplementer đã khai khi đăng ký (có từ kỳ Tháng 12/2026). '' nếu không có.
+ */
+export const coImplementerOf = (row: any, nsLines: any[] = []): string => {
+  if (!row || row.implementerManual) return '';
+  const uid = row.implementerUid;
+  const pid = row.projectId;
+  const m = normalizeMonth(row.month);
+  if (!uid || !pid || !m) return '';
+  const line = (nsLines || []).find((l: any) => l && !l.deleted && l.ownerUid === uid && l.projectId === pid && normalizeMonth(l.period) === m);
+  return String(line?.coImplementer || '');
+};
 
 // Fast cache for formula parsing strings
 const formulaCache = new Map<string, ParsedFormulaResult>();
@@ -344,6 +360,7 @@ export const getSortValue = (item: any, key: string, teams: any[] = [], blocks: 
     case 'teamName': return item.teamName || '';
     case 'gdkdName': return item.gdkdName || '';
     case 'implementerName': return item.implementerName || '';
+    case 'coImplementer': return item.coImplementer || '';
     case 'projectName': return item.projectName || '';
     case 'status': return item.status || '';
     case 'notes': return item.notes || '';

@@ -85,7 +85,11 @@ export function MyRegistration({ c, period, lines }: { c: VCtx; period: string; 
   const openEdit = windowOpenFor(c, period, 'nsEdit');
   const [pid, setPid] = useState('');
   const [amt, setAmt] = useState(0);
+  // Người cùng triển khai — bổ sung từ kỳ Tháng 12/2026 (period 'YYYY-MM').
+  const showCoImpl = period >= '2026-12';
+  const [coImpl, setCoImpl] = useState('');
   const [edit, setEdit] = useState<Record<string, number>>({});
+  const [editCo, setEditCo] = useState<Record<string, string>>({});
   const [hist, setHist] = useState(false);
   const myGdkd = gdkdTeams(c);
   const homeTeamId = c.teamId || myGdkd[0] || '';
@@ -113,14 +117,14 @@ export function MyRegistration({ c, period, lines }: { c: VCtx; period: string; 
     if (!ck.ok) return toast(ck.reason!, 'err');
     const lk = lockBlock(c.role, 'nsCreate', period); if (lk) return toast(lk, 'err');
     try {
-      await saveNsLine(c, { kind: 'user', period, teamId: homeTeamId, blockId: blockOfTeam(c, homeTeamId), projectId: pid, owner: { uid: c.uid, name: c.name, email: c.email }, payAccount: pick(payId) ? snapOf(pick(payId)!) : null, existing: lines.find((l) => l.kind === 'user' && l.ownerUid === c.uid && l.projectId === pid && l.period === period) || null, amount: amt });
-      setPid(''); setAmt(0); setPayId(''); toast('Đã lưu đăng ký');
+      await saveNsLine(c, { kind: 'user', period, teamId: homeTeamId, blockId: blockOfTeam(c, homeTeamId), projectId: pid, owner: { uid: c.uid, name: c.name, email: c.email }, payAccount: pick(payId) ? snapOf(pick(payId)!) : null, existing: lines.find((l) => l.kind === 'user' && l.ownerUid === c.uid && l.projectId === pid && l.period === period) || null, amount: amt, ...(showCoImpl ? { coImplementer: coImpl.trim() } : {}) });
+      setPid(''); setAmt(0); setPayId(''); setCoImpl(''); toast('Đã lưu đăng ký');
     } catch (e: any) { toast('Không lưu được: ' + (e?.code || e?.message), 'err', () => add()); }
   };
   const save = async (l: NsLine) => {
     if (st(l) === 'approved' && sup[l.id] && !window.confirm('Khoản này đã được duyệt hỗ trợ MKT. Sửa sẽ chuyển sang «Cần duyệt lại» và GĐ Khối / Trợ lý Khối phải duyệt lại. Tiếp tục?')) return;
     const lk = lockBlock(c.role, 'nsEdit', l.period); if (lk) return toast(lk, 'err');
-    try { const pa = pick(editPay[l.id] || l.payAccount?.id); await saveNsLine(c, { kind: 'user', period, teamId: l.teamId, projectId: l.projectId, existing: l, amount: edit[l.id], payAccount: pa ? snapOf(pa) : null }); setEdit((e) => { const n = { ...e }; delete n[l.id]; return n; }); toast('Đã cập nhật');
+    try { const pa = pick(editPay[l.id] || l.payAccount?.id); await saveNsLine(c, { kind: 'user', period, teamId: l.teamId, projectId: l.projectId, existing: l, amount: edit[l.id], payAccount: pa ? snapOf(pa) : null, ...(showCoImpl ? { coImplementer: (editCo[l.id] ?? l.coImplementer ?? '').trim() } : {}) }); setEdit((e) => { const n = { ...e }; delete n[l.id]; return n; }); setEditCo((e) => { const n = { ...e }; delete n[l.id]; return n; }); toast('Đã cập nhật');
       if (st(l) === 'approved' && sup[l.id]) for (const u of khoiManagers(c, l.blockId)) pushNotif(c, u, { type: 'reapproval', title: `Cần duyệt lại: ${c.name} · ${projectName(c, l.projectId)}`, body: `Đã duyệt ${fmt(sup[l.id]!.amount)} đ → nay ${fmt(edit[l.id] ?? l.amount)} đ`, link: '/quan-ly-khoi', refId: l.id }); }
     catch (e: any) { toast('Không lưu được: ' + (e?.code || e?.message), 'err', () => save(l)); }
   };
@@ -144,6 +148,13 @@ export function MyRegistration({ c, period, lines }: { c: VCtx; period: string; 
           <Field label="Tài khoản nhận tiền"><PaySelect value={payId} onChange={setPayId} testId="vn-reg-pay" /></Field>
           <div className="hidden sm:block"><Btn primary onClick={add} disabled={!open}>+ Thêm</Btn></div>
         </div>
+        {showCoImpl && (
+          <div className="mt-2">
+            <Field label="Người cùng triển khai (nếu có — tối đa 1 người, nhập đầy đủ Họ và tên)">
+              <Input value={coImpl} onChange={(e: any) => setCoImpl(e.target.value)} placeholder="Họ và tên người cùng triển khai" disabled={!open} data-testid="vn-reg-coimpl" className="sm:max-w-[360px]" />
+            </Field>
+          </div>
+        )}
         <StickyFormBar>
           <Btn primary className="w-full justify-center sm:hidden" onClick={add} disabled={!open}>+ Thêm đăng ký</Btn>
         </StickyFormBar>
@@ -161,13 +172,14 @@ export function MyRegistration({ c, period, lines }: { c: VCtx; period: string; 
                   <div className="flex items-start gap-2"><div className="font-semibold text-[14px] flex-1 min-w-0 truncate">{projectName(c, l.projectId)}</div><SupportBadge status={st(l)} /></div>
                   <div className="text-[18px] font-bold tabular-nums">{edit[l.id] != null ? <MoneyInput value={edit[l.id]} onChange={(v: number) => setEdit({ ...edit, [l.id]: v })} className="w-full" /> : <>{fmt(l.amount)} đ</>}</div>
                   <div className="text-[11px] text-[var(--mh-text-2,var(--mh-text-2))]" data-testid="vn-line-pay">TK nhận: {edit[l.id] != null ? <PaySelect value={editPay[l.id] || l.payAccount?.id || ''} onChange={(v) => setEditPay({ ...editPay, [l.id]: v })} testId="vn-edit-pay" /> : (l.payAccount ? snapLabel(l.payAccount) : defAcc ? snapLabel(snapOf(defAcc)) + ' (mặc định)' : '—')}</div>
+                  {showCoImpl && <div className="text-[11px] text-[var(--mh-text-2)]" data-testid="vn-line-coimpl">Người cùng triển khai: {edit[l.id] != null ? <Input value={editCo[l.id] ?? l.coImplementer ?? ''} onChange={(e: any) => setEditCo({ ...editCo, [l.id]: e.target.value })} placeholder="Họ và tên" className="mt-1 h-8" /> : (l.coImplementer || '—')}</div>}
                   {st(l) === 'need_pay' && <div className="text-[11px] text-[var(--mh-warn,var(--mh-warn))]">Cập nhật thông tin thanh toán để được duyệt</div>}
                   {st(l) === 'reapproval' && <div className="text-[11px] text-[var(--mh-warn,var(--mh-warn))]">Đã duyệt {fmt(sup[l.id]!.amount)} đ · chờ duyệt lại</div>}
                   {(() => { const b = effectiveBanStatus(l, sup[l.id]); return (b === 'pending' || b === 'rejected') ? <div className={`text-[11px] ${b === 'rejected' ? 'text-[var(--mh-err)]' : 'text-[var(--mh-pending)]'}`}>{b === 'pending' ? 'Chờ Ban' : 'Ban từ chối'}</div> : null; })()}
                   <div className="flex flex-wrap gap-1.5 pt-1">
                     {pastBlock(c.role, 'ns', l.period) ? <PastTag /> : openEdit && (edit[l.id] != null
                       ? <><Btn small primary onClick={() => save(l)}>Lưu</Btn><Btn small onClick={() => setEdit((e) => { const n = { ...e }; delete n[l.id]; return n; })}>Huỷ</Btn></>
-                      : <><Btn small onClick={() => setEdit({ ...edit, [l.id]: Number(l.amount) })}>Sửa</Btn><Btn small danger onClick={() => del(l)}>Xoá</Btn></>)}
+                      : <><Btn small onClick={() => { setEdit({ ...edit, [l.id]: Number(l.amount) }); setEditCo({ ...editCo, [l.id]: l.coImplementer || '' }); }}>Sửa</Btn><Btn small danger onClick={() => del(l)}>Xoá</Btn></>)}
                     <Btn small onClick={() => setLineHist(l)}>Lịch sử</Btn>
                   </div>
                 </div>
@@ -180,14 +192,14 @@ export function MyRegistration({ c, period, lines }: { c: VCtx; period: string; 
               const byOther = last && last.byUid !== c.uid;
               return (
                 <tr key={l.id}>
-                  <Td><div className="font-medium">{projectName(c, l.projectId)}</div>{edit[l.id] != null ? <div className="mt-1 max-w-[260px]"><PaySelect value={editPay[l.id] || l.payAccount?.id || ''} onChange={(v) => setEditPay({ ...editPay, [l.id]: v })} testId="vn-edit-pay" /></div> : <div className="text-[11px] text-[var(--mh-text-2)]" data-testid="vn-line-pay">TK nhận: {l.payAccount ? snapLabel(l.payAccount) : defAcc ? snapLabel(snapOf(defAcc)) + ' (mặc định)' : '—'}</div>}{byOther && <div className="text-[11px] text-[var(--mh-warn)]">Đã được {last.byName} điều chỉnh{last.reason ? `: ${last.reason}` : ''}</div>}{l.teamId && l.teamId !== c.teamId && <div className="text-[11px] text-[var(--mh-err)]" data-testid="vn-ns-old-team">Đăng ký ở Phòng cũ: {teamName(c, l.teamId)} — không tính vào Ngân sách Phòng hiện tại</div>}</Td>
+                  <Td><div className="font-medium">{projectName(c, l.projectId)}</div>{edit[l.id] != null ? <div className="mt-1 max-w-[260px]"><PaySelect value={editPay[l.id] || l.payAccount?.id || ''} onChange={(v) => setEditPay({ ...editPay, [l.id]: v })} testId="vn-edit-pay" /></div> : <div className="text-[11px] text-[var(--mh-text-2)]" data-testid="vn-line-pay">TK nhận: {l.payAccount ? snapLabel(l.payAccount) : defAcc ? snapLabel(snapOf(defAcc)) + ' (mặc định)' : '—'}</div>}{showCoImpl && <div className="text-[11px] text-[var(--mh-text-2)] mt-0.5" data-testid="vn-line-coimpl">Người cùng triển khai: {edit[l.id] != null ? <Input value={editCo[l.id] ?? l.coImplementer ?? ''} onChange={(e: any) => setEditCo({ ...editCo, [l.id]: e.target.value })} placeholder="Họ và tên" className="mt-1 h-8 max-w-[260px]" /> : <b>{l.coImplementer || '—'}</b>}</div>}{byOther && <div className="text-[11px] text-[var(--mh-warn)]">Đã được {last.byName} điều chỉnh{last.reason ? `: ${last.reason}` : ''}</div>}{l.teamId && l.teamId !== c.teamId && <div className="text-[11px] text-[var(--mh-err)]" data-testid="vn-ns-old-team">Đăng ký ở Phòng cũ: {teamName(c, l.teamId)} — không tính vào Ngân sách Phòng hiện tại</div>}</Td>
                   <PctTd c={c} pid={l.projectId} period={period} />
                   <Td r>{edit[l.id] != null ? <MoneyInput value={edit[l.id]} onChange={(v: number) => setEdit({ ...edit, [l.id]: v })} className="w-[120px] sm:w-[160px] ml-auto" /> : <b>{fmt(l.amount)}</b>}</Td>
                   <Td><SupportBadge status={st(l)} />{st(l) === 'need_pay' && <div className="text-[11px] text-[var(--mh-warn)]" data-testid="vn-my-needpay">Cập nhật thông tin thanh toán để được duyệt</div>}{st(l) === 'reapproval' && <div className="text-[11px] text-[var(--mh-warn)]" data-testid="vn-my-reappr">Đã duyệt {fmt(sup[l.id]!.amount)} đ · chờ duyệt lại</div>}{sup[l.id]?.status === 'rejected' && sup[l.id]?.reason && <div className="text-[11px] text-[var(--mh-err)] max-w-[200px]">{sup[l.id]?.reason}</div>}{(() => { const b = effectiveBanStatus(l, sup[l.id]); return (b === 'pending' || b === 'rejected') ? <div className={`text-[11px] max-w-[200px] ${b === 'rejected' ? 'text-[var(--mh-err,var(--mh-err))]' : 'text-[var(--mh-pending,#7C3AED)]'}`} data-testid="vn-my-ban">{b === 'pending' ? 'Chờ Ban' : 'Ban từ chối'}{banReasonText(sup[l.id]) ? ` — ${banReasonText(sup[l.id])}` : ''}</div> : null; })()}</Td>
                   <Td className="text-[12px] text-[var(--mh-text-2)] whitespace-nowrap">{vnTime(l.updatedAt)}</Td>
                   <Td r className="whitespace-nowrap">{pastBlock(c.role, 'ns', l.period) ? <PastTag /> : openEdit && (edit[l.id] != null
                     ? <><Btn small primary onClick={() => save(l)}>Lưu</Btn> <Btn small onClick={() => setEdit((e) => { const n = { ...e }; delete n[l.id]; return n; })}>Huỷ</Btn></>
-                    : <><Btn small onClick={() => setEdit({ ...edit, [l.id]: Number(l.amount) })}>Sửa</Btn> <Btn small danger onClick={() => del(l)}>Xoá</Btn></>)} <Btn small onClick={() => setLineHist(l)} data-testid="vn-my-line-history">Lịch sử</Btn></Td>
+                    : <><Btn small onClick={() => { setEdit({ ...edit, [l.id]: Number(l.amount) }); setEditCo({ ...editCo, [l.id]: l.coImplementer || '' }); }}>Sửa</Btn> <Btn small danger onClick={() => del(l)}>Xoá</Btn></>)} <Btn small onClick={() => setLineHist(l)} data-testid="vn-my-line-history">Lịch sử</Btn></Td>
                 </tr>
               );
             })}
@@ -459,6 +471,9 @@ export function KhoiRegistration({ c, period, lines, blockIds }: { c: VCtx; peri
   const openEdit = windowOpenFor(c, period, 'nsEdit');
   const [pid, setPid] = useState('');
   const [amt, setAmt] = useState(0);
+  const showCoImpl = period >= '2026-12';
+  const [coImpl, setCoImpl] = useState('');
+  const [editCo, setEditCo] = useState<Record<string, string>>({});
   const [edit, setEdit] = useState<Record<string, number>>({});
   const [hist, setHist] = useState(false);
   const canReg = canRegisterAsKhoi(c.role) && !!bid && c.myBlockIds.includes(bid);
@@ -470,12 +485,12 @@ export function KhoiRegistration({ c, period, lines, blockIds }: { c: VCtx; peri
     const ck = checkEdit(actor, { kind: 'khoi', blockId: bid, ownerUid: c.uid }, { windowOpen: open, isNew: true });
     if (!ck.ok) return toast(ck.reason!, 'err');
     try {
-      await saveNsLine(c, { kind: 'khoi', period, blockId: bid, projectId: pid, owner: { uid: c.uid, name: c.name, email: c.email }, existing: lines.find((l) => l.kind === 'khoi' && l.ownerUid === c.uid && l.blockId === bid && l.projectId === pid && l.period === period) || null, amount: amt });
-      setPid(''); setAmt(0); toast('Đã lưu đăng ký');
+      await saveNsLine(c, { kind: 'khoi', period, blockId: bid, projectId: pid, owner: { uid: c.uid, name: c.name, email: c.email }, existing: lines.find((l) => l.kind === 'khoi' && l.ownerUid === c.uid && l.blockId === bid && l.projectId === pid && l.period === period) || null, amount: amt, ...(showCoImpl ? { coImplementer: coImpl.trim() } : {}) });
+      setPid(''); setAmt(0); setCoImpl(''); toast('Đã lưu đăng ký');
     } catch (e: any) { toast('Không lưu được: ' + (e?.code || e?.message), 'err'); }
   };
   const save = async (l: NsLine) => {
-    try { await saveNsLine(c, { kind: 'khoi', period, blockId: l.blockId, projectId: l.projectId, existing: l, amount: edit[l.id] }); setEdit((e) => { const n = { ...e }; delete n[l.id]; return n; }); toast('Đã cập nhật'); }
+    try { await saveNsLine(c, { kind: 'khoi', period, blockId: l.blockId, projectId: l.projectId, existing: l, amount: edit[l.id], ...(showCoImpl ? { coImplementer: (editCo[l.id] ?? l.coImplementer ?? '').trim() } : {}) }); setEdit((e) => { const n = { ...e }; delete n[l.id]; return n; }); setEditCo((e) => { const n = { ...e }; delete n[l.id]; return n; }); toast('Đã cập nhật'); }
     catch (e: any) { toast('Không lưu được: ' + (e?.code || e?.message), 'err'); }
   };
   const del = async (l: NsLine) => {
@@ -497,6 +512,13 @@ export function KhoiRegistration({ c, period, lines, blockIds }: { c: VCtx; peri
           <Field label="Ngân sách (đ)"><MoneyInput value={amt} onChange={setAmt} disabled={!open} /></Field>
           <Btn primary onClick={add} disabled={!open}>+ Thêm</Btn>
         </div>
+        {showCoImpl && (
+          <div className="mt-2">
+            <Field label="Người cùng triển khai (nếu có — tối đa 1 người, nhập đầy đủ Họ và tên)">
+              <Input value={coImpl} onChange={(e: any) => setCoImpl(e.target.value)} placeholder="Họ và tên người cùng triển khai" disabled={!open} data-testid="vn-khoi-reg-coimpl" className="sm:max-w-[360px]" />
+            </Field>
+          </div>
+        )}
         <div className="text-[11px] text-[var(--mh-text-3)] mt-2">NS này tính vào NS Khối (cột «NS GĐ Khối»). Ai đăng ký MKT đều phải nộp Báo cáo tuần.</div>
       </Card>
       <Card>
@@ -505,13 +527,13 @@ export function KhoiRegistration({ c, period, lines, blockIds }: { c: VCtx; peri
           <div className="overflow-x-auto"><table data-mh-responsive className="w-full"><thead><tr><Th>Dự án</Th><PctTh /><Th r>Ngân sách (đ)</Th><Th>Cập nhật</Th><Th></Th></tr></thead><tbody>
             {mine.map((l) => (
               <tr key={l.id}>
-                <Td><div className="font-medium">{projectName(c, l.projectId)}</div></Td>
+                <Td><div className="font-medium">{projectName(c, l.projectId)}</div>{showCoImpl && <div className="text-[11px] text-[var(--mh-text-2)] mt-0.5" data-testid="vn-khoi-line-coimpl">Người cùng triển khai: {edit[l.id] != null ? <Input value={editCo[l.id] ?? l.coImplementer ?? ''} onChange={(e: any) => setEditCo({ ...editCo, [l.id]: e.target.value })} placeholder="Họ và tên" className="mt-1 h-8 max-w-[260px]" /> : <b>{l.coImplementer || '—'}</b>}</div>}</Td>
                 <PctTd c={c} pid={l.projectId} period={period} />
                 <Td r>{edit[l.id] != null ? <MoneyInput value={edit[l.id]} onChange={(v: number) => setEdit({ ...edit, [l.id]: v })} className="w-[120px] sm:w-[160px] ml-auto" /> : <b>{fmt(l.amount)}</b>}</Td>
                 <Td className="text-[12px] text-[var(--mh-text-2)] whitespace-nowrap">{vnTime(l.updatedAt)}</Td>
                 <Td r className="whitespace-nowrap">{pastBlock(c.role, 'ns', l.period) ? <PastTag /> : openEdit && (edit[l.id] != null
                   ? <><Btn small primary onClick={() => save(l)}>Lưu</Btn> <Btn small onClick={() => setEdit((e) => { const n = { ...e }; delete n[l.id]; return n; })}>Huỷ</Btn></>
-                  : <><Btn small onClick={() => setEdit({ ...edit, [l.id]: Number(l.amount) })}>Sửa</Btn> <Btn small danger onClick={() => del(l)}>Xoá</Btn></>)}</Td>
+                  : <><Btn small onClick={() => { setEdit({ ...edit, [l.id]: Number(l.amount) }); setEditCo({ ...editCo, [l.id]: l.coImplementer || '' }); }}>Sửa</Btn> <Btn small danger onClick={() => del(l)}>Xoá</Btn></>)}</Td>
               </tr>
             ))}
           </tbody></table></div>
