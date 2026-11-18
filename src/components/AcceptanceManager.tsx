@@ -79,6 +79,7 @@ import {
   matchesProjectFilter,
   preVatOf,
   ntTotals,
+  coImplementerOf,
 } from './acceptance/acceptanceUtils';
 import { exportFileName, blockCodeOf, teamCodeOf } from '../../lib/vnext/exportName';
 import { getPeriodOf } from '../../lib/vnext/period';
@@ -759,7 +760,9 @@ export const AcceptanceManager = React.memo(({
     if (scopeErr) { toast.error(scopeErr); return; }
 
     const comp = getRowComputed(draftRow);
-    const tm = (teamLookup.findTeam 
+    // Người cùng triển khai — đồng bộ từ Đăng ký MKT theo Người phụ trách + Dự án + kỳ.
+    const coImpl = coImplementerOf(draftRow, nsLines);
+    const tm = (teamLookup.findTeam
       ? (teamLookup.findTeam(draftRow.teamId) || teamLookup.findTeam(draftRow.teamCode) || teamLookup.findTeam(draftRow.teamName))
       : null) || (teams || []).find((t: any) => 
         t.id === draftRow.teamId || 
@@ -791,6 +794,7 @@ export const AcceptanceManager = React.memo(({
         blockName: khoiMgr ? khoiBlk!.blockName : (resolvedBlock.blockName || tm?.blockName || draftRow.blockName || ''),
         gdkdName: draftRow.gdkdName || tm?.name || '',
         implementerName: draftRow.implementerName || '',
+        coImplementer: coImpl,
         implementerUid: draftRow.implementerManual ? '' : (draftRow.implementerUid || ''),
         ntMonth: draftRow.implementerUid && !draftRow.implementerManual ? (normalizeMonth(draftRow.month) || '') : '',
         ntTeamId: khoiMgr ? '' : (tm?.id || draftRow.teamId || ''),
@@ -971,6 +975,7 @@ export const AcceptanceManager = React.memo(({
         );
 
     const pr = resolveAcceptanceProject(updatedState, projects);
+    const coImpl = coImplementerOf({ ...updatedState, projectId: pr?.id || updatedState.projectId }, nsLines);
 
     try {
       const oldItem = acceptancesRef.current.find((a: any) => a.id === id);
@@ -1008,6 +1013,7 @@ export const AcceptanceManager = React.memo(({
         blockName: khoiMgr ? khoiBlk!.blockName : (resolvedBlock.blockName || tm?.blockName || updatedState.blockName || oldItem?.blockName || ''),
         gdkdName: updatedState.gdkdName || tm?.name || oldItem?.gdkdName || '',
         implementerName: updatedState.implementerName || oldItem?.implementerName || '',
+        coImplementer: coImpl || oldItem?.coImplementer || '',
         implementerUid: updatedState.implementerManual ? '' : (updatedState.implementerUid || oldItem?.implementerUid || ''),
         ntMonth: updatedState.implementerManual ? (oldItem?.ntMonth || '') : (updatedState.implementerUid || oldItem?.implementerUid) ? (normalizeMonth(updatedState.month) || normalizeMonth(oldItem?.month) || '') : (oldItem?.ntMonth || ''),
         ntTeamId: khoiMgr ? '' : (tm?.id || updatedState.teamId || oldItem?.teamId || ''),

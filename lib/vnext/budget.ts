@@ -45,6 +45,8 @@ export type NsLine = {
   updatedBy?: string;
   /** Tài khoản nhận tiền (snapshot không có STK đầy đủ). */
   payAccount?: { id: string; bankName: string; tail: string };
+  /** Người cùng triển khai (Họ và tên) — khai khi Đăng ký MKT từ kỳ Tháng 12/2026, tối đa 1 người, không bắt buộc. */
+  coImplementer?: string;
 };
 
 export function nsLineId(kind: NsKind, period: string, scopeId: string, projectId: string, uid?: string): string {

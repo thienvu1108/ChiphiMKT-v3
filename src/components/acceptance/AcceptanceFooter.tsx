@@ -68,14 +68,18 @@ export const AcceptanceFooter: React.FC<FooterProps> = React.memo(({ records, fo
   return (
     <TableFooter className="bg-[var(--mh-surface-2)] font-black border-t-2 border-[var(--mh-border-strong)] z-10 sticky bottom-0">
       <TableRow className="border-t border-[var(--mh-border-strong)] text-[11px]">
-        {/* Col STT + THÁNG + KHỐI + MÃ TEAM + NGƯỜI PHỤ TRÁCH + DỰ ÁN = 6 cols */}
-        <TableCell colSpan={6} className="text-right font-black text-[var(--mh-text)] text-xs px-3 bg-[var(--mh-surface-2)] md:sticky md:left-0 md:z-20">
+        {/* Col STT + THÁNG + KHỐI + MÃ TEAM + NGƯỜI PHỤ TRÁCH (+ NGƯỜI CÙNG TRIỂN KHAI) + DỰ ÁN */}
+        <TableCell colSpan={newLayout ? 7 : 6} className="text-right font-black text-[var(--mh-text)] text-xs px-3 bg-[var(--mh-surface-2)] md:sticky md:left-0 md:z-20">
           <div data-testid="vn-acc-footer-total">TỔNG CỘNG ({records.length} bản ghi đang lọc):</div>
           <div className="text-[10px] font-semibold text-[var(--mh-text-2)]">Trước VAT {fmt(totals.dTotalChuaVat + totals.vTotalChuaVat + totals.dtCtyChuaVat + totals.cnTotal + totals.cnNapTienCty)} · VAT {fmt(totals.grandTotal - (totals.dTotalChuaVat + totals.vTotalChuaVat + totals.dtCtyChuaVat + totals.cnTotal + totals.cnNapTienCty))}</div>
         </TableCell>
 
         {/* Col TỔNG — after DỰ ÁN */}
         <TableCell className="text-right font-mono text-xs font-black text-rose-900 bg-rose-100">{fmt(totals.grandTotal)}</TableCell>
+        {newLayout && (<>
+        <TableCell className="text-right font-mono text-xs font-black text-orange-950 bg-orange-100/70">{fmt(totals.hoaDonTong)}</TableCell>
+        <TableCell className="text-right font-mono text-xs font-black text-fuchsia-950 bg-fuchsia-100/60">{fmt(totals.chenhLechHD)}</TableCell>
+        </>)}
         {!newLayout && (<>
         <TableCell className="text-right font-mono text-xs font-black text-orange-950 bg-orange-100">{fmt(totals.hoaDonTien)}</TableCell>
         <TableCell className="text-right font-mono text-xs font-black text-orange-950 bg-orange-200">{fmt(totals.hoaDonNo)}</TableCell>
@@ -130,8 +134,6 @@ export const AcceptanceFooter: React.FC<FooterProps> = React.memo(({ records, fo
         <TableCell className="text-right font-mono text-xs font-bold text-orange-900 bg-orange-50/50">{fmt(totals.hoaDonUCall)}</TableCell>
         <TableCell className="text-right font-mono text-xs font-bold text-orange-900 bg-orange-50/50">{fmt(totals.hoaDonNativeAds)}</TableCell>
         <TableCell className="text-right font-mono text-xs font-bold text-orange-900 bg-orange-50/50">{fmt(totals.hoaDonKhac)}</TableCell>
-        <TableCell className="text-right font-mono text-xs font-black text-orange-950 bg-orange-100/70">{fmt(totals.hoaDonTong)}</TableCell>
-        <TableCell className="text-right font-mono text-xs font-black text-fuchsia-950 bg-fuchsia-100/60">{fmt(totals.chenhLechHD)}</TableCell>
         </>)}
 
         {/* Col AA: SỐ LEAD */}

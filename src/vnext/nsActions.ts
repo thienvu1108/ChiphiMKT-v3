@@ -12,6 +12,7 @@ export async function saveNsLine(c: VCtx, opts: {
   owner?: { uid: string; name?: string; email?: string };
   existing?: NsLine | null; amount: number; reason?: string; notifyOwner?: boolean;
   payAccount?: { id: string; bankName: string; tail: string } | null;
+  coImplementer?: string;
 }) {
   { const lk = lockBlock(c.role, opts.existing && !opts.existing.deleted ? 'nsEdit' : 'nsCreate', opts.period); if (lk) throw new Error(lk); }
   const scope = opts.kind === 'gdk' || opts.kind === 'khoi' ? opts.blockId! : opts.teamId!;
@@ -28,7 +29,7 @@ export async function saveNsLine(c: VCtx, opts: {
     ...(opts.kind !== 'user' && opts.kind !== 'khoi' ? { actingAs: opts.kind, actingRole: c.role } : {}),
   };
   delete base.id;
-  const next = { ...base, ...(opts.payAccount ? { payAccount: opts.payAccount } : {}), amount: opts.amount, deleted: false, history: appendHistory(base, h), updatedAt: now, updatedBy: c.uid };
+  const next = { ...base, ...(opts.payAccount ? { payAccount: opts.payAccount } : {}), ...(opts.coImplementer !== undefined ? { coImplementer: String(opts.coImplementer || '').trim() } : {}), amount: opts.amount, deleted: false, history: appendHistory(base, h), updatedAt: now, updatedBy: c.uid };
   await setDoc(doc(c.db, NS_COLLECTION, id), next);
   if (opts.kind === 'user' || opts.kind === 'khoi') await writeLineHist(c, { id, ...next } as NsLine, opts.existing ? 'update' : 'create', diffLine(opts.existing || null, next), opts.reason);
   // NS tự duyệt (Khối / GĐK-kiêm) → xếp hàng Ban ngay khi tạo
