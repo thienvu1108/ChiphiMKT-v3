@@ -219,6 +219,7 @@ import { useLocks as useVnLocks } from './vnext/locks';
 const VnTeamPage = lazyRetry(() => import('./vnext/TeamPage'));
 const VnGuidePage = lazyRetry(() => import('./vnext/GuidePage'));
 const VnSupportInfoPage = lazyRetry(() => import('./vnext/SupportInfoPage'));
+const VnMktAnnouncementPopup = lazyRetry(() => import('./vnext/MktAnnouncementPopup').then((m) => ({ default: m.MktAnnouncementPopup })));
 const VnNtReportPage = lazyRetry(() => import('./vnext/NtReportPage'));
 const VnSettings = lazyRetry(() => import('./vnext/SettingsPanel'));
 const VnBackupPanel = lazyRetry(() => import('./vnext/BackupPanel'));
@@ -12925,6 +12926,7 @@ export default function AuthenticatedApp() {
     <VnErrorBoundary name="app"><div className="mh-legacy-root">
       {!vnGate && !!user && !!userProfile && kycRequired(userProfile?.role, { profile: userProfile, isAppOwner: isAppOwnerEmail(user?.email), isBanLeader: isBanLeaderOfAny || isTruongBanKd, isBanDeputy: isBanDeputyOfAny || isPhoBanKd }) && <VnErrorBoundary><PayGateBanner c={vctx} popup onOpenKyc={() => setKycOpen(true)} /></VnErrorBoundary>}
       {!vnGate && !!userProfile && <VnErrorBoundary><GlobalSearch c={vctx} open={globalSearchOpen} onClose={() => setGlobalSearchOpen(false)} onGo={vnGo} /></VnErrorBoundary>}
+      {!vnGate && !!userProfile && <VnErrorBoundary><React.Suspense fallback={null}><VnMktAnnouncementPopup onDetail={() => vnGo('/thong-tin-ho-tro')} /></React.Suspense></VnErrorBoundary>}
       {!vnGate && !!userProfile && activeTab !== 'vn-home' && activeTab !== 'vn-locks' && <VnErrorBoundary><div className="mb-3"><LockBanner c={vctx} /></div></VnErrorBoundary>}
       {kycOpen && <VnErrorBoundary><KycSelfDialog c={vctx} open={kycOpen} onClose={() => setKycOpen(false)} /></VnErrorBoundary>}
       {selfRenameOpen && userProfile && <VnErrorBoundary><React.Suspense fallback={null}><VnSelfRenameDialog c={vctx} profile={userProfile} open={selfRenameOpen} onClose={() => setSelfRenameOpen(false)} onDone={(n: string) => { setUserProfile((prev: any) => ({ ...(prev || {}), fullName: n, displayName: n })); if (auth.currentUser) updateProfile(auth.currentUser, { displayName: n }).catch(() => {}); }} /></React.Suspense></VnErrorBoundary>}
