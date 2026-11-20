@@ -1,5 +1,5 @@
 import { isSupplement, suppStatus, suppViewLabel, ntCountsInTotals } from '../../lib/vnext/ntSupplement';
-import React, { useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import { implementerLabel } from '../../lib/vnext/ntManual';
 import { doc, updateDoc } from 'firebase/firestore';
 import { Shell, Card, Btn, Badge, Th, Td, Field, Select, Tabs, Empty, Modal, useToast , SearchSelect } from './ui';
@@ -23,7 +23,8 @@ import { periodLabel } from '../../lib/vnext/period';
 import { fmt } from './ui';
 
 /** Quản lý Phòng KD (Team): Thành viên · Đăng ký NS · Ngân sách Phòng · Báo cáo tuần · Báo cáo Phòng */
-export default function TeamPage({ c }: { c: VCtx }) {
+/** navReq: sub-tab requested by the menu quick-nav (Đăng ký MKT / Báo cáo tuần); n changes on every click. */
+export default function TeamPage({ c, navReq }: { c: VCtx; navReq?: { tab: string; n: number } }) {
   const myGdkd = gdkdTeams(c);
   const all = canViewAll(c);
   const teamChoices = useMemo(() => {
@@ -40,6 +41,8 @@ export default function TeamPage({ c }: { c: VCtx }) {
   const isRegistrant = canRegisterUserNs(c.role, myGdkd) && !!tid && (tid === c.teamId || (!c.teamId && myGdkd.includes(tid)));
   // Mặc định tính lại khi dữ liệu Phòng/vai trò tải xong (NVKD đã duyệt → Đăng ký Ngân sách MKT)
   const [tab, setTab] = useState<string>(() => { try { const t = sessionStorage.getItem('vn-team-tab') || ''; sessionStorage.removeItem('vn-team-tab'); return t; } catch { return ''; } });
+  // Already mounted (đang ở /quan-ly-phong-kd) → menu click still switches the sub-tab.
+  useEffect(() => { if (navReq?.tab) setTab(navReq.tab); }, [navReq?.tab, navReq?.n]);
   const defTab = isRegistrant && !isGdkdHere ? 'register' : canManage ? 'budget' : 'members';
   const { lines } = useNsLines(c, [period], all || isGdkdHere || c.role === 'gd_khoi' || c.role === 'tro_ly_khoi' ? 'all' : 'mine');
   // Chờ duyệt: Admin, GĐK/Trợ lý (Phòng trong Khối mình), GĐKD (Phòng mình).
