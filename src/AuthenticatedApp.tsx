@@ -1,5 +1,6 @@
 import { snapPending, snapExists } from './lib/clientErrorFilter';
 import { lazyRetry } from './lib/chunkReload';
+import { teamQuickNav, shellHighlightTab, type TeamQuickTab } from './lib/teamQuickNav';
 import { exportFileName } from '../lib/vnext/exportName';
 import { excelSupportPctFields } from '../lib/vnext/supportPct';
 import { gdkdTeamIdsFor } from '../lib/vnext/budget';
@@ -2438,13 +2439,18 @@ export default function AuthenticatedApp() {
     [vnGate, lockedScreen, effectiveRoleKey, isDualGdkUser, dualPending]
   );
   const { goTo: navigateApp, replaceTo: replaceScreen } = useAppRouteSync(activeTab, adminSubTab, setActiveTab, setAdminSubTab, roleRedirectFor);
+  // Quick-nav item đang chọn (giữ highlight menu) + yêu cầu sub-tab cho TeamPage (n tăng mỗi lần bấm).
+  const [teamQuick, setTeamQuick] = useState<{ tab: TeamQuickTab; sub: string; n: number } | null>(null);
   const handleShellNavigate = useCallback((tab: string, sub?: string) => {
-    // NVKD / GĐKD quick-nav: Đăng ký MKT / Báo cáo tuần → mở Phòng KD đúng sub-tab
-    if (tab === 'team-register' || tab === 'team-weekly') {
-      try { sessionStorage.setItem('vn-team-tab', tab === 'team-register' ? 'register' : 'weekly'); } catch { /* ignore */ }
-      setActiveTab(tab);
+    // NVKD / GĐKD quick-nav: Đăng ký MKT / Báo cáo tuần → mở Phòng KD (team-mgmt) đúng sub-tab
+    const q = teamQuickNav(tab);
+    if (q) {
+      try { sessionStorage.setItem('vn-team-tab', q.subTab); } catch { /* ignore */ }
+      setTeamQuick((prev) => ({ tab: q.highlight, sub: q.subTab, n: (prev?.n || 0) + 1 }));
+      setActiveTab(q.activeTab);
       return;
     }
+    setTeamQuick(null);
     if (sub) {
       setActiveTab(tab);
       setAdminSubTab(sub);
@@ -2452,6 +2458,12 @@ export default function AuthenticatedApp() {
       setActiveTab(tab);
     }
   }, []);
+  // Hardening: activeTab không bao giờ ở lại 'team-weekly'/'team-register' (không có TabsContent → trang trắng);
+  // rời màn Phòng KD → bỏ highlight quick-nav.
+  useEffect(() => {
+    if (teamQuickNav(activeTab)) handleShellNavigate(activeTab);
+    else if (activeTab !== 'team-mgmt') setTeamQuick(null);
+  }, [activeTab, handleShellNavigate]);
 
   const [blockSubTab, setBlockSubTab] = useState('block-teams');
   // Hidden Khối tab «Đối ứng» — deep links / stale state fall back to Thông tin.
@@ -12907,7 +12919,7 @@ export default function AuthenticatedApp() {
     <Suspense fallback={<ScreenSkeleton />}>
     <AppShell
       menuItems={shellNavItems}
-      activeTab={activeTab}
+      activeTab={shellHighlightTab(activeTab, teamQuick?.tab)}
       adminSubTab={adminSubTab}
       onNavigate={handleShellNavigate}
       userName={(userProfile as any)?.fullName || user?.displayName}
@@ -21696,7 +21708,7 @@ export default function AuthenticatedApp() {
           </TabsContent>
 
           <TabsContent value="team-mgmt" className="pb-20 lg:pb-0">
-            {(activeTab === 'team-mgmt' || activeTab === 'team-register' || activeTab === 'team-weekly') && <VnErrorBoundary><React.Suspense fallback={<VnFallback />}><VnTeamPage key={activeTab} c={vctx} /></React.Suspense></VnErrorBoundary>}
+            {(activeTab === 'team-mgmt' || activeTab === 'team-register' || activeTab === 'team-weekly') && <VnErrorBoundary><React.Suspense fallback={<VnFallback />}><VnTeamPage c={vctx} navReq={teamQuick ? { tab: teamQuick.sub, n: teamQuick.n } : undefined} /></React.Suspense></VnErrorBoundary>}
           </TabsContent>
           <TabsContent value="vn-approvals" className="pb-20 lg:pb-0 space-y-4">
             {activeTab === 'vn-approvals' && <><div className="text-lg font-bold">Duyệt tài khoản</div><ApprovalsPanel c={vctx} /><TransferPanel c={vctx} canRequest={false} /></>}
