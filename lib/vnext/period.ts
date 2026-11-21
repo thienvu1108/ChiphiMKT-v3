@@ -83,8 +83,8 @@ export function daysInMonth(y: number, m: number) {
 export type Ymd = { y: number; m: number; d: number };
 export type Dot = { n: number; from: Ymd; to: Ymd; label: string };
 
-/** Số ngày lịch MỞ nộp/sửa báo cáo, tính từ ngày `to` của đợt (gồm cả `to`). Đợt 3 chỉ mở 1 ngày. */
-export const DOT_REPORT_OPEN_SPAN: readonly [number, number, number, number] = [2, 2, 1, 2];
+/** Số ngày lịch MỞ nộp/sửa báo cáo, tính từ ngày `to` của đợt (gồm cả `to`). Đợt 3 chỉ mở 1 ngày; đợt 4 mở 3 ngày (19–21/M). */
+export const DOT_REPORT_OPEN_SPAN: readonly [number, number, number, number] = [2, 2, 1, 3];
 
 export function addCalendarDays(base: Ymd, k: number): Ymd {
   // UTC noon tránh lệch DST; lịch VN không DST nên ổn.
@@ -119,7 +119,7 @@ export function currentDot(key: string, date: Date = now()): number {
   const ds = dotsOf(key);
   if (o < ord(ds[0].from)) return 0;
   for (const d of ds) if (o >= ord(d.from) && o <= ord(d.to)) return d.n;
-  // Ngày 20/M nằm trong cửa sổ mở đợt 4 nhưng ngoài biên nội dung 12–19 → vẫn coi là sau đợt 4.
+  // Ngày 20–21/M nằm trong cửa sổ mở đợt 4 nhưng ngoài biên nội dung 12–19 → vẫn coi là sau đợt 4.
   return 5;
 }
 

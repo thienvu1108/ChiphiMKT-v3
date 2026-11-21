@@ -188,6 +188,15 @@ describe('weekly_reports', () => {
     await assertFails(setDoc(doc(as('u1'), 'weekly_reports', '2026-11_1_u2'), w('u2')));
     await assertFails(setDoc(doc(as('u1'), 'weekly_reports', '2026-11_2_u1'), w('u1', 1)));
   });
+  it('đợt 4 mở 19–21/M (giờ VN): cửa sổ theo ngày hiện tại', async () => {
+    const t = new Date(Date.now() + 7 * 3600e3);
+    const d = t.getUTCDate();
+    const period = `${t.getUTCFullYear()}-${String(t.getUTCMonth() + 1).padStart(2, '0')}`;
+    const ref = doc(as('u1'), 'weekly_reports', `${period}_4_u1`);
+    const data = { ...w('u1', 4), period };
+    if (d >= 19 && d <= 21) await assertSucceeds(setDoc(ref, data));
+    else await assertFails(setDoc(ref, data));
+  });
   it('Số căn chốt (closedUnits) trong items: lưu được; báo cáo cũ không có trường vẫn sửa được', async () => {
     await seed('weekly_reports/2026-11_1_u1', w('u1'));
     await assertSucceeds(setDoc(doc(as('u1'), 'weekly_reports', '2026-11_1_u1'), { ...w('u1'), items: [{ projectId: 'P1', cumCost: 2, leads: 3, interested: 1, closedUnits: 2 }] }));

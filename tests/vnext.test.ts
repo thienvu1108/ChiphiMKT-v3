@@ -40,7 +40,7 @@ describe('period 21→20', () => {
     expect(currentDot('2026-11', vn('2026-10-20T01:00:00'))).toBe(0);
   });
   it('cửa sổ nộp Báo cáo tuần theo đợt', () => {
-    expect(DOT_REPORT_OPEN_SPAN).toEqual([2, 2, 1, 2]);
+    expect(DOT_REPORT_OPEN_SPAN).toEqual([2, 2, 1, 3]);
     // Đợt 1: mở 27–28/10 (hôm nay 28/10 phải còn mở)
     expect(isDotReportOpen('2026-11', 1, vn('2026-10-27T00:00:00'))).toBe(true);
     expect(isDotReportOpen('2026-11', 1, vn('2026-10-28T23:00:00'))).toBe(true);
@@ -56,11 +56,19 @@ describe('period 21→20', () => {
     expect(dotReportWindow('2026-11', 3).openLabel).toBe('11/11');
     expect(isDotReportOpen('2026-11', 3, vn('2026-11-11T08:00:00'))).toBe(true);
     expect(isDotReportOpen('2026-11', 3, vn('2026-11-12T00:00:00'))).toBe(false);
-    // Đợt 4: 19–20/11
-    expect(dotReportWindow('2026-11', 4).openLabel).toBe('19/11 – 20/11');
+    // Đợt 4: 19–21/11 (hằng tháng 19–21/M)
+    expect(dotReportWindow('2026-11', 4).openLabel).toBe('19/11 – 21/11');
     expect(isDotReportOpen('2026-11', 4, vn('2026-11-19T00:00:00'))).toBe(true);
     expect(isDotReportOpen('2026-11', 4, vn('2026-11-20T23:00:00'))).toBe(true);
-    expect(isDotReportOpen('2026-11', 4, vn('2026-11-21T00:00:00'))).toBe(false);
+    expect(isDotReportOpen('2026-11', 4, vn('2026-11-21T00:00:00'))).toBe(true);
+    expect(isDotReportOpen('2026-11', 4, vn('2026-11-21T23:59:00'))).toBe(true);
+    expect(isDotReportOpen('2026-11', 4, vn('2026-11-22T00:00:00'))).toBe(false);
+    expect(isDotReportOpen('2026-11', 4, vn('2026-11-18T23:59:00'))).toBe(false);
+    expect(dotReportWindow('2026-11', 4, vn('2026-11-21T12:00:00')).state).toBe('open');
+    expect(dotReportWindow('2026-11', 4, vn('2026-11-22T00:00:00')).state).toBe('closed');
+    expect(openReportDot('2026-11', vn('2026-11-21T12:00:00'))).toBe(4);
+    // Tháng 2 (28 ngày) vẫn 19–21/02
+    expect(dotReportWindow('2027-02', 4).openLabel).toBe('19/02 – 21/02');
   });
   it('kỳ mở đăng ký NS chỉ theo «Thời gian MỞ» (14 → 5, Tháng này) + khoá kỳ đã qua', () => {
     const rec = (apply: number | null) => ({ on: true, fromDay: 14, fromMin: 0, toDay: 5, toMin: 0, apply, exceptions: [] });
