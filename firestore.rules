@@ -1994,7 +1994,7 @@ service cloud.firestore {
     }
 
     // Báo cáo tuần: user tự nộp trong cửa sổ đợt; quản lý chỉ đọc. Admin/Super Admin sửa mọi lúc.
-    // Cửa sổ (giờ VN, kỳ period=YYYY-MM = tháng M): đợt1 = 27–28/(M−1); đợt2 = 3–4/M; đợt3 = 11/M; đợt4 = 19–20/M.
+    // Cửa sổ (giờ VN, kỳ period=YYYY-MM = tháng M): đợt1 = 27–28/(M−1); đợt2 = 3–4/M; đợt3 = 11/M; đợt4 = 19–21/M.
     function weeklyShapeOk(d, id) {
       return d.period is string && d.period.matches('^[0-9]{4}-[0-9]{2}$')
         && d.dot is int && d.dot >= 1 && d.dot <= 4
@@ -2010,7 +2010,7 @@ service cloud.firestore {
         (dot == 1 && cur == M - 1 && (d == 27 || d == 28))
         || (dot == 2 && cur == M && (d == 3 || d == 4))
         || (dot == 3 && cur == M && d == 11)
-        || (dot == 4 && cur == M && (d == 19 || d == 20))
+        || (dot == 4 && cur == M && d >= 19 && d <= 21)
       );
     }
     match /weekly_reports/{repId} {
