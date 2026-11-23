@@ -73,11 +73,11 @@ async function api(action: string, body: any) {
   return j;
 }
 
-function putFile(url: string, f: File, onProg: (p: number) => void): Promise<any> {
+function putFile(url: string, f: File, onProg: (p: number) => void, mime?: string): Promise<any> {
   return new Promise((resolve, reject) => {
     const x = new XMLHttpRequest();
     x.open('PUT', url);
-    x.setRequestHeader('content-type', f.type);
+    x.setRequestHeader('content-type', mime || f.type); // cùng mime với phiên Drive (vd .csv báo ms-excel/text/plain → text/csv)
     x.upload.onprogress = (e) => { if (e.lengthComputable) onProg(e.loaded / e.total); };
     x.onload = () => { if (x.status >= 200 && x.status < 300) { try { resolve(JSON.parse(x.responseText)); } catch { resolve({}); } } else reject(new Error(`Drive từ chối (${x.status})`)); };
     x.onerror = () => reject(new Error('Mất kết nối khi tải lên Drive'));
@@ -90,7 +90,7 @@ export async function uploadInvoice(c: VCtx, r: any, month: string, f: File, ord
   if (!isInvoiceFileOk(f)) throw new Error(INVOICE_TYPES_MSG);
   const { name, path } = invoiceNaming(c, r, month, order, extOf(f));
   const s = await api('invoice-session', { name, path, mime, size: f.size });
-  const up = await putFile(s.uploadUrl, f, onProg);
+  const up = await putFile(s.uploadUrl, f, onProg, mime);
   if (!up?.id) throw new Error('Drive không trả mã file');
   const fin = await api('invoice-finalize', { fileId: up.id });
   const ref = doc(collection(c.db, INVOICE_COLLECTION));
