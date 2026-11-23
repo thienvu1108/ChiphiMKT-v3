@@ -1987,7 +1987,7 @@ service cloud.firestore {
         && incoming().keys().hasOnly(['acceptanceId', 'fileId', 'name', 'origName', 'mime', 'size', 'webViewLink', 'path', 'order', 'uploadedBy', 'uploadedByName', 'uploadedAt', 'teamId'])
         && (!('teamId' in incoming()) || incoming().teamId is string)
         && incoming().acceptanceId is string && incoming().fileId is string && incoming().fileId.matches('^[a-zA-Z0-9_-]{10,}$')
-        && incoming().mime is string && incoming().mime.matches('application/(pdf|zip|x-zip-compressed|vnd[.]ms-excel|vnd[.]openxmlformats-officedocument[.]spreadsheetml[.]sheet)|image/(jpeg|png|webp|heic|heif)')
+        && incoming().mime is string && incoming().mime.matches('application/(pdf|zip|x-zip-compressed|vnd[.]ms-excel|vnd[.]openxmlformats-officedocument[.]spreadsheetml[.]sheet)|text/csv|image/(jpeg|png|webp|heic|heif)')
         && incoming().uploadedBy == request.auth.uid && vnNtDocOpen(incoming().acceptanceId);
       allow update: if (isAdmin() || isMod()) && incoming().diff(existing()).affectedKeys().hasOnly(['order']) && vnNtDocOpen(resource.data.get('acceptanceId', ''));
       allow delete: if (isAdmin() || isMod()) && vnNtDocOpen(resource.data.get('acceptanceId', ''));

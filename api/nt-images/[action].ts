@@ -18,6 +18,7 @@ import { createSign } from 'node:crypto';
 import { accessTokenFromBlob, oauthConfigured } from '../_lib/driveOAuth.js';
 import { isUnderRoot } from '../_lib/driveAncestry.js';
 import { databaseIdOrNull } from '../_lib/dbId.js';
+import { mimeFromName, INVOICE_MIMES } from '../_lib/invoiceMime.js';
 
 const PROJECT_ID = process.env.FIREBASE_PROJECT_ID || 'app-api-login-1b95b';
 const DATABASE_ID = databaseIdOrNull() || 'unconfigured';
@@ -114,23 +115,7 @@ async function invoiceRoot(tok: string, imgRoot: string, settings: any): Promise
   if (parent) { try { return await ensureFolder(tok, parent, 'Hóa đơn Nghiệm thu'); } catch { /* không có quyền thư mục cha */ } }
   return ensureFolder(tok, imgRoot, 'Hóa đơn');
 }
-function mimeFromName(name: string, mime: string): string {
-  const m = String(mime || '').trim();
-  if (m && m !== 'application/octet-stream') return m;
-  const n = String(name || '').toLowerCase();
-  if (n.endsWith('.pdf')) return 'application/pdf';
-  if (n.endsWith('.zip')) return 'application/zip';
-  if (n.endsWith('.xls')) return 'application/vnd.ms-excel';
-  if (n.endsWith('.xlsx')) return 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet';
-  if (n.endsWith('.png')) return 'image/png';
-  if (n.endsWith('.webp')) return 'image/webp';
-  if (n.endsWith('.heic')) return 'image/heic';
-  if (n.endsWith('.heif')) return 'image/heif';
-  if (/\.jpe?g$/.test(n)) return 'image/jpeg';
-  return m;
-}
-
-export const INVOICE_MIMES = ['application/pdf', 'image/jpeg', 'image/png', 'image/webp', 'image/heic', 'image/heif', 'application/zip', 'application/x-zip-compressed', 'application/vnd.ms-excel', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'];
+export { mimeFromName, INVOICE_MIMES };
 
 export default async function handler(req: any, res: any) {
   if (DATABASE_ID === 'unconfigured' && String(req.query?.action || '') !== 'status') return res.status(503).json({ error: 'Máy chủ chưa cấu hình FIRESTORE_DATABASE_ID' });
@@ -177,7 +162,7 @@ export default async function handler(req: any, res: any) {
       const { path = [], name, size } = body;
       let mime = mimeFromName(String(name || ''), String(body.mime || ''));
       if (!name || !/^MAYHOMES - HD - /.test(String(name))) throw new HttpError(400, 'Tên hóa đơn phải theo mẫu «MAYHOMES - HD - …»');
-      if (!INVOICE_MIMES.includes(String(mime))) throw new HttpError(400, 'Chỉ nhận ảnh, PDF, ZIP hoặc Excel');
+      if (!INVOICE_MIMES.includes(String(mime))) throw new HttpError(400, 'Chỉ nhận ảnh, PDF, ZIP, Excel hoặc CSV');
       let parent = await invoiceRoot(t.tok, root, settings);
       for (const seg of (path as string[]).slice(0, 6)) parent = await ensureFolder(t.tok, parent, String(seg).slice(0, 100));
       const origin = String(req.headers?.origin || '');

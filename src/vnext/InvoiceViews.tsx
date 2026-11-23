@@ -12,13 +12,14 @@ import { storageFor } from './storage';
 import { PhotoViewer, type ViewerItem } from './PhotoViewer';
 import type { DeckImage } from './ntDeck';
 
+import { isPreviewableInvoice, isDownloadOnlyInvoice, inferInvoiceMime, isInvoiceFileOk, invoiceExt, INVOICE_ACCEPT, INVOICE_TYPES_MSG } from '../../lib/vnext/invoiceMime';
 export { invoiceDeckImages } from '../../lib/vnext/invoiceDeck';
 
 export type Invoice = { id: string; acceptanceId: string; fileId: string; name: string; origName?: string; mime: string; size: number; webViewLink: string; path?: string; order: number; uploadedBy: string; uploadedByName?: string; uploadedAt: string };
 
 /** Ảnh xem trước hóa đơn: giữ tỉ lệ gốc (object-contain), trình duyệt tự xoay theo EXIF; bấm mở Drive. */
-const isPreviewableInv = (i: Invoice) => (i.mime || '').startsWith('image/') || i.mime === 'application/pdf';
-const isZipOrExcel = (i: Invoice) => /zip|excel|spreadsheet|sheet/i.test(i.mime || '') || /\.(zip|xlsx?)$/i.test(i.name || '');
+const isPreviewableInv = (i: Invoice) => isPreviewableInvoice(i);
+const isZipOrExcel = (i: Invoice) => isDownloadOnlyInvoice(i);
 
 export function InvoiceThumb({ c, i, onOpen }: { c: VCtx; i: Invoice; onOpen?: () => void; key?: React.Key }) {
   const [src, setSrc] = useState(''); const [err, setErr] = useState(false);
@@ -30,7 +31,7 @@ export function InvoiceThumb({ c, i, onOpen }: { c: VCtx; i: Invoice; onOpen?: (
     <>
       <div className="aspect-[3/4] relative grid place-items-center">
         {src ? <img src={src} alt={i.name} className="absolute inset-0 w-full h-full object-contain" style={{ imageOrientation: 'from-image' } as any} data-testid="vn-invoice-thumb-img" />
-          : <span className="text-[11px] text-[var(--mh-text-3)] p-2 text-center">{isZipOrExcel(i) ? '📦 ZIP/Excel — bấm tải' : err ? (i.mime === 'application/pdf' ? '📄 PDF — bấm để mở' : '🖼️ Bấm để mở') : 'Đang tải…'}</span>}
+          : <span className="text-[11px] text-[var(--mh-text-3)] p-2 text-center">{isZipOrExcel(i) ? '📦 ZIP/Excel/CSV — bấm tải' : err ? (i.mime === 'application/pdf' ? '📄 PDF — bấm để mở' : '🖼️ Bấm để mở') : 'Đang tải…'}</span>}
       </div>
       <div className="px-2 py-1 text-[11px] truncate text-[var(--mh-navy)]">{i.mime === 'application/pdf' ? '📄 ' : isZipOrExcel(i) ? '📦 ' : ''}{i.name}</div>
     </>
@@ -47,8 +48,7 @@ export function InvoiceThumb({ c, i, onOpen }: { c: VCtx; i: Invoice; onOpen?: (
 export const INVOICE_FEATURE = 'vn.nt_invoices.upload';
 export const INVOICE_COLLECTION = 'acceptanceInvoices';
 
-const OK_MIME = ['application/pdf', 'image/jpeg', 'image/png', 'image/webp', 'image/heic', 'image/heif', 'application/zip', 'application/x-zip-compressed', 'application/vnd.ms-excel', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'];
-const extOf = (f: File) => (f.type === 'application/pdf' ? 'pdf' : (f.name.split('.').pop() || 'jpg').toLowerCase().replace(/[^a-z0-9]/g, '').slice(0, 5) || 'jpg');
+const extOf = invoiceExt;
 export const fmtSize = (n: number) => (n >= 1 << 30 ? (n / (1 << 30)).toFixed(2) + ' GB' : n >= 1 << 20 ? (n / (1 << 20)).toFixed(1) + ' MB' : Math.max(1, Math.round(n / 1024)) + ' KB');
 
 export function useInvoices(c: VCtx, acceptanceId?: string) {
@@ -73,11 +73,11 @@ async function api(action: string, body: any) {
   return j;
 }
 
-function putFile(url: string, f: File, onProg: (p: number) => void): Promise<any> {
+function putFile(url: string, f: File, onProg: (p: number) => void, mime?: string): Promise<any> {
   return new Promise((resolve, reject) => {
     const x = new XMLHttpRequest();
     x.open('PUT', url);
-    x.setRequestHeader('content-type', f.type);
+    x.setRequestHeader('content-type', mime || f.type); // cùng mime với phiên Drive (vd .csv báo ms-excel/text/plain → text/csv)
     x.upload.onprogress = (e) => { if (e.lengthComputable) onProg(e.loaded / e.total); };
     x.onload = () => { if (x.status >= 200 && x.status < 300) { try { resolve(JSON.parse(x.responseText)); } catch { resolve({}); } } else reject(new Error(`Drive từ chối (${x.status})`)); };
     x.onerror = () => reject(new Error('Mất kết nối khi tải lên Drive'));
@@ -86,25 +86,11 @@ function putFile(url: string, f: File, onProg: (p: number) => void): Promise<any
 }
 
 export async function uploadInvoice(c: VCtx, r: any, month: string, f: File, order: number, onProg: (p: number) => void): Promise<Invoice> {
-  const inferInvMime = (f: File) => {
-    let m = f.type === 'image/jpg' ? 'image/jpeg' : f.type;
-    if (!m || m === 'application/octet-stream') {
-      const n = f.name.toLowerCase();
-      if (n.endsWith('.pdf')) m = 'application/pdf';
-      else if (n.endsWith('.zip')) m = 'application/zip';
-      else if (n.endsWith('.xls')) m = 'application/vnd.ms-excel';
-      else if (n.endsWith('.xlsx')) m = 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet';
-      else if (n.endsWith('.png')) m = 'image/png';
-      else if (n.endsWith('.webp')) m = 'image/webp';
-      else if (/\.jpe?g$/.test(n)) m = 'image/jpeg';
-    }
-    return m;
-  };
-  const mime = inferInvMime(f);
-  if (!OK_MIME.includes(mime) && !/\.(zip|xlsx?|pdf|jpe?g|png|webp|heic|heif)$/i.test(f.name)) throw new Error('Chỉ nhận ảnh, PDF, ZIP hoặc Excel');
+  const mime = inferInvoiceMime(f);
+  if (!isInvoiceFileOk(f)) throw new Error(INVOICE_TYPES_MSG);
   const { name, path } = invoiceNaming(c, r, month, order, extOf(f));
   const s = await api('invoice-session', { name, path, mime, size: f.size });
-  const up = await putFile(s.uploadUrl, f, onProg);
+  const up = await putFile(s.uploadUrl, f, onProg, mime);
   if (!up?.id) throw new Error('Drive không trả mã file');
   const fin = await api('invoice-finalize', { fileId: up.id });
   const ref = doc(collection(c.db, INVOICE_COLLECTION));
@@ -174,7 +160,7 @@ export function NtInvoiceModal({ c, record, onClose }: { c: VCtx; record: any; o
     <Modal open onClose={() => { if (!busy) onClose(); }} title="Tải Hóa đơn Nghiệm thu" wide>
       <div className="space-y-3" data-testid="vn-invoice-modal">
         <div className="text-[12px] text-[var(--mh-text-2)]"><b>{projectName(c, record.projectId, record.projectName)} › {record.implementerName || '—'}</b><div data-testid="vn-invoice-path">Drive (thư mục Hóa đơn riêng): {n.path.join(' / ')}</div><div>Tên: {n.name}</div></div>
-        {can && <label data-testid="vn-invoice-pick" className={`h-9 px-3 rounded-lg text-[13px] font-semibold inline-flex items-center gap-1 cursor-pointer bg-[#0E7C66] text-white ${busy ? 'opacity-50 pointer-events-none' : ''}`}>{busy ? 'Đang tải hóa đơn…' : '🧾 Chọn ảnh / PDF / ZIP / Excel (nhiều tệp)'}<input type="file" accept="image/*,application/pdf,application/zip,.zip,application/vnd.ms-excel,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet,.xls,.xlsx" multiple className="hidden" disabled={busy} onChange={(e) => { upload(e.target.files); e.target.value = ''; }} /></label>}
+        {can && <label data-testid="vn-invoice-pick" className={`h-9 px-3 rounded-lg text-[13px] font-semibold inline-flex items-center gap-1 cursor-pointer bg-[#0E7C66] text-white ${busy ? 'opacity-50 pointer-events-none' : ''}`}>{busy ? 'Đang tải hóa đơn…' : '🧾 Chọn ảnh / PDF / ZIP / Excel / CSV (nhiều tệp)'}<input type="file" accept={INVOICE_ACCEPT} multiple className="hidden" disabled={busy} onChange={(e) => { upload(e.target.files); e.target.value = ''; }} /></label>}
         <div className="text-[11px] text-[var(--mh-text-3)]">Không giới hạn dung lượng — tệp được tải thẳng lên Google Drive. Giữ trang mở đến khi xong.</div>
         {!!prog.length && <Card className="p-2 text-[12px]" data-testid="vn-invoice-progress">{prog.map((x, k) => (
           <div key={k} className="py-1" data-testid="vn-invoice-prog-item" data-st={x.st}>
