@@ -904,14 +904,14 @@ export const AcceptanceRow: React.FC<RowProps> = React.memo(({
 
       {newLayout && (<>
       {/* TIỀN TRÊN HÓA ĐƠN theo kênh */}
-      <TableCell className="text-right font-mono text-xs text-orange-950 bg-orange-50/20">{formatCurrency(comp.hoaDonFb).replace(' đ', '')}</TableCell>
-      <TableCell className="text-right font-mono text-xs text-orange-950 bg-orange-50/20">{formatCurrency(comp.hoaDonZalo).replace(' đ', '')}</TableCell>
-      <TableCell className="text-right font-mono text-xs text-orange-950 bg-orange-50/20">{formatCurrency(comp.hoaDonTiktok).replace(' đ', '')}</TableCell>
-      <TableCell className="text-right font-mono text-xs text-orange-950 bg-orange-50/20">{formatCurrency(comp.hoaDonGoogle).replace(' đ', '')}</TableCell>
-      <TableCell className="text-right font-mono text-xs text-orange-950 bg-orange-50/20">{formatCurrency(comp.hoaDonDangTin).replace(' đ', '')}</TableCell>
-      <TableCell className="text-right font-mono text-xs text-orange-950 bg-orange-50/20">{formatCurrency(comp.hoaDonUCall).replace(' đ', '')}</TableCell>
-      <TableCell className="text-right font-mono text-xs text-orange-950 bg-orange-50/20">{formatCurrency(comp.hoaDonNativeAds).replace(' đ', '')}</TableCell>
-      <TableCell className="text-right font-mono text-xs text-orange-950 bg-orange-50/20">{formatCurrency(comp.hoaDonKhac).replace(' đ', '')}</TableCell>
+      <TableCell className="text-right font-mono text-xs text-orange-950 bg-orange-50/20">{renderBreakdownTooltip(comp.hoaDonFb, item.costBreakdowns?.hoaDonFb, 'HĐ Facebook')}</TableCell>
+      <TableCell className="text-right font-mono text-xs text-orange-950 bg-orange-50/20">{renderBreakdownTooltip(comp.hoaDonZalo, item.costBreakdowns?.hoaDonZalo, 'HĐ Zalo')}</TableCell>
+      <TableCell className="text-right font-mono text-xs text-orange-950 bg-orange-50/20">{renderBreakdownTooltip(comp.hoaDonTiktok, item.costBreakdowns?.hoaDonTiktok, 'HĐ Tiktok')}</TableCell>
+      <TableCell className="text-right font-mono text-xs text-orange-950 bg-orange-50/20">{renderBreakdownTooltip(comp.hoaDonGoogle, item.costBreakdowns?.hoaDonGoogle, 'HĐ Google Ads')}</TableCell>
+      <TableCell className="text-right font-mono text-xs text-orange-950 bg-orange-50/20">{renderBreakdownTooltip(comp.hoaDonDangTin, item.costBreakdowns?.hoaDonDangTin, 'HĐ Đăng tin')}</TableCell>
+      <TableCell className="text-right font-mono text-xs text-orange-950 bg-orange-50/20">{renderBreakdownTooltip(comp.hoaDonUCall, item.costBreakdowns?.hoaDonUCall, 'HĐ UCall')}</TableCell>
+      <TableCell className="text-right font-mono text-xs text-orange-950 bg-orange-50/20">{renderBreakdownTooltip(comp.hoaDonNativeAds, item.costBreakdowns?.hoaDonNativeAds, 'HĐ Native Ads')}</TableCell>
+      <TableCell className="text-right font-mono text-xs text-orange-950 bg-orange-50/20">{renderBreakdownTooltip(comp.hoaDonKhac, item.costBreakdowns?.hoaDonKhac, 'HĐ Khác')}</TableCell>
       </>)}
 
       {/* Col AA: SỐ LEAD */}
