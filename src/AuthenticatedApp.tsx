@@ -30,7 +30,7 @@ import { useAppRouteSync } from '@/hooks/useAppRouteSync';
 import { useLocation } from 'react-router-dom';
 import { normalizeRoleKey, ruleHasPerm, uiHasPermission, findRolePermDoc, type RoleKey } from './lib/rolePermissions';
 import { isBanKdLeader, isBanKdManager, isBanKdDeputy } from './lib/orgPermissions';
-import { lockedScreenForRole, filterNavForRole, redirectPathForRole, landingTabForRole } from './lib/roleMenu';
+import { lockedScreenForRole, filterNavForRole, redirectPathForRole, landingTabForRole, extraLockedScreenForRole, keepsDeepLinkForLockedRole } from './lib/roleMenu';
 import { planTruongBanAssignment, userLeadsBan } from './lib/truongBanAssignment';
 import { planLeaderSync, planClearLeadership, planSetDeputy, planUnsetDeputy, planDeputyRoleSync, planExclusiveSetDeputy, planClearDeputyship, roleAfterSetDeputy, roleAfterUnsetDeputy, banRoleOf, BAN_ROLE_LABEL, authUidOf } from './lib/banRoleSync';
 import { BanKdAssignDialog, ConfirmChangeDialog, type PendingChange } from './components/users/AssignDialogs';
@@ -1411,7 +1411,7 @@ export const DEFAULT_PERMISSIONS: Record<string, string[]> = {
     'report_nt.view',
     'block_budget.view'
   ],
-  // Phó Ban KD: chỉ xem Quản lý Ban KD (không bankd.assign; duyệt NS Ban = leader only).
+  // Phó Ban KD: Quản lý Ban KD (không bankd.assign); duyệt NS Ban được — quyết định của Trưởng Ban được ưu tiên.
   pho_ban_kd: [
     'bankd.view',
     'report_nt.view',
@@ -1897,7 +1897,14 @@ export default function AuthenticatedApp() {
     const o: any = (userProfile as any)?.vnOnboarding;
     return !!o && o.status === 'approved' && o.dept === 'kd' && (o.position === 'nvkd' || o.position === 'gdkd') && !!(o.teamId || (userProfile as any)?.teamId);
   }, [userProfile]);
-  const lockedAllows = useCallback((tab: string) => !!lockedScreen && (tab === lockedScreen.tab || tab === 'huong-dan' || tab === 'thong-tin-ho-tro' || tab === 'vn-home' || ((isDualGdkUser || dualPending || hasApprovedKdTeam) && tab === 'team-mgmt')), [lockedScreen, isDualGdkUser, dualPending, hasApprovedKdTeam]);
+  // GĐ Khối kiêm Phó Ban KD (deputyUids): thêm màn «Quản lý Ban KD» (chỉ Ban mình là Phó Ban). Chờ ban_kd tải xong thì tạm cho phép (link trực tiếp).
+  const isGdkBanDeputy = useMemo(
+    () => effectiveRoleKey === 'gd_khoi' && banKdList.some((b) => isBanKdDeputy(b as any, user as any, userProfile as any)),
+    [effectiveRoleKey, banKdList, user, userProfile]
+  );
+  const gdkBanPending = effectiveRoleKey === 'gd_khoi' && !scopeDataLoaded.banKd;
+  const gdkBanTabOk = !!extraLockedScreenForRole(effectiveRoleKey, isGdkBanDeputy || gdkBanPending);
+  const lockedAllows = useCallback((tab: string) => !!lockedScreen && (tab === lockedScreen.tab || (gdkBanTabOk && tab === 'bankd-mgmt') || tab === 'huong-dan' || tab === 'thong-tin-ho-tro' || tab === 'vn-home' || ((isDualGdkUser || dualPending || hasApprovedKdTeam) && tab === 'team-mgmt')), [lockedScreen, isDualGdkUser, dualPending, hasApprovedKdTeam, gdkBanTabOk]);
 
   // Capability flags mirror firestore.rules exactly (stored rolePermissions; defaults only when
   // the rolePermissions doc is missing). Khối scope is checked separately (myBlocks).
@@ -2271,9 +2278,11 @@ export default function AuthenticatedApp() {
     if (isAdmin || isSuperAdmin || isAccountant) return banKdList;
     // Trưởng / Phó Ban KD (role): ONLY Ban(s) they lead or are Phó — never "all Bans".
     if (isTruongBanKd || isPhoBanKd) return banKdList.filter(b => isBanKdManager(b as any, user as any, userProfile as any));
+    // GĐ Khối kiêm Phó Ban: chỉ Ban mình là Phó Ban (không phải mọi Ban / Ban chỉ là thành viên).
+    if (effectiveRoleKey === 'gd_khoi') return banKdList.filter(b => isBanKdDeputy(b as any, user as any, userProfile as any));
     if (myBanKds.length > 0) return myBanKds;
     return hasPermission('bankd.view') ? banKdList : [];
-  }, [isAdmin, isSuperAdmin, isAccountant, isTruongBanKd, isPhoBanKd, banKdList, myBanKds, hasPermission, user, userProfile]);
+  }, [isAdmin, isSuperAdmin, isAccountant, isTruongBanKd, isPhoBanKd, effectiveRoleKey, banKdList, myBanKds, hasPermission, user, userProfile]);
 
   const currentActiveBanKd = useMemo(() => {
     const list = userAllowedBanKds;
@@ -2435,8 +2444,8 @@ export default function AuthenticatedApp() {
   // v-next: người chưa đăng ký lại / đang chờ duyệt chỉ vào được Quy trình MKT.
   const vnGate = !!user && !!userProfile && needsOnboarding(userProfile, { isAppOwner: isAppOwnerEmail(user?.email) });
   const roleRedirectFor = useCallback(
-    (pathname: string) => (/^\/(huong-dan|thong-tin-ho-tro|trang-chu)(\/|$)/.test(pathname) && !(vnGate && /^\/thong-tin-ho-tro/.test(pathname)) ? null : vnGate ? (pathname === '/cho-duyet' ? null : '/cho-duyet') : lockedScreen ? (((isDualGdkUser || dualPending) && /^\/quan-ly-phong-kd(\/|$)/.test(pathname)) ? null : redirectPathForRole(effectiveRoleKey, pathname)) : null),
-    [vnGate, lockedScreen, effectiveRoleKey, isDualGdkUser, dualPending]
+    (pathname: string) => (/^\/(huong-dan|thong-tin-ho-tro|trang-chu)(\/|$)/.test(pathname) && !(vnGate && /^\/thong-tin-ho-tro/.test(pathname)) ? null : vnGate ? (pathname === '/cho-duyet' ? null : '/cho-duyet') : lockedScreen ? (((isDualGdkUser || dualPending) && /^\/quan-ly-phong-kd(\/|$)/.test(pathname)) ? null : redirectPathForRole(effectiveRoleKey, pathname, isGdkBanDeputy || gdkBanPending)) : null),
+    [vnGate, lockedScreen, effectiveRoleKey, isDualGdkUser, dualPending, isGdkBanDeputy, gdkBanPending]
   );
   const { goTo: navigateApp, replaceTo: replaceScreen } = useAppRouteSync(activeTab, adminSubTab, setActiveTab, setAdminSubTab, roleRedirectFor);
   // Quick-nav item đang chọn (giữ highlight menu) + yêu cầu sub-tab cho TeamPage (n tăng mỗi lần bấm).
@@ -3923,6 +3932,7 @@ export default function AuthenticatedApp() {
       return [
         { value: 'block-mgmt', label: 'Quản lý Khối', icon: Building2, color: 'text-purple-600', activeBg: 'bg-indigo-600', activeText: 'text-white font-black', visible: true, desc: 'Ngân sách Khối, Thông tin & Nghiệm thu của Khối', badge: khoiTodo.count || undefined },
         ...(isDualGdkUser ? [{ value: 'team-mgmt', label: 'Phòng KD của tôi', icon: Users, color: 'text-indigo-600', activeBg: 'bg-indigo-600', activeText: 'text-white font-black', visible: true, desc: 'GĐKD kiêm nhiệm: NS Phòng, Duyệt NVKD, Báo cáo Phòng', badge: vnActionable.length || undefined }] : []),
+        ...(isGdkBanDeputy ? [{ value: 'bankd-mgmt', label: 'Quản lý Ban KD', icon: Briefcase, color: 'text-blue-600', activeBg: 'bg-indigo-600', activeText: 'text-white font-black', visible: true, desc: 'GĐK kiêm Phó Ban: Ngân sách Ban & duyệt NS Ban (mọi Khối trong Ban)' }] : []),
       ];
     }
     if (lockedScreen?.tab === 'bankd-mgmt') {
@@ -3963,7 +3973,7 @@ export default function AuthenticatedApp() {
       { value: 'support', label: 'Hỗ trợ kỹ thuật', icon: MessageCircle, color: 'text-blue-500', activeBg: 'bg-indigo-600', activeText: 'text-white font-black', visible: hasPermission('support.create') || hasPermission('support.resolve'), badge: pendingSupportCount, desc: 'Yêu cầu hỗ trợ, phản hồi sự cố' },
     ].filter(item => item.visible);
   })(); return [...(canHome ? [homeItem] : []), ...base.map((m: any) => (m.value === 'home' ? { ...m, label: 'Tổng quan báo cáo' } : m)), ...sysItems, ...(canInfo ? [infoItem] : []), ...(canGuide ? [guideItem] : [])];
-  }, [canHome, sysItems.length, canGuide, canInfo, lockedScreen, isUser, hasPermission, isGDKD, isMod, isGDKhoi, isTroLyKhoi, isAssistant, isAdmin, isSuperAdmin, isAccountant, myBlocks, userAllowedBlocks, myBanKds, userAllowedBanKds, pendingSupportCount, vnGate, vnPendingReqs.length, vnActionable.length, isDualGdkUser, hasApprovedKdTeam, khoiTodo.count]);
+  }, [canHome, sysItems.length, canGuide, canInfo, lockedScreen, isUser, hasPermission, isGDKD, isMod, isGDKhoi, isTroLyKhoi, isAssistant, isAdmin, isSuperAdmin, isAccountant, myBlocks, userAllowedBlocks, myBanKds, userAllowedBanKds, pendingSupportCount, vnGate, vnPendingReqs.length, vnActionable.length, isDualGdkUser, isGdkBanDeputy, hasApprovedKdTeam, khoiTodo.count]);
 
   // Sidebar nav: promote Ngân sách / Ngân sách Khối / Đối ứng out of admin submenu (IA hướng A)
   const shellNavItems = useMemo(() => {
@@ -4029,7 +4039,7 @@ export default function AuthenticatedApp() {
   useEffect(() => {
     if (!user || !lockedScreen || vnGate) return;
     if (!lockedAllows(activeTab)) setActiveTab(lockedScreen.tab);
-  }, [user, lockedScreen, activeTab]);
+  }, [user, lockedScreen, activeTab, lockedAllows]);
 
 
   // Landing / URL guard: if the current screen is one this role cannot use (rules would deny
@@ -5978,7 +5988,7 @@ export default function AuthenticatedApp() {
           // Deep link (vd. /quan-ly-phong-kd, F5 trên một màn): giữ màn theo URL; các guard quyền phía sau vẫn áp dụng.
           const landingPath = (window.location.pathname || '/').replace(/\/+$/, '') || '/';
           const isDeepLink = !['/', '/dang-nhap', '/login'].includes(landingPath);
-          if (isDeepLink && (!lockedLanding || /^\/(huong-dan|thong-tin-ho-tro|trang-chu)(\/|$)/.test(landingPath) || (lockedLanding === 'block-mgmt' && /^\/quan-ly-phong-kd(\/|$)/.test(landingPath)))) {
+          if (isDeepLink && (!lockedLanding || keepsDeepLinkForLockedRole(initialRoleKey, landingPath))) {
             // không đổi activeTab: useAppRouteSync đã đồng bộ từ URL
           } else if (!isDeepLink) {
             // Trang chủ theo vai trò (batch 24/10) cho mọi vai trò; người chờ duyệt bị guard riêng đưa về «Chờ duyệt».
@@ -19716,7 +19726,7 @@ export default function AuthenticatedApp() {
                         <DialogTitle>Gán Phó Ban KD</DialogTitle>
                         <DialogDescription>
                           {phoBanDialogUser ? (phoBanDialogUser.fullName || phoBanDialogUser.email) : ''} sẽ có vai trò <strong>Phó Ban KD</strong>:
-                          khi đăng nhập chỉ thấy <strong>Quản lý Ban KD</strong> (xem Ngân sách Ban — không duyệt). Cần chọn đúng 1 Ban.
+                          khi đăng nhập chỉ thấy <strong>Quản lý Ban KD</strong> (xem và duyệt / từ chối Ngân sách Ban; quyết định của Trưởng Ban được ưu tiên và là quyết định cuối). Cần chọn đúng 1 Ban.
                         </DialogDescription>
                       </DialogHeader>
                       <div className="max-h-[320px] overflow-y-auto rounded-xl border border-[var(--mh-border)] divide-y divide-slate-100">

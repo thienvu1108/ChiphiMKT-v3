@@ -67,6 +67,7 @@ import { BanBanner } from '../vnext/BanBanner';
 import { BanNsApprovePanel } from '../vnext/BanNsApprovePanel';
 import { BAN_STATUS_LABEL, effectiveBanStatus } from '../../lib/vnext/banSupport';
 import { banKdLeaderCapabilities, isBanKdDeputy, isBanKdLeader } from '../lib/orgPermissions';
+import { mergeBanLines } from '../lib/banLinesFromSupport';
 import { planSetDeputy, planUnsetDeputy, planExclusiveSetDeputy, banRoleOf, BAN_ROLE_LABEL, authUidOf, isDeputyOf, roleAfterSetDeputy, roleAfterUnsetDeputy } from '../lib/banRoleSync';
 import { BanPendingGate } from '../vnext/BanPendingGate';
 import type { VCtx } from '../vnext/ctx';
@@ -205,7 +206,10 @@ export const BanKdManagementView: React.FC<BanKdManagementViewProps> = ({
   }, [currentBanProjectIds]);
 
   // Từ Tháng 11/2026 (v-next): NS đăng ký nằm ở ns_lines (Phòng/Khối) — nghe theo dự án của Ban, gộp theo Dự án × Khối × Kỳ.
-  const [nsBanLines, setNsBanLines] = useState<any[]>([]);
+  // nsOwnLines = ns_lines mà rules cho đọc. GĐK kiêm Phó Ban: chỉ Khối mình → gộp thêm dòng dựng từ nsSupport (nsBanLines, bên dưới).
+  const [nsOwnLines, setNsBanLines] = useState<any[]>([]);
+  // GĐ Khối kiêm Phó Ban của Ban đang chọn: ns_lines Khối khác bị rules chặn → đọc nsSupport theo dự án Ban (isBanMgrOf).
+  const isKhoiDeputy = normalizeRoleKey(userProfile?.role) === 'gd_khoi' && isCurrentBanDeputy;
   const banProjectKey = useMemo(() => [...currentBanProjectIds].sort().join(','), [currentBanProjectIds]);
   useEffect(() => {
     const ids = banProjectKey ? banProjectKey.split(',') : [];
@@ -245,16 +249,21 @@ export const BanKdManagementView: React.FC<BanKdManagementViewProps> = ({
     const push = () => setBanSup(Object.fromEntries(Object.values(parts).flat().map((x: any) => [x.id, x])));
     const isKm = ['gd_khoi', 'tro_ly_khoi'].includes(normalizeRoleKey(userProfile?.role) as any);
     const qs: any[] = [];
-    if (isKm) for (const b of myBlockIds.filter(Boolean)) qs.push(query(collection(db, SUPPORT_COLLECTION), where('blockId', '==', b)));
+    if (isKm && !isKhoiDeputy) for (const b of myBlockIds.filter(Boolean)) qs.push(query(collection(db, SUPPORT_COLLECTION), where('blockId', '==', b)));
     else for (let i = 0; i < ids.length; i += 30) qs.push(query(collection(db, SUPPORT_COLLECTION), where('projectId', 'in', ids.slice(i, i + 30))));
     setBanSupErr(false);
     const us = qs.map((q, i) => onSnapshot(q, (x: any) => { parts[i] = x.docs.map((d: any) => ({ id: d.id, ...d.data() })); push(); }, () => { parts[i] = []; setBanSupErr(true); push(); }));
     return () => us.forEach((u: any) => u && u());
-  }, [currentActiveBanKd?.id, banProjectKey, userProfile?.role, myBlockIds.join(',')]);
+  }, [currentActiveBanKd?.id, banProjectKey, userProfile?.role, myBlockIds.join(','), isKhoiDeputy]);
+  const nsBanLines = useMemo<any[]>(
+    () => (isKhoiDeputy ? mergeBanLines(nsOwnLines, Object.values(banSup) as any[], currentBanProjectIds, (uid) => (allUsers || []).find((u: any) => u.uid === uid || u.id === uid)?.fullName || '') : nsOwnLines),
+    [isKhoiDeputy, nsOwnLines, banSup, currentBanProjectIds, allUsers],
+  );
   const banPay = usePayMap(db);
 
   // Popup Trưởng Ban: NS + nsSupport trên MỌI Ban đang lead (không chỉ Ban đang chọn).
-  const [leaderAllNs, setLeaderAllNs] = useState<any[]>([]);
+  const [leaderAllNsOwn, setLeaderAllNs] = useState<any[]>([]);
+  const isKhoiRole = normalizeRoleKey(userProfile?.role) === 'gd_khoi';
   const [leaderAllSup, setLeaderAllSup] = useState<Record<string, any>>({});
   useEffect(() => {
     const ids = ledBanProjectKey ? ledBanProjectKey.split(',') : [];
@@ -263,13 +272,25 @@ export const BanKdManagementView: React.FC<BanKdManagementViewProps> = ({
     const push = () => setLeaderAllNs(Object.values(parts).flat());
     const chunks: string[][] = [];
     for (let i = 0; i < ids.length; i += 30) chunks.push(ids.slice(i, i + 30));
+    // GĐK kiêm Phó Ban: rules chỉ cho đọc ns_lines Khối mình → truy vấn theo blockId (Khối khác lấy từ nsSupport, gộp bên dưới).
+    if (isKhoiRole) {
+      const inBan = new Set(ids);
+      const bids = myBlockIds.filter(Boolean);
+      const us = bids.map((b, i) => onSnapshot(
+        query(collection(db, NS_COLLECTION), where('blockId', '==', b)),
+        (s: any) => { parts[i] = s.docs.map((d: any) => ({ id: d.id, ...d.data() })).filter((l: any) => inBan.has(l.projectId)); push(); },
+        () => { parts[i] = []; push(); },
+      ));
+      if (!bids.length) setLeaderAllNs([]);
+      return () => us.forEach((u: any) => u && u());
+    }
     const unsubs = chunks.map((ch, i) => onSnapshot(
       query(collection(db, NS_COLLECTION), where('projectId', 'in', ch)),
       (s: any) => { parts[i] = s.docs.map((d: any) => ({ id: d.id, ...d.data() })); push(); },
       () => { parts[i] = []; push(); },
     ));
     return () => unsubs.forEach((u: any) => u && u());
-  }, [isLeaderOfAny, ledBanProjectKey]);
+  }, [isLeaderOfAny, ledBanProjectKey, isKhoiRole, myBlockIds.join(',')]);
   useEffect(() => {
     const ids = ledBanProjectKey ? ledBanProjectKey.split(',') : [];
     if (!isLeaderOfAny || !ids.length) { setLeaderAllSup({}); return; }
@@ -280,6 +301,10 @@ export const BanKdManagementView: React.FC<BanKdManagementViewProps> = ({
     const us = qs.map((q, i) => onSnapshot(q, (x: any) => { parts[i] = x.docs.map((d: any) => ({ id: d.id, ...d.data() })); push(); }, () => { parts[i] = []; push(); }));
     return () => us.forEach((u: any) => u && u());
   }, [isLeaderOfAny, ledBanProjectKey]);
+  const leaderAllNs = useMemo<any[]>(
+    () => (isKhoiRole ? mergeBanLines(leaderAllNsOwn, Object.values(leaderAllSup) as any[], new Set(ledBanProjectKey ? ledBanProjectKey.split(',') : []), (uid) => (allUsers || []).find((u: any) => u.uid === uid || u.id === uid)?.fullName || '') : leaderAllNsOwn),
+    [isKhoiRole, leaderAllNsOwn, leaderAllSup, ledBanProjectKey, allUsers],
+  );
   const banCtx: VCtx = useMemo(() => ({
     db, uid: user?.uid || '', email: user?.email || userProfile?.email || '', name: userProfile?.fullName || user?.displayName || user?.email || '',
     role: normalizeRoleKey(userProfile?.role || user?.role) as any, teamId: userProfile?.teamId || '',
@@ -1578,7 +1603,7 @@ export const BanKdManagementView: React.FC<BanKdManagementViewProps> = ({
           <DialogHeader>
             <DialogTitle>Thêm Phó Ban · {currentActiveBanKd?.name}</DialogTitle>
             <DialogDescription>
-              Đồng bộ ban_kd.deputyUids và users.assignedBanKds. Vai trò thường → «Phó Ban KD»; Admin/GĐK/Trưởng… giữ vai trò. Miễn cập nhật STK.
+              Đồng bộ ban_kd.deputyUids và users.assignedBanKds. Vai trò thường → «Phó Ban KD»; Admin/GĐK/Trưởng… giữ vai trò. Miễn cập nhật STK. Phó Ban được duyệt / từ chối Ngân sách Ban; quyết định của Trưởng Ban được ưu tiên và là quyết định cuối.
             </DialogDescription>
           </DialogHeader>
           <div className="relative my-2">

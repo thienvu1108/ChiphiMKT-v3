@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import {
-  filterNavForRole, isLockedRole, isScreenAllowedForRole, landingTabForRole, lockedScreenForRole, redirectPathForRole,
+  filterNavForRole, isLockedRole, isScreenAllowedForRole, landingTabForRole, lockedScreenForRole, redirectPathForRole, keepsDeepLinkForLockedRole,
 } from '../src/lib/roleMenu';
 import { normalizeRoleKey, ruleHasPerm, uiHasPermission, RULE_DEFAULT_PERMS } from '../src/lib/rolePermissions';
 import { APP_ROUTES, tabsFromPath } from '../lib/routes';
@@ -128,5 +128,24 @@ describe('firestore.rules ↔ UI stay in sync for the locked roles', () => {
   });
   it('normalizedUserRole() maps truong_ban_kd', () => {
     expect(rules).toMatch(/r == 'truong_ban_kd'[^?]*\? 'truong_ban_kd'/);
+  });
+});
+
+describe('keepsDeepLinkForLockedRole', () => {
+  it('gd_khoi keeps /quan-ly-ban-kd (guards decide later), but not /admin', () => {
+    expect(keepsDeepLinkForLockedRole('gd_khoi', '/quan-ly-ban-kd')).toBe(true);
+    expect(keepsDeepLinkForLockedRole('gd_khoi', '/quan-ly-ban-kd/')).toBe(true);
+    expect(keepsDeepLinkForLockedRole('gd_khoi', '/admin')).toBe(false);
+    expect(keepsDeepLinkForLockedRole('gd_khoi', '/quan-ly-phong-kd')).toBe(true);
+    expect(keepsDeepLinkForLockedRole('gd_khoi', '/huong-dan')).toBe(true);
+  });
+  it('tro_ly_khoi does not keep /quan-ly-ban-kd; truong_ban_kd unchanged', () => {
+    expect(keepsDeepLinkForLockedRole('tro_ly_khoi', '/quan-ly-ban-kd')).toBe(false);
+    expect(keepsDeepLinkForLockedRole('truong_ban_kd', '/quan-ly-phong-kd')).toBe(false);
+    expect(keepsDeepLinkForLockedRole('truong_ban_kd', '/admin')).toBe(false);
+    expect(keepsDeepLinkForLockedRole('truong_ban_kd', '/trang-chu')).toBe(true);
+  });
+  it('unlocked roles always keep', () => {
+    expect(keepsDeepLinkForLockedRole('admin', '/admin')).toBe(true);
   });
 });

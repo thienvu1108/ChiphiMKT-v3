@@ -59,7 +59,7 @@ export const RULE_DEFAULT_PERMS: Record<RoleKey, string[]> = {
   // Trưởng ban KD: only Quản lý Ban KD (Ngân sách Ban = block budgets of the Ban's projects,
   // Nghiệm thu MKT theo Ban = acceptances). Scope to own Ban is enforced in UI + ban_kd rules.
   truong_ban_kd: ['report_nt.view', 'block_budget.view'],
-  // Phó Ban KD: xem Quản lý Ban KD (không duyệt NS Ban — UI canApprove = leader only).
+  // Phó Ban KD: Quản lý Ban KD; duyệt NS Ban được (Trưởng Ban ưu tiên, xem banApprover.ts).
   pho_ban_kd: ['report_nt.view', 'block_budget.view'],
   gdkd: ['home.view', 'history.view', 'actual.view', 'register.view', 'mkt_efficiency.view', 'report_nt.view'],
   assistant: ['home.view', 'history.view', 'actual.view', 'actual.create', 'actual.edit', 'register.view', 'register.create', 'register.edit', 'mkt_efficiency.view', 'report_nt.view', 'block.view', 'block_budget.view', 'block_budget.create', 'block_budget.edit', 'block_budget.delete', 'reciprocal_budget.view', 'reciprocal_budget.create', 'reciprocal_budget.edit', 'reciprocal_budget.delete'],
