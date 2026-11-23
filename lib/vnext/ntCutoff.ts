@@ -27,3 +27,26 @@ export function cutoffFromInput(s: string): Date | null {
 /** Bản ghi đã chịu ràng buộc (tạo sau go-live). */
 export function recordNeedsImplementer(rec: any): boolean { return rec?.ntRequired === true; }
 export const NT_REQUIRED_MSG = 'Bản ghi Nghiệm thu mới (từ ngày go-live) bắt buộc chọn Người phụ trách.';
+
+export const NT_CFG_LOADING_MSG = 'Đang tải cấu hình, vui lòng thử lại sau vài giây.';
+export type NtRequiredDecision = { ok: boolean; required: boolean; msg?: string };
+/**
+ * Quyết định bản ghi mới có phải mang ntRequired=true không, KHÔNG phụ thuộc prop có thể chưa tải
+ * (settings/global tải sau → prop null/undefined; rules vẫn bắt ntRequired nên thiếu cờ = permission-denied).
+ * - Prop đã cho thấy bắt buộc → true (không cần fetch).
+ * - Ngược lại đọc settings/global lúc lưu (fetchCutoff trả ntImplementerRequiredFrom, hoặc null nếu chưa đặt).
+ * - Fetch lỗi: nếu prop có giá trị (đã tải, chưa tới mốc) dùng prop; còn không → chặn, không gửi thiếu cờ.
+ */
+export async function resolveNtRequired(
+  propCutoff: any,
+  fetchCutoff: () => Promise<any>,
+  now: Date = new Date(),
+): Promise<NtRequiredDecision> {
+  if (ntImplementerRequired(propCutoff, now)) return { ok: true, required: true };
+  try {
+    return { ok: true, required: ntImplementerRequired(await fetchCutoff(), now) };
+  } catch {
+    if (cutoffDate(propCutoff)) return { ok: true, required: false };
+    return { ok: false, required: false, msg: NT_CFG_LOADING_MSG };
+  }
+}
