@@ -30,7 +30,7 @@ import { useAppRouteSync } from '@/hooks/useAppRouteSync';
 import { useLocation } from 'react-router-dom';
 import { normalizeRoleKey, ruleHasPerm, uiHasPermission, findRolePermDoc, type RoleKey } from './lib/rolePermissions';
 import { isBanKdLeader, isBanKdManager, isBanKdDeputy } from './lib/orgPermissions';
-import { lockedScreenForRole, filterNavForRole, redirectPathForRole, landingTabForRole, extraLockedScreenForRole } from './lib/roleMenu';
+import { lockedScreenForRole, filterNavForRole, redirectPathForRole, landingTabForRole, extraLockedScreenForRole, keepsDeepLinkForLockedRole } from './lib/roleMenu';
 import { planTruongBanAssignment, userLeadsBan } from './lib/truongBanAssignment';
 import { planLeaderSync, planClearLeadership, planSetDeputy, planUnsetDeputy, planDeputyRoleSync, planExclusiveSetDeputy, planClearDeputyship, roleAfterSetDeputy, roleAfterUnsetDeputy, banRoleOf, BAN_ROLE_LABEL, authUidOf } from './lib/banRoleSync';
 import { BanKdAssignDialog, ConfirmChangeDialog, type PendingChange } from './components/users/AssignDialogs';
@@ -5988,7 +5988,7 @@ export default function AuthenticatedApp() {
           // Deep link (vd. /quan-ly-phong-kd, F5 trên một màn): giữ màn theo URL; các guard quyền phía sau vẫn áp dụng.
           const landingPath = (window.location.pathname || '/').replace(/\/+$/, '') || '/';
           const isDeepLink = !['/', '/dang-nhap', '/login'].includes(landingPath);
-          if (isDeepLink && (!lockedLanding || /^\/(huong-dan|thong-tin-ho-tro|trang-chu)(\/|$)/.test(landingPath) || (lockedLanding === 'block-mgmt' && /^\/quan-ly-phong-kd(\/|$)/.test(landingPath)))) {
+          if (isDeepLink && (!lockedLanding || keepsDeepLinkForLockedRole(initialRoleKey, landingPath))) {
             // không đổi activeTab: useAppRouteSync đã đồng bộ từ URL
           } else if (!isDeepLink) {
             // Trang chủ theo vai trò (batch 24/10) cho mọi vai trò; người chờ duyệt bị guard riêng đưa về «Chờ duyệt».

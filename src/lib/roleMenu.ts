@@ -73,6 +73,21 @@ export function redirectPathForRole(role: unknown, pathname: string, isBanDeputy
   return locked.path;
 }
 
+/**
+ * Initial deep link (F5 / pasted URL): may a locked role keep the URL instead of being forced to its
+ * locked landing? Later guards (lockedAllows / redirectPathForRole) still bounce disallowed screens
+ * once the scope data (ban_kd) has loaded, e.g. a gd_khoi who is NOT a Phó Ban.
+ */
+export function keepsDeepLinkForLockedRole(role: unknown, pathname: string): boolean {
+  const locked = lockedScreenForRole(role);
+  if (!locked) return true;
+  const clean = (pathname || '/').replace(/\/+$/, '') || '/';
+  const under = (p: string) => clean === p || clean.startsWith(p + '/');
+  if (/^\/(huong-dan|thong-tin-ho-tro|trang-chu)(\/|$)/.test(clean)) return true;
+  if (locked.tab === 'block-mgmt' && /^\/quan-ly-phong-kd(\/|$)/.test(clean)) return true;
+  return normalizeRoleKey(role) === 'gd_khoi' && under(GDK_DEPUTY_BAN_SCREEN.path);
+}
+
 /** Landing tab after login for a locked role (null → use the normal landing logic). */
 export function landingTabForRole(role: unknown): string | null {
   return lockedScreenForRole(role)?.tab || null;
