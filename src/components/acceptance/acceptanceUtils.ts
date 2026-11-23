@@ -417,15 +417,24 @@ export const getSortValue = (item: any, key: string, teams: any[] = [], blocks: 
   }
 };
 
+/** «Tiền trên hoá đơn» theo kênh (bố cục từ T11/2026). */
+export const HOA_DON_CHANNEL_FIELDS = [
+  'hoaDonFb', 'hoaDonZalo', 'hoaDonTiktok', 'hoaDonGoogle', 'hoaDonDangTin', 'hoaDonUCall', 'hoaDonNativeAds', 'hoaDonKhac',
+] as const;
+
+/** Các ô tiền được lưu chi tiết từng dòng (costBreakdowns) để xem lại / sửa lại sau khi lưu. */
+export const COST_BREAKDOWN_FIELDS = [
+  'digitalFb', 'digitalZalo', 'digitalTiktok', 'digitalKhac',
+  'visaFb', 'visaZalo', 'visaTiktok', 'visaDangTin',
+  'dangTinCtyChuaVat',
+  'caNhanFb', 'caNhanDangTin', 'caNhanZalo', 'caNhanGoogle', 'caNhanTiktok', 'caNhanNativeAds', 'caNhanUCall', 'caNhanKhac',
+  'caNhanNapTienQuaCty', 'caNhanNapTienCty',
+  'caNhanNopTien', 'hoaDonTien',
+  ...HOA_DON_CHANNEL_FIELDS,
+];
+
 export const buildCostBreakdownsOfRecord = (rowState: any) => {
-  const fields = [
-    'digitalFb', 'digitalZalo', 'digitalTiktok', 'digitalKhac',
-    'visaFb', 'visaZalo', 'visaTiktok', 'visaDangTin',
-    'dangTinCtyChuaVat',
-    'caNhanFb', 'caNhanDangTin', 'caNhanZalo', 'caNhanGoogle', 'caNhanTiktok', 'caNhanNativeAds', 'caNhanUCall',
-    'caNhanNapTienQuaCty', 'caNhanNapTienCty',
-    'caNhanNopTien', 'hoaDonTien'
-  ];
+  const fields = COST_BREAKDOWN_FIELDS;
 
   const breakdowns: any = {};
   for (const field of fields) {
