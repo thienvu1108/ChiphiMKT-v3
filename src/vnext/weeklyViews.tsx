@@ -5,7 +5,7 @@ import { Card, Btn, Badge, Th, Td, Field, Select, MoneyInput, Input, Kpi, Empty,
 import { vnCan } from './ctx';
 import { type VCtx, projectName, teamName, blockName, userName, uidOf, blockOfTeam, useWeekly, isAdm, canViewAll } from './ctx';
 import { userNsByProject, type NsLine } from '../../lib/vnext/budget';
-import { WEEKLY_COLLECTION, weeklyId, formProjects, prevCum, itemMetrics, validateItem, freezeOnSubmit, rollup, byProject, scopeKhoiReports, NON_REPORTING_ROLES, khoiRegistrants, projectRows, sumProjectRowKpis, type ProjectRow, type WeeklyItem, type WeeklyReport, type BlockNode } from '../../lib/vnext/weekly';
+import { WEEKLY_COLLECTION, weeklyId, formProjects, prevCum, itemMetrics, validateItem, freezeOnSubmit, rollup, byProject, scopeKhoiReports, NON_REPORTING_ROLES, khoiRegistrants, projectRows, sumProjectRowKpis, DOTS_PER_PERIOD, type DotSel, type ProjectRow, type WeeklyItem, type WeeklyReport, type BlockNode } from '../../lib/vnext/weekly';
 import { dotsOf, currentDot, periodLabel, dotReportWindow, openReportDot } from '../../lib/vnext/period';
 import { loadXlsx } from '../lib/loadXlsx';
 import { exportBaseName, blockCodeOf, teamCodeOf } from '../../lib/vnext/exportName';
@@ -20,12 +20,12 @@ export function reportableNsInclude(line: NsLine, sup: Record<string, Partial<Su
   return isNsReportableLine(line, sup[line.id], payOf(pay, line.ownerUid));
 }
 
-function DotChips({ period, dot, onChange, submitted }: { period: string; dot: number; onChange: (n: number) => void; submitted?: Set<number> }) {
+function DotChips({ period, dot, onChange, submitted, month }: { period: string; dot: number; onChange: (n: number) => void; submitted?: Set<number>; month?: { on: boolean; onClick: () => void } }) {
   const cur = currentDot(period);
   return (
-    <div className="grid grid-cols-2 md:grid-cols-4 gap-2">
+    <div className={`grid grid-cols-2 gap-2 ${month ? 'md:grid-cols-5' : 'md:grid-cols-4'}`}>
       {dotsOf(period).map((d) => {
-        const on = d.n === dot;
+        const on = !month?.on && d.n === dot;
         const win = dotReportWindow(period, d.n);
         const badge = win.isOpen
           ? <span className={`text-[9px] px-1.5 py-0.5 rounded ${on ? 'bg-[var(--mh-surface)]/20' : 'bg-[var(--mh-ok)] text-white'}`}>ĐANG MỞ</span>
@@ -42,6 +42,12 @@ function DotChips({ period, dot, onChange, submitted }: { period: string; dot: n
           </button>
         );
       })}
+      {month && (
+        <button onClick={month.onClick} className={`text-left rounded-xl border px-3 py-2 col-span-2 md:col-span-1 ${month.on ? 'bg-[var(--mh-navy)] border-[var(--mh-navy)] text-white' : 'bg-[var(--mh-surface)] border-[var(--mh-border)]'}`} data-testid="vn-weekly-dot-month">
+          <div className="text-[13px] font-semibold">Cả tháng</div>
+          <div className={`text-[11px] ${month.on ? 'text-white/80' : 'text-[var(--mh-text-2)]'}`}>Gộp {DOTS_PER_PERIOD} đợt của kỳ</div>
+        </button>
+      )}
     </div>
   );
 }
@@ -206,7 +212,7 @@ export function WeeklyForm({ c, period, lines, blockId }: { c: VCtx; period: str
 // ------------------------------------------------------------------ Rollup view (Phòng / Khối / Ban / Quản lý Báo cáo)
 export type RollScope = { teamIds?: string[]; blockIds?: string[]; projectIds?: string[] };
 
-export function useRollup(c: VCtx, period: string, dot: number, lines: NsLine[], scope: RollScope, filters: { blockId?: string; teamId?: string; projectId?: string }) {
+export function useRollup(c: VCtx, period: string, dot: DotSel, lines: NsLine[], scope: RollScope, filters: { blockId?: string; teamId?: string; projectId?: string }) {
   const { reports: allReports } = useWeekly(c, period, 'all', scope.blockIds);
   const sup = useSupport(c, [period], scope.blockIds ? { blockIds: scope.blockIds } : scope.teamIds ? {} : {});
   const pay = usePayMap(c.db);
@@ -239,9 +245,9 @@ export function useRollup(c: VCtx, period: string, dot: number, lines: NsLine[],
   }, [c, period, dot, reportableLines, scope, filters.blockId, filters.teamId, filters.projectId, allReports, sup]);
 }
 
-export async function exportRollupXlsx(c: VCtx, period: string, dot: number, rows: ProjectRow[], fileName: string) {
+export async function exportRollupXlsx(c: VCtx, period: string, dot: DotSel, rows: ProjectRow[], fileName: string) {
   const XLSX = await loadXlsx();
-  const out = rows.map((r) => ({ Kỳ: periodLabel(period), Đợt: dot, Khối: blockName(c, r.blockId), Phòng: teamName(c, r.teamId), User: r.userName, 'Dự án': projectName(c, r.projectId), 'Trạng thái': r.status === 'submitted' ? 'Đã nộp' : 'Chưa nộp', NS: r.ns, 'Chi phí luỹ kế': r.cum, 'Chi đợt này': r.dotCost, '% dùng': r.pct ?? '', Lead: r.leads, 'Khách QT': r.interested, 'Số căn chốt': r.closedUnits, 'Giá TB/lead': r.cpl ?? '', 'Vượt NS': r.over ? 'Có' : '', 'Không còn NS': r.noBudget ? 'Có' : '', 'Khó khăn': r.difficulty || '' }));
+  const out = rows.map((r) => ({ Kỳ: periodLabel(period), Đợt: dot === 'month' ? 'Cả tháng' : dot, Khối: blockName(c, r.blockId), Phòng: teamName(c, r.teamId), User: r.userName, 'Dự án': projectName(c, r.projectId), 'Trạng thái': r.status === 'submitted' ? 'Đã nộp' : 'Chưa nộp', 'Nộp Báo cáo': `${r.dotsSubmitted}/${DOTS_PER_PERIOD}`, NS: r.ns, 'Chi phí luỹ kế': r.cum, 'Chi đợt này': r.dotCost, '% dùng': r.pct ?? '', Lead: r.leads, 'Khách QT': r.interested, 'Số căn chốt': r.closedUnits, 'Giá TB/lead': r.cpl ?? '', 'Vượt NS': r.over ? 'Có' : '', 'Không còn NS': r.noBudget ? 'Có' : '', 'Khó khăn': r.difficulty || '' }));
   const ws = XLSX.utils.json_to_sheet(out);
   const wb = XLSX.utils.book_new();
   XLSX.utils.book_append_sheet(wb, ws, 'Bao cao tuan');
@@ -259,7 +265,7 @@ function ProjectRowsTable({ c, rows, levels, onEdit }: { c: VCtx; rows: ProjectR
   const st = (r: ProjectRow) => <>{st0(r)}{onEdit && r.status === 'submitted' && <> <Btn small className="min-h-11 md:min-h-0" onClick={() => onEdit(r.uid, r.userName)} data-testid="vn-weekly-admin-edit-p">✎ Sửa</Btn></>}</>;
   return (
     <>
-      <div className="hidden md:block overflow-x-auto" data-testid="vn-report-project-table"><table className="w-full min-w-[980px]"><thead><tr>{showB && <Th>Khối</Th>}{showT && <Th>Phòng</Th>}<Th>User</Th><Th>Dự án</Th><Th>Trạng thái</Th><Th r>NS</Th><Th r>Chi phí luỹ kế</Th><Th r>Chi đợt này</Th><Th r>% dùng</Th><Th r>Lead</Th><Th r>Khách QT</Th><Th r>Số căn chốt</Th><Th r>Giá TB/lead</Th><Th r>Vượt NS</Th></tr></thead><tbody>
+      <div className="hidden md:block overflow-x-auto" data-testid="vn-report-project-table"><table className="w-full min-w-[1060px]"><thead><tr>{showB && <Th>Khối</Th>}{showT && <Th>Phòng</Th>}<Th>User</Th><Th>Dự án</Th><Th>Trạng thái</Th><Th r>Nộp Báo cáo</Th><Th r>NS</Th><Th r>Chi phí luỹ kế</Th><Th r>Chi đợt này</Th><Th r>% dùng</Th><Th r>Lead</Th><Th r>Khách QT</Th><Th r>Số căn chốt</Th><Th r>Giá TB/lead</Th><Th r>Vượt NS</Th></tr></thead><tbody>
         {rows.map((r, i) => {
           const prev = rows[i - 1];
           const newB = !prev || prev.blockId !== r.blockId, newT = newB || prev.teamId !== r.teamId, newU = newT || prev.uid !== r.uid;
@@ -270,6 +276,7 @@ function ProjectRowsTable({ c, rows, levels, onEdit }: { c: VCtx; rows: ProjectR
               <Td className="whitespace-nowrap">{newU ? r.userName : ''}</Td>
               <Td className="font-medium">{projectName(c, r.projectId)}{r.noBudget && <> <Badge c="mute">Không còn ngân sách</Badge></>}{r.difficulty && <div className="text-[11px] italic text-[var(--mh-text-2)]">“{r.difficulty}”</div>}</Td>
               <Td className="whitespace-nowrap">{st(r)}</Td>
+              <Td r className="whitespace-nowrap" data-testid="vn-report-dots">{r.dotsSubmitted}/{DOTS_PER_PERIOD}</Td>
               <Td r>{fmt(r.ns)}</Td><Td r>{r.status === 'submitted' ? fmt(r.cum) : '—'}</Td><Td r>{r.status === 'submitted' ? fmt(r.dotCost) : '—'}</Td><Td r><Pct pct={r.pct} over={r.over} /></Td><Td r>{fmt(r.leads)}</Td><Td r>{fmt(r.interested)}</Td><Td r>{fmt(r.closedUnits)}</Td><Td r>{r.cpl ? fmt(r.cpl) : '—'}</Td><Td r>{r.over ? <Badge c="err">Vượt</Badge> : ''}</Td>
             </tr>
           );
@@ -281,6 +288,7 @@ function ProjectRowsTable({ c, rows, levels, onEdit }: { c: VCtx; rows: ProjectR
             <div className="flex items-start gap-2"><div className="flex-1 font-semibold">{projectName(c, r.projectId)}</div>{st(r)}</div>
             <div className="text-[11px] text-[var(--mh-text-2)]">{[showB && blockName(c, r.blockId), showT && teamName(c, r.teamId), r.userName].filter(Boolean).join(' · ')}</div>
             <div className="grid grid-cols-3 gap-1 mt-1 text-[12px]"><div>NS <b>{fmtM(r.ns)}</b></div><div>Luỹ kế <b>{r.status === 'submitted' ? fmtM(r.cum) : '—'}</b></div><div>Lead <b>{fmt(r.leads)}</b></div></div>
+            <div className="text-[12px] mt-0.5">Nộp Báo cáo <b>{r.dotsSubmitted}/{DOTS_PER_PERIOD}</b></div>
             {r.noBudget && <Badge c="mute">Không còn ngân sách</Badge>}{r.over && <Badge c="err">Vượt NS</Badge>}
           </div>
         ))}
@@ -291,7 +299,11 @@ function ProjectRowsTable({ c, rows, levels, onEdit }: { c: VCtx; rows: ProjectR
 
 export function RollupView({ c, period, lines, scope, title, levels = ['block', 'team', 'user'], showFilters = true, allowExport = true }: { c: VCtx; period: string; lines: NsLine[]; scope: RollScope; title: string; levels?: ('block' | 'team' | 'user')[]; showFilters?: boolean; allowExport?: boolean }) {
   const cd = currentDot(period);
-  const [dot, setDot] = useState(cd >= 1 && cd <= 4 ? cd : cd > 4 ? 4 : 1);
+  const [dotN, setDot] = useState(cd >= 1 && cd <= 4 ? cd : cd > 4 ? 4 : 1);
+  const [monthView, setMonthView] = useState(false);
+  const month = monthView;
+  const dot: DotSel = month ? 'month' : dotN;
+  const dotLabel = month ? 'Cả tháng' : `Đợt ${dotN}`;
   const [blockId, setBlockId] = useState('');
   const [teamId, setTeamId] = useState('');
   const [projectId, setProjectId] = useState('');
@@ -300,9 +312,10 @@ export function RollupView({ c, period, lines, scope, title, levels = ['block', 
   const [view, setView] = useState<'project' | 'user'>('project');
   const onlyMissing = status === 'missing';
   const data = useRollup(c, period, dot, lines, scope, { blockId, teamId, projectId });
-  const canAdminEdit = isAdm(c) && vnCan(c, 'vn.reports.admin_edit');
+  // Sửa/Xoá là thao tác trên 1 báo cáo của 1 đợt → tắt ở chế độ Cả tháng.
+  const canAdminEdit = !month && isAdm(c) && vnCan(c, 'vn.reports.admin_edit');
   const [adm, setAdm] = useState<{ rep: any; name: string } | null>(null);
-  const repOf = (uid: string) => (data.reports as any[]).find((r) => r.uid === uid && r.dot === dot);
+  const repOf = (uid: string) => (data.reports as any[]).find((r) => r.uid === uid && r.dot === dotN);
   const blockOpts = useMemo(() => {
     const ids = new Set<string>(c.teams.map((t) => blockOfTeam(c, t.id)).filter(Boolean));
     return [...ids].filter((b) => !scope.blockIds || scope.blockIds.includes(b));
@@ -338,15 +351,15 @@ export function RollupView({ c, period, lines, scope, title, levels = ['block', 
         <Field label="Trạng thái"><Select value={status} onChange={(v: string) => setStatus(v as StatusFilter)} options={STATUS_OPTS} data-testid="vn-report-status-filter" /></Field>
         <div className="h-9 inline-flex rounded-lg border border-[var(--mh-border)] overflow-hidden text-[13px]">{([['project', 'Theo dự án'], ['user', 'Theo người']] as const).map(([v, l]) => <button key={v} onClick={() => setView(v)} className={`px-3 ${view === v ? 'bg-[var(--mh-navy)] text-white' : 'bg-[var(--mh-surface)]'}`}>{l}</button>)}</div>
         <div className="flex-1" />
-        {allowExport && <Btn onClick={() => exportRollupXlsx(c, period, dot, rows, `${exportBaseName({ blockCode: (blockId ? [blockId] : data.blocks.map((b) => b.blockId).filter((b) => b && b !== 'unassigned')).map((b) => blockCodeOf(c.blocks.find((x) => x.id === b)) || b), month: period, teamCode: teamId ? teamCodeOf(c.teams.find((t) => t.id === teamId)) : '', projectName: projectId ? projectName(c, projectId) : '' })} - Đợt ${dot}.xlsx`)}>⬇ Xuất Excel</Btn>}
+        {allowExport && <Btn onClick={() => exportRollupXlsx(c, period, dot, rows, `${exportBaseName({ blockCode: (blockId ? [blockId] : data.blocks.map((b) => b.blockId).filter((b) => b && b !== 'unassigned')).map((b) => blockCodeOf(c.blocks.find((x) => x.id === b)) || b), month: period, teamCode: teamId ? teamCodeOf(c.teams.find((t) => t.id === teamId)) : '', projectName: projectId ? projectName(c, projectId) : '' })} - ${dotLabel}.xlsx`)}>⬇ Xuất Excel</Btn>}
       </div>
-      <DotChips period={period} dot={dot} onChange={setDot} />
-      {canAdminEdit && dotReportWindow(period, dot).state === 'closed' && <div className="text-[12px]" data-testid="vn-weekly-admin-closed"><Badge c="warn">Đợt {dot} đã đóng — Admin vẫn sửa được (bấm «✎ Sửa» ở dòng đã nộp)</Badge></div>}
+      <DotChips period={period} dot={dotN} onChange={(n) => { setMonthView(false); setDot(n); }} month={{ on: month, onClick: () => setMonthView(true) }} />
+      {canAdminEdit && dotReportWindow(period, dotN).state === 'closed' && <div className="text-[12px]" data-testid="vn-weekly-admin-closed"><Badge c="warn">Đợt {dotN} đã đóng — Admin vẫn sửa được (bấm «✎ Sửa» ở dòng đã nộp)</Badge></div>}
       <div className="grid grid-cols-2 lg:grid-cols-7 gap-3" data-testid="vn-report-kpis">
         <Kpi label="Đã nộp" value={`${kpi.submitted}/${kpi.expected}`} tone={kpi.submitted < kpi.expected ? 'err' : 'ok'} />
         <Kpi label="NS" value={fmtM(kpi.ns)} />
         <Kpi label="Chi phí luỹ kế" value={fmtM(kpi.cum)} hint={kpi.ns ? `${Math.round((kpi.cum / kpi.ns) * 100)}% NS` : undefined} />
-        <Kpi label={`Chi riêng Đợt ${dot}`} value={fmtM(kpi.dotCost)} />
+        <Kpi label={month ? 'Chi cả tháng' : `Chi riêng Đợt ${dotN}`} value={fmtM(kpi.dotCost)} />
         <Kpi label="Lead / Khách QT" value={`${fmt(kpi.leads)} / ${fmt(kpi.interested)}`} hint={kpi.leads ? `Giá TB/lead ${fmt(kpi.cum / kpi.leads)} đ` : undefined} />
         <Kpi label="Số căn chốt" value={fmt(kpi.closedUnits)} />
         <Kpi label="Dự án vượt NS" value={kpi.over} tone={kpi.over ? 'err' : undefined} />
@@ -354,7 +367,7 @@ export function RollupView({ c, period, lines, scope, title, levels = ['block', 
       <Card>
         <div className="px-4 py-3 font-semibold text-[14px] border-b border-[var(--mh-border)] flex flex-wrap gap-2 items-center"><span className="flex-1">{title}{view === 'project' && ' · theo Dự án'}</span>{view === 'project' && <span className="text-[12px] font-normal text-[var(--mh-text-2)]">{rows.length} dòng · {rowKpi.submitted}/{rowKpi.expected} dự án đã nộp</span>}</div>
         {view === 'project' ? <ProjectRowsTable c={c} rows={rows} levels={levels} onEdit={canAdminEdit ? (uid, name) => { const r = repOf(uid); if (r) setAdm({ rep: r, name }); } : undefined} /> : !flatTeams.length ? <Empty>Không có dữ liệu cho bộ lọc này</Empty> : (
-          <div className="overflow-x-auto"><table className="w-full min-w-[820px]"><thead><tr><Th>{levels.includes('block') ? 'Khối / Phòng / User' : levels.includes('team') ? 'Phòng / User' : 'User'}</Th><Th>Nộp</Th><Th r>NS</Th><Th r>Chi phí luỹ kế</Th><Th r>Chi đợt này</Th><Th r>% dùng</Th><Th r>Lead</Th><Th r>Khách QT</Th><Th r>Số căn chốt</Th><Th r>Giá TB/lead</Th><Th r>Vượt NS</Th></tr></thead><tbody>
+          <div className="overflow-x-auto"><table className="w-full min-w-[820px]"><thead><tr><Th>{levels.includes('block') ? 'Khối / Phòng / User' : levels.includes('team') ? 'Phòng / User' : 'User'}</Th><Th>Nộp</Th><Th r>Nộp Báo cáo</Th><Th r>NS</Th><Th r>Chi phí luỹ kế</Th><Th r>{month ? 'Chi cả tháng' : 'Chi đợt này'}</Th><Th r>% dùng</Th><Th r>Lead</Th><Th r>Khách QT</Th><Th r>Số căn chốt</Th><Th r>Giá TB/lead</Th><Th r>Vượt NS</Th></tr></thead><tbody>
             {data.blocks.map((b) => {
               const bk = 'b' + b.blockId;
               const bOpen = !levels.includes('block') || open[bk] !== false;
@@ -374,10 +387,11 @@ export function RollupView({ c, period, lines, scope, title, levels = ['block', 
                             <tr className={u.over ? 'bg-red-50/50' : ''}>
                               <Td className={levels.includes('team') ? 'pl-10' : ''}><button onClick={() => toggle('u' + u.uid)}>{u.projects.length ? (open['u' + u.uid] ? '▾ ' : '▸ ') : ''}{u.name}</button></Td>
                               <Td className="whitespace-nowrap">{u.submitted ? <Badge c="ok">Đã nộp</Badge> : <Badge c="err">Chưa nộp</Badge>}{canAdminEdit && u.submitted && repOf(u.uid) && <> <Btn small onClick={() => setAdm({ rep: repOf(u.uid), name: u.name })} data-testid="vn-weekly-admin-edit">Sửa/Xoá</Btn></>}</Td>
+                              <Td r className="whitespace-nowrap">{u.dotsSubmitted}/{DOTS_PER_PERIOD}</Td>
                               <Td r>{fmt(u.ns)}</Td><Td r>{fmt(u.cum)}</Td><Td r>{fmt(u.dotCost)}</Td><Td r><Pct pct={u.ns ? Math.round((u.cum / u.ns) * 1000) / 10 : null} over={u.cum > u.ns && u.ns > 0} /></Td><Td r>{fmt(u.leads)}</Td><Td r>{fmt(u.interested)}</Td><Td r>{fmt(u.closedUnits)}</Td><Td r>{u.leads ? fmt(u.cum / u.leads) : '—'}</Td><Td r>{u.over ? <Badge c="err">{u.over}</Badge> : ''}</Td>
                             </tr>
                             {open['u' + u.uid] && u.projects.map((p) => (
-                              <tr key={p.projectId} className="text-[12px]"><Td className="pl-16 text-[var(--mh-text-2)]">{projectName(c, p.projectId)}{p.noBudget && <> <Badge c="mute">Không còn ngân sách</Badge></>}{p.difficulty && <div className="text-[11px] italic">“{p.difficulty}”</div>}</Td><Td /><Td r>{fmt(p.ns)}</Td><Td r>{fmt(p.cum)}</Td><Td r>{fmt(p.dotCost)}</Td><Td r><Pct pct={p.pct} over={p.over} /></Td><Td r>{fmt(p.leads)}</Td><Td r>{fmt(p.interested)}</Td><Td r>{fmt(p.closedUnits || 0)}</Td><Td r>{p.cpl ? fmt(p.cpl) : '—'}</Td><Td r>{p.over ? <Badge c="err">Vượt</Badge> : ''}</Td></tr>
+                              <tr key={p.projectId} className="text-[12px]"><Td className="pl-16 text-[var(--mh-text-2)]">{projectName(c, p.projectId)}{p.noBudget && <> <Badge c="mute">Không còn ngân sách</Badge></>}{p.difficulty && <div className="text-[11px] italic">“{p.difficulty}”</div>}</Td><Td /><Td /><Td r>{fmt(p.ns)}</Td><Td r>{fmt(p.cum)}</Td><Td r>{fmt(p.dotCost)}</Td><Td r><Pct pct={p.pct} over={p.over} /></Td><Td r>{fmt(p.leads)}</Td><Td r>{fmt(p.interested)}</Td><Td r>{fmt(p.closedUnits || 0)}</Td><Td r>{p.cpl ? fmt(p.cpl) : '—'}</Td><Td r>{p.over ? <Badge c="err">Vượt</Badge> : ''}</Td></tr>
                             ))}
                           </React.Fragment>
                         ))}
@@ -392,7 +406,7 @@ export function RollupView({ c, period, lines, scope, title, levels = ['block', 
         )}
       </Card>
       <Card>
-        <div className="px-4 py-3 font-semibold text-[14px] border-b border-[var(--mh-border)]">Tổng hợp theo Dự án · Đợt {dot}</div>
+        <div className="px-4 py-3 font-semibold text-[14px] border-b border-[var(--mh-border)]">Tổng hợp theo Dự án · {dotLabel}</div>
         {!projOpts.length ? <Empty>Chưa có báo cáo</Empty> : (
           <div className="overflow-x-auto"><table data-mh-responsive className="w-full"><thead><tr><Th>Dự án</Th><Th r>Người báo cáo</Th><Th r>NS</Th><Th r>Chi phí luỹ kế</Th><Th r>Chi đợt này</Th><Th r>% dùng</Th><Th r>Lead</Th><Th r>Khách QT</Th><Th r>Số căn chốt</Th><Th r>Giá TB/lead</Th></tr></thead><tbody>
             {projOpts.map((p) => <tr key={p.projectId} className={p.cum > p.ns && p.ns > 0 ? 'bg-red-50/50' : ''}><Td className="font-medium">{projectName(c, p.projectId)}</Td><Td r>{p.reporters}</Td><Td r>{fmt(p.ns)}</Td><Td r>{fmt(p.cum)}</Td><Td r>{fmt(p.dotCost)}</Td><Td r><Pct pct={p.ns ? Math.round((p.cum / p.ns) * 1000) / 10 : null} over={p.cum > p.ns && p.ns > 0} /></Td><Td r>{fmt(p.leads)}</Td><Td r>{fmt(p.interested)}</Td><Td r>{fmt(p.closedUnits)}</Td><Td r>{p.leads ? fmt(p.cum / p.leads) : '—'}</Td></tr>)}
@@ -445,5 +459,5 @@ function AdminReportModal({ c, rep, name, onClose }: { c: VCtx; rep: any; name: 
 }
 
 function AggRow({ label, a, sub, cls }: any) {
-  return <tr className={`${cls} ${a.over ? 'text-[var(--mh-text)]' : ''}`}><Td>{label}</Td><Td><span className="text-[12px]">{sub}</span></Td><Td r>{fmt(a.ns)}</Td><Td r>{fmt(a.cum)}</Td><Td r>{fmt(a.dotCost)}</Td><Td r><Pct pct={a.ns ? Math.round((a.cum / a.ns) * 1000) / 10 : null} over={a.cum > a.ns && a.ns > 0} /></Td><Td r>{fmt(a.leads)}</Td><Td r>{fmt(a.interested)}</Td><Td r>{fmt(a.closedUnits)}</Td><Td r>{a.leads ? fmt(a.cum / a.leads) : '—'}</Td><Td r>{a.over ? <Badge c="err">⚠ {a.over}</Badge> : ''}</Td></tr>;
+  return <tr className={`${cls} ${a.over ? 'text-[var(--mh-text)]' : ''}`}><Td>{label}</Td><Td><span className="text-[12px]">{sub}</span></Td><Td r className="whitespace-nowrap">{a.dotsSubmitted}/{(a.expected || 0) * DOTS_PER_PERIOD}</Td><Td r>{fmt(a.ns)}</Td><Td r>{fmt(a.cum)}</Td><Td r>{fmt(a.dotCost)}</Td><Td r><Pct pct={a.ns ? Math.round((a.cum / a.ns) * 1000) / 10 : null} over={a.cum > a.ns && a.ns > 0} /></Td><Td r>{fmt(a.leads)}</Td><Td r>{fmt(a.interested)}</Td><Td r>{fmt(a.closedUnits)}</Td><Td r>{a.leads ? fmt(a.cum / a.leads) : '—'}</Td><Td r>{a.over ? <Badge c="err">⚠ {a.over}</Badge> : ''}</Td></tr>;
 }
