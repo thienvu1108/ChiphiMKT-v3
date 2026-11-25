@@ -3,6 +3,7 @@ import { activeLock } from '../../lib/vnext/platform';
 import { lazyRetry } from '../lib/chunkReload';
 import { recordNeedsImplementer, NT_REQUIRED_MSG, resolveNtRequired } from '../../lib/vnext/ntCutoff';
 import { useLatestCallback } from '../lib/useLatestCallback';
+import { probeNtCreateDenied } from '../lib/ntDenyProbe';
 import React, { useState, useMemo, useEffect, useRef, useCallback } from 'react';
 import { loadXlsx } from '../lib/loadXlsx';
 const AdLinksModal = lazyRetry(() => import('../vnext/AdLinksModal'));
@@ -775,6 +776,7 @@ export const AcceptanceManager = React.memo(({
         t.id === draftRow.teamCode
       );
     const pr = resolveAcceptanceProject(draftRow, projects);
+    let lastPayload: any = null; // payload gửi lên (đã mutate tại chỗ) — dùng chẩn đoán khi bị từ chối
 
     try {
       const resolvedTeamName = tm?.name || (draftRow.teamName && !draftRow.teamName.startsWith('draft-') ? draftRow.teamName : tm?.teamCode || '');
@@ -891,6 +893,7 @@ export const AcceptanceManager = React.memo(({
         ]
       };
 
+      lastPayload = payload;
       let suppSel = draftRow.supplement === true ? prevMonth(normalizeMonth(payload.month)) : (typeof draftRow.supplement === 'string' ? draftRow.supplement : '');
       {
         const r0 = isSuperAdmin ? 'super_admin' : 'x';
@@ -945,6 +948,12 @@ export const AcceptanceManager = React.memo(({
       });
     } catch (err) {
       console.error('Error saving draft:', err);
+      if (String((err as any)?.code || '').includes('permission-denied')) {
+        let msg = '';
+        try { msg = (await probeNtCreateDenied(lastPayload)).message; } catch { /* dùng thông báo mặc định */ }
+        toast.error(msg || ntDeniedMsg(err, normalizeMonth(draftRow?.month), kyLooksOpen(draftRow?.month)) || 'Lỗi khi lưu bản ghi nghiệm thu');
+        return;
+      }
       toast.error(ntDeniedMsg(err, normalizeMonth(draftRow?.month), kyLooksOpen(draftRow?.month)) || 'Lỗi khi lưu bản ghi nghiệm thu');
     }
   });
