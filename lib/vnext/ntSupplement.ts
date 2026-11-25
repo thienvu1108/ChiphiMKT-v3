@@ -36,9 +36,11 @@ export function suppMonths(m: unknown, n = 12): string[] {
   return out;
 }
 /** Thông báo rõ khi luật Firestore từ chối (permission-denied) thay cho lỗi chung. */
-export function ntDeniedMsg(e: any, month?: unknown): string | null {
+export function ntDeniedMsg(e: any, month?: unknown, kyOpen = false): string | null {
   const c = String(e?.code || '');
   if (!c.includes('permission-denied')) return null;
+  // Client thấy kỳ đang mở mà vẫn bị từ chối → không phải do khoá kỳ (thường dữ liệu/cấu hình cũ).
+  if (kyOpen) return 'Không lưu được (không có quyền hoặc dữ liệu thiếu) — tải lại trang (Ctrl+Shift+R) rồi thử lại.';
   const m = /^(\d{4})-(\d{2})$/.exec(String(month || ''));
   const ky = m ? `Kỳ tháng ${+m[2]}/${m[1]}` : 'Kỳ này';
   return `${ky} đã khoá Nghiệm thu (hoặc bạn không có quyền). Chỉ Super Admin sửa được — hãy tạo bản «Nghiệm thu bổ sung» mới trong kỳ đang mở để Super Admin duyệt.`;

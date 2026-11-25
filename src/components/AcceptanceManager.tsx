@@ -1,7 +1,9 @@
 import { lockBlock, pastBlock, useLocks } from '../vnext/locks';
 import { activeLock } from '../../lib/vnext/platform';
 import { lazyRetry } from '../lib/chunkReload';
-import { ntImplementerRequired, recordNeedsImplementer, NT_REQUIRED_MSG } from '../../lib/vnext/ntCutoff';
+import { recordNeedsImplementer, NT_REQUIRED_MSG, resolveNtRequired } from '../../lib/vnext/ntCutoff';
+import { useLatestCallback } from '../lib/useLatestCallback';
+import { probeNtCreateDenied } from '../lib/ntDenyProbe';
 import React, { useState, useMemo, useEffect, useRef, useCallback } from 'react';
 import { loadXlsx } from '../lib/loadXlsx';
 const AdLinksModal = lazyRetry(() => import('../vnext/AdLinksModal'));
@@ -101,6 +103,8 @@ export const AcceptanceManager = React.memo(({
   const vnLocksNow = useLocks(db);
   /** Ô «Bổ sung cho T{M-1}» chỉ hiện khi kỳ NT của tháng M đang MỞ. */
   const suppOpenFor = (m: any) => { const mm = normalizeMonth(m); return !!mm && !activeLock(vnLocksNow, 'nt', mm); };
+  /** Client thấy kỳ của tháng này đang mở (không bị khoá/quá hạn) → lỗi permission-denied không phải do khoá kỳ. */
+  const kyLooksOpen = (m: any) => { const mm = normalizeMonth(m); return !!mm && !lockBlock(isSuperAdmin ? 'super_admin' : 'x', 'nt', mm, vnLocksNow) && !pastBlock(isSuperAdmin ? 'super_admin' : 'x', 'nt', mm, vnLocksNow); };
   const [suppView, setSuppView] = useState(false);
   /** Kỳ NT đang MỞ (không phải Super Admin): ưu tiên tháng hiện tại (giờ VN) — vd 25/10 → kỳ 2026-10. */
   const openNtKy = useMemo(() => {
@@ -743,7 +747,8 @@ export const AcceptanceManager = React.memo(({
   };
 
   // Save Draft to Firestore
-  const handleSaveDraft = useCallback(async (draftRow: any) => {
+  // useLatestCallback: luôn đọc props/state mới nhất (ntRequiredFrom, canCreate, nsLines… có thể tải sau lần tạo đầu).
+  const handleSaveDraft = useLatestCallback(async (draftRow: any) => {
     if (!canCreate) {
       toast.error('Chỉ Quản trị viên (Admin) và Điều phối (Mod) mới có quyền tạo mới bản ghi Nghiệm thu MKT!');
       return;
@@ -771,6 +776,7 @@ export const AcceptanceManager = React.memo(({
         t.id === draftRow.teamCode
       );
     const pr = resolveAcceptanceProject(draftRow, projects);
+    let lastPayload: any = null; // payload gửi lên (đã mutate tại chỗ) — dùng chẩn đoán khi bị từ chối
 
     try {
       const resolvedTeamName = tm?.name || (draftRow.teamName && !draftRow.teamName.startsWith('draft-') ? draftRow.teamName : tm?.teamCode || '');
@@ -887,6 +893,7 @@ export const AcceptanceManager = React.memo(({
         ]
       };
 
+      lastPayload = payload;
       let suppSel = draftRow.supplement === true ? prevMonth(normalizeMonth(payload.month)) : (typeof draftRow.supplement === 'string' ? draftRow.supplement : '');
       {
         const r0 = isSuperAdmin ? 'super_admin' : 'x';
@@ -913,7 +920,10 @@ export const AcceptanceManager = React.memo(({
         if (!canManualAssignee || !ntManualAllowed(payload.month)) { toast.error('Chỉ kỳ Tháng 10/2026 được tự nhập Người phụ trách'); return; }
         Object.assign(payload, manualAttributionPatch(payload.month, payload.implementerName, { uid: user?.uid, email: user?.email }));
       }
-      if (ntImplementerRequired(ntRequiredFrom)) {
+      // Không tin prop có thể chưa tải: nếu chưa thấy mốc bắt buộc thì đọc settings/global lúc lưu.
+      const ntDec = await resolveNtRequired(ntRequiredFrom, async () => (await getDocFs(doc(db, 'settings', 'global'))).data()?.ntImplementerRequiredFrom ?? null);
+      if (!ntDec.ok) { toast.error(ntDec.msg); return; }
+      if (ntDec.required) {
         if (!payload.implementerUid && !payload.implementerManual) { toast.error(NT_REQUIRED_MSG); return; }
         (payload as any).ntRequired = true;
       }
@@ -938,9 +948,15 @@ export const AcceptanceManager = React.memo(({
       });
     } catch (err) {
       console.error('Error saving draft:', err);
-      toast.error(ntDeniedMsg(err, normalizeMonth(draftRow?.month)) || 'Lỗi khi lưu bản ghi nghiệm thu');
+      if (String((err as any)?.code || '').includes('permission-denied')) {
+        let msg = '';
+        try { msg = (await probeNtCreateDenied(lastPayload)).message; } catch { /* dùng thông báo mặc định */ }
+        toast.error(msg || ntDeniedMsg(err, normalizeMonth(draftRow?.month), kyLooksOpen(draftRow?.month)) || 'Lỗi khi lưu bản ghi nghiệm thu');
+        return;
+      }
+      toast.error(ntDeniedMsg(err, normalizeMonth(draftRow?.month), kyLooksOpen(draftRow?.month)) || 'Lỗi khi lưu bản ghi nghiệm thu');
     }
-  }, [user, teamLookup, projectLookup, teams, projects, acceptanceMonthFilter, unregisteredProjectReason, khoiBlockIdOf, blockFieldsFor]);
+  });
 
   // Start Edit
   const handleStartEdit = useCallback((item: any) => {
@@ -956,7 +972,7 @@ export const AcceptanceManager = React.memo(({
   }, []);
 
   // Save Edit (Takes local row state directly from child component)
-  const handleSaveEdit = useCallback(async (id: string, updatedState: any) => {
+  const handleSaveEdit = useLatestCallback(async (id: string, updatedState: any) => {
     if (!canEdit) {
       toast.error('Chỉ Quản trị viên (Admin) và Điều phối (Mod) mới có quyền chỉnh sửa bản ghi Nghiệm thu MKT!');
       return;
@@ -1143,9 +1159,9 @@ export const AcceptanceManager = React.memo(({
       setEditingRowId(null);
     } catch (err) {
       console.error('Error updating acceptance:', err);
-      toast.error(ntDeniedMsg(err, normalizeMonth(updatedState?.month)) || 'Lỗi khi cập nhật bản ghi');
+      toast.error(ntDeniedMsg(err, normalizeMonth(updatedState?.month), kyLooksOpen(updatedState?.month)) || 'Lỗi khi cập nhật bản ghi');
     }
-  }, [canEdit, canCreate, user, teamLookup, projectLookup, teams, projects, blocks, openNtKy, isSuperAdmin, unregisteredProjectReason, khoiBlockIdOf, blockFieldsFor]);
+  });
 
   /** Bản kỳ đã khoá không sửa được: tạo dòng nháp «Nghiệm thu bổ sung» MỚI (điền sẵn từ bản này, Phòng/Dự án/Người phụ trách vẫn đổi được). */
   const prefillSuppFromLocked = (src: any, om: string) => {
@@ -1162,7 +1178,7 @@ export const AcceptanceManager = React.memo(({
   };
 
 
-  const handleAssignImplementer = useCallback(async (item: any, uid: string, name: string) => {
+  const handleAssignImplementer = useLatestCallback(async (item: any, uid: string, name: string) => {
     if (!canEdit) return toast.error('Không có quyền gán người phụ trách');
     if (!uid && recordNeedsImplementer(item)) return toast.error(NT_REQUIRED_MSG);
     if (!item?.teamId && !item?.teamCode && !item?.blockId) return toast.error('Chọn Phòng KD trước khi gán người phụ trách');
@@ -1182,9 +1198,9 @@ export const AcceptanceManager = React.memo(({
       if (e?.code === 'dup') toast.error(`Trùng: ${name} đã có bản ghi dự án này trong tháng (#${String(e.dup?.id || '').slice(-6).toUpperCase()})`);
       else { console.error(e); toast.error('Không gán được: ' + (e?.code || e?.message || e)); }
     }
-  }, [canEdit, user, teams, teamLookup, acceptances, unregisteredProjectReason, nsLines, nsSupport]);
+  });
 
-  const handleAssignManual = useCallback(async (item: any, name: string) => {
+  const handleAssignManual = useLatestCallback(async (item: any, name: string) => {
     if (!canManualAssignee) throw new Error('Không có quyền tự nhập Người phụ trách');
     if (!ntManualAllowed(item?.month)) throw new Error('Chỉ kỳ Tháng 10/2026 được tự nhập Người phụ trách');
     if (!item?.teamId && !item?.teamCode) throw new Error('Chọn Phòng KD trước');
@@ -1192,9 +1208,9 @@ export const AcceptanceManager = React.memo(({
       await assignManualImplementer(db, item, name, { uid: user?.uid, email: user?.email });
       toast.success(`Đã ghi Người phụ trách (tự nhập): ${name}`);
     } catch (e: any) { console.error(e); throw new Error('Không lưu được: ' + (e?.code || e?.message || e)); }
-  }, [canManualAssignee, user]);
+  });
 
-  const handleAssignTeam = useCallback(async (item: any, teamId: string) => {
+  const handleAssignTeam = useLatestCallback(async (item: any, teamId: string) => {
     if (!canEdit) return;
     const tm = teamLookup.findTeam?.(teamId) || teams.find((t: any) => t.id === teamId);
     if (!tm) return toast.error('Không tìm thấy Phòng');
@@ -1210,7 +1226,7 @@ export const AcceptanceManager = React.memo(({
       });
       toast.success('Đã chọn Phòng — tiếp tục chọn Người phụ trách');
     } catch (e: any) { toast.error('Không cập nhật Phòng: ' + (e?.message || e)); }
-  }, [canEdit, teams, blocks, teamLookup]);
+  });
 
   const handleSelectRow = useCallback((id: string, checked: boolean) => {
     setSelectedAcceptanceIds(prev => 
@@ -1218,7 +1234,7 @@ export const AcceptanceManager = React.memo(({
     );
   }, []);
 
-  const handleOpenDeleteModal = useCallback((id: string) => {
+  const handleOpenDeleteModal = useLatestCallback((id: string) => {
     if (!canDelete) {
       toast.error('Chỉ Quản trị viên (Admin) và Điều phối (Mod) mới có quyền xóa bản ghi Nghiệm thu MKT!');
       return;
@@ -1226,7 +1242,7 @@ export const AcceptanceManager = React.memo(({
     { const it = (acceptancesRef.current || []).find((a: any) => a.id === id); const pb = pastBlock(isSuperAdmin ? 'super_admin' : 'x', 'nt', it?.month); if (pb) { toast.error(pb); return; } }
     setItemToDeleteId(id);
     setIsDeleteDialogOpen(true);
-  }, [canDelete, isSuperAdmin]);
+  });
 
   const handleOpenHistoryModal = useCallback((acc: any) => {
     setHistoryTargetRecord(acc);
@@ -1247,7 +1263,7 @@ export const AcceptanceManager = React.memo(({
       setItemToDeleteId(null);
     } catch (err) {
       console.error('Error deleting acceptance:', err);
-      toast.error(ntDeniedMsg(err) || 'Lỗi khi xóa bản ghi');
+      toast.error(ntDeniedMsg(err, undefined, kyLooksOpen(((acceptancesRef.current || []).find((x: any) => x.id === itemToDeleteId) as any)?.month)) || 'Lỗi khi xóa bản ghi');
     }
   };
 
