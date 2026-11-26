@@ -48,7 +48,7 @@ function ImageView({ img, resolve }: { img: DeckImage; resolve: (img: DeckImage)
   useEffect(() => { let on = true; resolve(img).then((u) => on && setSrc(u)).catch(() => {}); return () => { on = false; }; }, [img.id]);
   return (
     <figure className="flex-1 min-w-0 flex flex-col">
-      <div className="flex-1 min-h-0 bg-[var(--mh-bg)] rounded-lg grid place-items-center overflow-hidden">{src ? (img.link ? <a href={img.link} target="_blank" rel="noreferrer" className="contents" data-testid="vn-deck-invoice"><img src={src} alt={img.caption || ''} className="max-w-full max-h-full object-contain" /></a> : <img src={src} alt={img.caption || ''} className="max-w-full max-h-full object-contain" />) : <span className="text-[11px] text-[var(--mh-text-3)]">Đang tải ảnh…</span>}</div>
+      <div className="flex-1 min-h-0 bg-[var(--mh-bg)] rounded-lg relative overflow-hidden">{src ? (img.link ? <a href={img.link} target="_blank" rel="noreferrer" className="contents" data-testid="vn-deck-invoice"><img src={src} alt={img.caption || ''} className="absolute inset-0 w-full h-full object-contain" data-testid="vn-deck-img" /></a> : <img src={src} alt={img.caption || ''} className="absolute inset-0 w-full h-full object-contain" data-testid="vn-deck-img" />) : <span className="absolute inset-0 grid place-items-center text-[11px] text-[var(--mh-text-3)]">Đang tải ảnh…</span>}</div>
       {img.caption && <figcaption className="text-[clamp(8px,1.1vw,13px)] text-[var(--mh-text-2)] mt-1 text-center truncate">{img.caption}</figcaption>}
     </figure>
   );
