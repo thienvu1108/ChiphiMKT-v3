@@ -3,7 +3,7 @@
  * nsSupport/{lineId} (cùng id với ns_lines). Không có doc = «Chưa được duyệt».
  * Người duyệt: GĐ Khối / Trợ lý Khối của Khối ghi trên dòng NS (blockId), Admin.
  */
-import type { NsLine } from './budget';
+import type { NsLine } from './budget.js';
 
 export const SUPPORT_COLLECTION = 'nsSupport';
 /** 'reapproval' = «Cần duyệt lại»: suy ra trong code (đã duyệt rồi người đăng ký sửa), KHÔNG ghi vào nsSupport. */
@@ -90,14 +90,8 @@ export function isNsReportableLine(line: NsLine, s?: Partial<Support> | null, _p
   if (_weeklyBanGate) return _weeklyBanGate(line, s);
   return true;
 }
-/**
- * Số tiền NS dùng cho Báo cáo tuần.
- * Cần duyệt lại (đã sửa sau GĐK duyệt): lấy amount đã duyệt gần nhất trên nsSupport nếu có; không thì amount hiện tại.
- */
-export function reportableNsAmount(line: NsLine, s?: Partial<Support> | null): number {
-  const base = baseStatus(line, s);
-  const prev = Number(s?.amount);
-  if (base === 'reapproval' && Number.isFinite(prev) && prev > 0) return prev;
+/** Báo cáo tuần hiển thị tiền NS hiện hành, kể cả khi cần duyệt lại. */
+export function reportableNsAmount(line: NsLine, _support?: Partial<Support> | null): number {
   return Number(line.amount) || 0;
 }
 /** Map uid → có STK; undefined = chưa tải (không chặn). */
@@ -119,17 +113,19 @@ function baseStatus(line: NsLine, s?: Partial<Support> | null): SupportStatus {
   return st;
 }
 
-export type StatusSplit = Record<SupportStatus, { n: number; amount: number }> & { total: number };
+export const countsTowardApproved = (status: SupportStatus) => status === 'approved' || status === 'reapproval';
+export type StatusSplit = Record<SupportStatus, { n: number; amount: number }> & { total: number; approvedTotal: number };
 /** Tách tổng NS theo 4 trạng thái — dùng chung cho Ngân sách MKT Khối, Duyệt hỗ trợ MKT, Ngân sách Ban. */
 /** 5 ô riêng (ST5_ORDER), tổng = tổng 5 ô. */
 export function splitByStatus(lines: NsLine[], sup: Record<string, Partial<Support> | undefined>, pay?: PayMap): StatusSplit {
-  const o: any = { total: 0 };
+  const o: any = { total: 0, approvedTotal: 0 };
   for (const k of ALL_STATUSES) o[k] = { n: 0, amount: 0 };
   for (const l of lines) {
     if (!supportable(l)) continue;
     const st = effectiveStatus(l, sup[l.id], payOf(pay, l.ownerUid));
     const a = Number(l.amount) || 0;
     o[st].n++; o[st].amount += a; o.total += a;
+    if (countsTowardApproved(st)) o.approvedTotal += a;
   }
   return o;
 }

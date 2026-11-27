@@ -2,7 +2,7 @@
  * MC-6 — Super Admin thêm / sửa / xoá (mềm + cứng) / khôi phục đăng ký NS của từng user.
  * Hàm thuần (không đụng Firestore); phần ghi nằm ở src/vnext/nsActions.ts.
  */
-import { nsLineId, type NsLine } from './budget';
+import { nsLineId, type NsLine } from './budget.js';
 
 export type NsAuditAction = 'NS_LINE_SOFT_DELETE' | 'NS_LINE_HARD_DELETE' | 'NS_LINE_SA_CREATE' | 'NS_LINE_SA_UPDATE' | 'NS_LINE_RESTORE';
 

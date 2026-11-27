@@ -5,7 +5,7 @@ import React, { useEffect, useMemo, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { decideBanSupportBatch } from './SupportViews';
 import { BAN_NS_FILTER_SS, BAN_NS_FOCUS_BLOCK_SS } from './BanPendingGate';
-import { BAN_STATUS_LABEL, effectiveBanStatus, banReasonText, banPendingKind, banReapprovalChange, type BanEffectiveStatus, type BanStoredStatus } from '../../lib/vnext/banSupport';
+import { BAN_STATUS_LABEL, effectiveBanStatus, banApprovedAwaitingKhoi, banReasonText, banPendingKind, banReapprovalChange, type BanEffectiveStatus, type BanStoredStatus } from '../../lib/vnext/banSupport';
 import { supportable, type Support } from '../../lib/vnext/support';
 import type { NsLine } from '../../lib/vnext/budget';
 import { periodLabel, VNEXT_PERIOD_CUTOVER } from '../../lib/vnext/period';
@@ -15,6 +15,7 @@ import { deputyBlocked, approverLog, type BanApproverRole } from '../lib/banAppr
 import { groupByProject, matchesBlock, bulkSummary, projectBulkTargets, needsBulkConfirm, validBanReason } from '../lib/banNsFilters';
 
 type Row = { line: NsLine; s?: Support; ban: BanEffectiveStatus };
+const countedAsApproved = (r: Row) => r.ban === 'approved' || banApprovedAwaitingKhoi(r.line, r.s);
 type BanFilter = 'todo' | 'approved' | 'rejected' | 'all';
 
 const FILTER_LABEL: Record<BanFilter, string> = {
@@ -112,17 +113,17 @@ export function BanNsApprovePanel({
       .filter((l) => matchesBlock(l as any, filterBlock, (id) => { const b: any = c.blocks.find((x) => x.id === id); return b?.code || b?.blockCode; }))
       .filter((l) => !filterProject || filterProject === 'all' || l.projectId === filterProject)
       .map((line) => ({ line, s: sup[line.id], ban: effectiveBanStatus(line, sup[line.id]) }))
-      .filter((r) => r.ban === 'pending' || r.ban === 'approved' || r.ban === 'rejected')
+      .filter((r) => r.ban !== 'na' || countedAsApproved(r))
       .sort((a, b) => blockName(c, a.line.blockId).localeCompare(blockName(c, b.line.blockId), 'vi')
         || projectName(c, a.line.projectId).localeCompare(projectName(c, b.line.projectId), 'vi')
         || String(a.line.ownerName || '').localeCompare(String(b.line.ownerName || ''), 'vi'));
   }, [lines, sup, allowedProjectIds, filterMonth, filterBlock, filterProject, c.blocks, c.projects]);
 
   const counts = useMemo(() => {
-    const o = { todo: 0, approved: 0, rejected: 0, all: allRows.length };
+    const o = { todo: 0, approved: 0, approvedAmount: 0, rejected: 0, all: allRows.length };
     for (const r of allRows) {
       if (r.ban === 'pending') o.todo++;
-      else if (r.ban === 'approved') o.approved++;
+      else if (countedAsApproved(r)) { o.approved++; o.approvedAmount += Number(r.line.amount) || 0; }
       else if (r.ban === 'rejected') o.rejected++;
     }
     return o;
@@ -131,6 +132,7 @@ export function BanNsApprovePanel({
   const rows = useMemo(() => {
     if (banFilter === 'all') return allRows;
     if (banFilter === 'todo') return allRows.filter((r) => r.ban === 'pending');
+    if (banFilter === 'approved') return allRows.filter(countedAsApproved);
     return allRows.filter((r) => r.ban === banFilter);
   }, [allRows, banFilter]);
 
@@ -155,7 +157,7 @@ export function BanNsApprovePanel({
       g.rows.push(r);
       g.amount += Number(r.line.amount) || 0;
       if (r.ban === 'pending') g.pending++;
-      else if (r.ban === 'approved') g.approved++;
+      else if (countedAsApproved(r)) g.approved++;
       else if (r.ban === 'rejected') g.rejected++;
     }
     for (const g of m.values()) {
@@ -180,7 +182,7 @@ export function BanNsApprovePanel({
         p.rows.push(r);
         p.amount += Number(r.line.amount) || 0;
         if (r.ban === 'pending') p.pending++;
-        else if (r.ban === 'approved') p.approved++;
+        else if (countedAsApproved(r)) p.approved++;
         else if (r.ban === 'rejected') p.rejected++;
       }
       g.projects = Array.from(pm.values()).map((p) => ({ ...p, ...projectStatus(p) }))
@@ -246,11 +248,11 @@ export function BanNsApprovePanel({
 
   if (!allRows.length) return null;
 
-  const banLabel = (r: Row) => (banPendingKind(r.line, r.s) === 'reapproval' ? 'Chờ Ban duyệt lại' : BAN_STATUS_LABEL[r.ban]);
+  const banLabel = (r: Row) => r.ban === 'na' ? 'Chờ Khối duyệt lại' : banPendingKind(r.line, r.s) === 'reapproval' ? 'Chờ Ban duyệt lại' : BAN_STATUS_LABEL[r.ban];
   /** Chi tiết thay đổi khiến phải duyệt lại: trước (Ban đã duyệt) → sau (hiện tại) · người sửa · thời gian. */
   const reapprovalNode = (r: Row) => {
     const ch = banReapprovalChange(r.line, r.s);
-    if (!ch) return null;
+    if (!ch) return r.ban === 'na' ? <div className="text-[11px] text-[var(--mh-warn)]" data-testid="vn-ban-reapproval">Đã sửa sau duyệt</div> : null;
     const t = ch.at ? new Date(ch.at).toLocaleString('vi-VN', { hour12: false }) : '';
     return (
       <div className="mt-1 text-[11px] leading-snug" data-testid="vn-ban-reapproval">
@@ -265,7 +267,7 @@ export function BanNsApprovePanel({
   };
 
   const lineActions = (r: Row) => {
-    if (!canApprove || !allowLineActions) return null;
+    if (!canApprove || !allowLineActions || r.ban === 'na') return null;
     if (deputyBlocked(approverRole, r.s as any)) return <span className="text-[11px] text-[var(--mh-text-3)]" data-testid="vn-ban-leader-locked">Trưởng Ban đã quyết định</span>;
     if (r.ban === 'pending') {
       return <>
@@ -346,7 +348,7 @@ export function BanNsApprovePanel({
             onClick={() => setBanFilter(f)}
             data-testid={`vn-ban-filter-${f}`}
           >
-            {FILTER_LABEL[f]} ({counts[f]})
+            {FILTER_LABEL[f]} ({counts[f]}){f === 'approved' && ` · ${fmt(counts.approvedAmount)} đ`}
           </button>
         ))}
       </div>

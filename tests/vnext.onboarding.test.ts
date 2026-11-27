@@ -108,7 +108,7 @@ describe('Registry quyền', () => {
     expect(editablePerms('mod', { permissions: ['report_nt.view'] }, [])).toContain('report_nt.view');
   });
   it('firestore.rules đồng bộ registry (npm run gen:vn-rules)', () => {
-    expect(readFileSync('firestore.rules', 'utf8')).toContain(rulesBlock());
+    expect(readFileSync('firestore.rules', 'utf8').replace(/\r\n/g, '\n')).toContain(rulesBlock());
   });
 });
 

@@ -73,6 +73,14 @@ export function isBanTodo(st: BanEffectiveStatus) {
   return st === 'pending';
 }
 
+/** Đã được Ban duyệt và hiện quay về Khối do sửa NS. */
+export function banApprovedAwaitingKhoi(line: NsLine, s?: Partial<Support> | null): boolean {
+  if (baseStatusForBan(line, s) !== 'reapproval') return false;
+  if (s?.banStatus) return s.banStatus === 'approved';
+  const at = gdkAt(line, s);
+  return !at || at <= BAN_APPROVAL_CUTOVER_ISO;
+}
+
 /** Dòng này Ban đã từng duyệt (history có layer 'ban' + status 'approved'). */
 export function banApprovedBefore(s?: Partial<Support> | null): boolean {
   const h = Array.isArray(s?.history) ? (s!.history as any[]) : [];
@@ -92,7 +100,7 @@ export type BanReapprovalChange = { before: number; after: number; byUid: string
  * kèm người sửa + thời điểm (lấy từ lịch sử sửa dòng NS). null nếu không phải trường hợp duyệt lại.
  */
 export function banReapprovalChange(line: NsLine, s?: Partial<Support> | null): BanReapprovalChange | null {
-  if (banPendingKind(line, s) !== 'reapproval') return null;
+  if (banPendingKind(line, s) !== 'reapproval' && !banApprovedAwaitingKhoi(line, s)) return null;
   const lh = Array.isArray(line.history) ? (line.history as any[]) : [];
   let edit: any = null;
   for (const x of lh) {

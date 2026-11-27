@@ -281,7 +281,7 @@ export function SupportReviewPanel({ c, blockId, period, lines }: { c: VCtx; blo
   const notes = (r: Row) => { const ban = effectiveBanStatus(r.line, r.s); return <>
     {r.status === 'need_pay' && <div className="text-[11px] text-[#6B2FB3] max-w-[260px]" data-testid="vn-support-needpay">Người đăng ký chưa có STK nhận tiền — chưa duyệt được{isAutoApproved(r.line) ? '; NS Khối sẽ tự duyệt lại khi cập nhật' : '; cập nhật xong sẽ về «Chờ duyệt»'}.</div>}
     {isAutoNow(r.line, r.s) && r.status !== 'need_pay' && <div className="text-[11px] text-[#0F7B4A]" data-testid="vn-support-auto">{AUTO_APPROVED_NOTE}</div>}
-    {r.status === 'reapproval' && r.s && <div className="text-[11px] text-[var(--mh-warn)]" data-testid="vn-support-reappr">Đã duyệt {fmt(r.s.amount)} → nay {fmt(r.line.amount)}{Number(r.s.amount) === Number(r.line.amount) ? ' (sửa lại, số tiền không đổi)' : ''}</div>}
+    {r.status === 'reapproval' && r.s && <div className="text-[11px] text-[var(--mh-warn)]" data-testid="vn-support-reappr">Đã sửa sau duyệt · {fmt(r.s.amount)} → {fmt(r.line.amount)} đ</div>}
     {r.s?.status === 'rejected' && r.s.reason && <div className="text-[11px] text-[var(--mh-err)] max-w-[260px]">{r.s.reason}</div>}
     {(ban === 'pending' || ban === 'rejected') && <div className={`text-[11px] max-w-[260px] ${ban === 'rejected' ? 'text-[var(--mh-err)]' : 'text-[var(--mh-warn)]'}`} data-testid="vn-support-ban">{BAN_STATUS_LABEL[ban]}{banReasonText(r.s) ? ` — ${banReasonText(r.s)}` : ''}</div>}
   </>; };
@@ -370,6 +370,7 @@ function BucketSummary({ split, onPick, active }: { split: BucketSplit; onPick: 
     <div className="grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-7 gap-2" data-testid="vn-status-split" data-total={split.total}>
       {cell('', 'Tổng đăng ký', split.n, split.total)}
       {BUCKET_ORDER.map((k) => cell(k, BUCKET_LABEL[k], split[k].n, split[k].amount, k === 'khoi_ok' ? KHOI_OK_META : ST_META[k as keyof typeof ST_META]))}
+      {split.reapproval.n > 0 && <div className="col-span-full text-[12px]">Tổng đã duyệt (gồm khoản đã sửa sau duyệt) · Ban KD <b>{fmt(split.banApprovedTotal)} đ</b> · Khối chờ Ban <b>{fmt(split.khoiApprovedTotal)} đ</b></div>}
     </div>);
 }
 

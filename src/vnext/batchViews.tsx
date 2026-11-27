@@ -559,6 +559,8 @@ export function RoleHome({ c, onGo, memberPending = 0 }: { c: VCtx; onGo: GoFn; 
   const all = useMemo(() => adaptNs(lines, sup as any, pay, c.projects).filter((r) => r.period === period), [lines, sup, pay, period]);
   const myRows = useMemo(() => adaptNs(mine, supMine as any, pay, c.projects).filter((r) => r.period === period && r.ownerUid === c.uid), [mine, supMine, pay, period]);
   const scope = khoi ? all.filter((r) => c.myBlockIds.includes(r.blockId)) : banMgr && !adm && !acct ? all.filter((r) => c.myBanKdIds.includes(r.banKdId)) : all;
+  const mySummary = summarize(myRows);
+  const scopeSummary = summarize(scope);
   const groupBy = khoi ? 'teamId' : banMgr && !adm && !acct ? 'projectId' : 'blockId';
   const groupName = (k: string) => (!k ? (groupBy === 'teamId' ? 'NS cấp Khối (không thuộc Phòng)' : '—') : groupBy === 'teamId' ? teamName(c, k) : groupBy === 'projectId' ? projectName(c, k) : blockName(c, k)) || '—';
   const agg = [...aggregate(pick ? scope.filter((r) => r.status === pick) : scope, groupBy as any).entries()].sort((a, b) => b[1].total - a[1].total).slice(0, 12);
@@ -577,11 +579,11 @@ export function RoleHome({ c, onGo, memberPending = 0 }: { c: VCtx; onGo: GoFn; 
           {!wide && <><Act label="Đăng ký / sửa NS MKT" path="/quan-ly-phong-kd" tid="vn-home-act-register" /><Act label="Thông tin Hỗ trợ" path="/thong-tin-ho-tro" /></>}
         </div>
         {(!wide || khoi || banMgr) && myRows.length > 0 && <Card className="p-3 space-y-2" data-testid="vn-home-mine"><div className="font-semibold text-[14px]">NS của tôi · {periodLabel(period)}</div>
-          <SummaryBox split={{ total: summarize(myRows).total, ...summarize(myRows).by }} testId="vn-home-mine-split" />
+          <SummaryBox split={{ ...mySummary, ...mySummary.by }} testId="vn-home-mine-split" />
           <div className="divide-y divide-[var(--mh-surface-2)]">{myRows.slice(0, 8).map((r) => <div key={r.id} className="flex items-center gap-2 py-1.5 text-[13px]"><span className="flex-1 truncate">{projectName(c, r.projectId)}</span><b className="tabular-nums">{fmt(r.amount)}</b><StatusBadge status={r.status} small /></div>)}</div></Card>}
         {!wide && !myRows.length && <Card className="p-4 text-[13px]">Bạn chưa đăng ký NS MKT {periodLabel(period)}. <Btn small primary onClick={() => onGo('/quan-ly-phong-kd')}>Đăng ký ngay</Btn></Card>}
         {wide && <Card className="p-3 space-y-2" data-testid="vn-home-scope"><div className="font-semibold text-[14px]">{khoi ? 'NS Khối của tôi' : banMgr && !adm && !acct ? 'NS Ban của tôi' : 'NS toàn hệ thống'} · {periodLabel(period)}</div>
-          <SummaryBox split={{ total: summarize(scope).total, ...summarize(scope).by }} onPick={(s) => setPick(s)} active={pick} testId="vn-home-split" />
+          <SummaryBox split={{ ...scopeSummary, ...scopeSummary.by }} onPick={(s) => setPick(s)} active={pick} testId="vn-home-split" />
           <div className="overflow-x-auto"><table data-mh-responsive className="w-full"><thead><tr><Th>{groupBy === 'teamId' ? 'Phòng' : groupBy === 'projectId' ? 'Dự án' : 'Khối'}</Th><Th r>Tổng</Th>{(['approved', 'pending', 'reapproval', 'need_pay', 'rejected'] as const).map((k) => <Th key={k} r className="hidden md:table-cell">{ST_META[k].label}</Th>)}</tr></thead><tbody>
             {agg.map(([k, s]) => <tr key={k}><Td className="text-[12px]">{groupName(k)}</Td><Td r className="font-semibold">{fmt(s.total)}</Td>{(['approved', 'pending', 'reapproval', 'need_pay', 'rejected'] as const).map((st) => <Td key={st} r className="hidden md:table-cell text-[12px]">{s.by[st].n ? `${fmt(s.by[st].amount)} (${s.by[st].n})` : '—'}</Td>)}</tr>)}
           </tbody></table></div></Card>}

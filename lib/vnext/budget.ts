@@ -7,7 +7,7 @@
  * Từ 10/2026: bỏ nút bổ sung GĐKD/GĐK, NS chỉ ghi nhận từ Đăng ký Ngân sách MKT (kể cả Admin: không tạo/sửa dòng gdkd/gdk; dòng cũ được chuyển thành đăng ký).
  * NS Phòng = Σ user + bổ sung GĐKD; NS Khối = Σ Phòng + bổ sung GĐK. Tự duyệt, không có bước phê duyệt.
  */
-import { normalizeRoleKey, type RoleKey } from '../../src/lib/rolePermissions';
+import { normalizeRoleKey, type RoleKey } from '../roleKey.js';
 
 export const NS_COLLECTION = 'ns_lines';
 
@@ -52,6 +52,7 @@ export type NsLine = {
   /** Cờ chi tiền theo dòng (chưa có trong hệ thống; helper isNsLinePaid đọc nếu có). */
   paid?: boolean;
   paidAt?: string;
+  payoutStatus?: string;
 };
 
 export function nsLineId(kind: NsKind, period: string, scopeId: string, projectId: string, uid?: string): string {
@@ -65,7 +66,7 @@ export function nsLineId(kind: NsKind, period: string, scopeId: string, projectI
 export function isNsLinePaid(line: Partial<NsLine> | null | undefined, support?: any): boolean {
   const l: any = line || {};
   const s: any = support || {};
-  return l.paid === true || !!l.paidAt || s.paid === true || !!s.paidAt || s.payoutStatus === 'paid';
+  return l.paid === true || !!l.paidAt || l.payoutStatus === 'paid' || s.paid === true || !!s.paidAt || s.payoutStatus === 'paid';
 }
 
 const live = (l: NsLine) => !l.deleted && Number(l.amount) > 0;
@@ -126,7 +127,7 @@ export function summarizeBlock(lines: NsLine[], period: string, blockId: string,
 
 /** NS user đã đăng ký theo dự án trong kỳ (dùng cho liên kết Báo cáo tuần).
  *  opts.includeLine: nếu có, chỉ cộng dòng thỏa.
- *  opts.amountOf: nếu có, lấy số tiền qua hàm (vd. Cần duyệt lại → amount đã duyệt gần nhất). */
+ *  opts.amountOf: nếu có, lấy số tiền qua hàm. */
 export function userNsByProject(lines: NsLine[], period: string, uid: string, opts?: { includeLine?: (l: NsLine) => boolean; amountOf?: (l: NsLine) => number }): Map<string, number> {
   const m = new Map<string, number>();
   for (const l of lines) {

@@ -338,7 +338,7 @@ export function TeamBudget({ c, teamId, period, lines, readOnly }: { c: VCtx; te
                     const last = (l.history || []).slice(-1)[0];
                     return (
                       <tr key={l.id}><Td className="pl-8">{l.ownerName || userName(c, l.ownerUid)}{convTag(l)}{isSa && isSaCreated(l) && <span className="ml-1 rounded bg-[#FEF3C7] px-1 text-[10px] text-[#92400E]" data-testid="vn-sa-ns-tag">SA tạo</span>}{last?.reason && <div className="text-[11px] text-[var(--mh-warn)]">Sửa bởi {last.byName}: {last.reason}</div>}</Td><PctTd c={c} pid={l.projectId} period={period} /><Td data-testid="vn-team-line-st"><SupportBadge status={stOf(l)} />{supT[l.id]?.status === 'rejected' && supT[l.id]?.reason && <div className="text-[11px] text-[var(--mh-err)] max-w-[200px]">{supT[l.id]?.reason}</div>}{(() => { const b = effectiveBanStatus(l, supT[l.id]); return (b === 'pending' || b === 'rejected') ? <div className={`text-[11px] max-w-[200px] ${b === 'rejected' ? 'text-[var(--mh-err,var(--mh-err))]' : 'text-[var(--mh-pending,#7C3AED)]'}`} data-testid="vn-team-ban">{b === 'pending' ? 'Chờ Ban' : 'Ban từ chối'}{banReasonText(supT[l.id]) ? ` — ${banReasonText(supT[l.id])}` : ''}</div> : null; })()}</Td><Td r>{fmt(l.amount)}</Td><Td /><Td r className="whitespace-nowrap">{isSa ? <>
-                        <Btn small onClick={() => setSaEdit(l)} data-testid="vn-sa-ns-edit">Sửa</Btn>{' '}
+                        <Btn small onClick={() => setSaEdit(l)} disabled={isNsLinePaid(l, supT[l.id])} title={isNsLinePaid(l, supT[l.id]) ? 'Đã chi tiền — không sửa được' : undefined} data-testid="vn-sa-ns-edit">Sửa</Btn>{' '}
                         <Btn small danger onClick={() => setSaDel(l)} disabled={isNsLinePaid(l, supT[l.id])} title={isNsLinePaid(l, supT[l.id]) ? 'Đã chi tiền — không xoá được' : undefined} data-testid="vn-sa-ns-delete">Xoá</Btn>
                       </> : canEditUsers && <Btn small onClick={() => setEditing({ line: l, amount: Number(l.amount), reason: '' })}>Sửa</Btn>}</Td></tr>
                     );
@@ -375,7 +375,7 @@ export function TeamBudget({ c, teamId, period, lines, readOnly }: { c: VCtx; te
       </Modal>
       <HistoryModal open={hist} onClose={() => setHist(false)} lines={teamLines} c={c} />
       {isSa && saAdd && <SaAddModal c={c} teamId={teamId} period={period} lines={lines} projectOpts={projectOptions(c)} onClose={() => setSaAdd(false)} toast={toast} />}
-      {isSa && saEdit && <SaEditModal c={c} line={saEdit} lines={lines} status={stOf(saEdit)} projectOpts={projectOptions(c)} onClose={() => setSaEdit(null)} toast={toast} />}
+      {isSa && saEdit && <SaEditModal c={c} line={saEdit} lines={lines} status={stOf(saEdit)} paid={isNsLinePaid(lines.find((l) => l.id === saEdit.id) || saEdit, supT[saEdit.id])} projectOpts={projectOptions(c)} onClose={() => setSaEdit(null)} toast={toast} />}
       {isSa && saDel && <SaDeleteModal c={c} line={saDel} support={supT[saDel.id]} status={stOf(saDel)} onClose={() => setSaDel(null)} toast={toast} />}
       {node}
     </div>

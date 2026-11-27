@@ -8,6 +8,22 @@ import { type VCtx, notifyUser, projectName, isAdm } from './ctx';
 import { periodLabel } from '../../lib/vnext/period';
 import { personAccountIds, ntPeriodKey } from '../../lib/vnext/ntBudgetProjects';
 import { buildDeleteAudit, buildSaWriteAudit, buildRestoreAudit, stripUndefined, weeklyRemoval, mergeWeeklyItems, amountBeforeDelete, latestSoftDeleteAudit, planProjectChange, type WeeklySnapItem, type NsImpact } from '../../lib/vnext/nsAdmin';
+import type { NsSyncPlan, NsSyncRequest } from '../../lib/vnext/nsSync';
+import { auth } from '../firebase';
+
+type NsSyncResponse = NsSyncPlan & { version: string; replayed?: boolean; notificationFailed?: boolean };
+export async function syncNsAmount(action: 'preview' | 'commit', request: NsSyncRequest & { version?: string }): Promise<NsSyncResponse> {
+  const token = await auth.currentUser?.getIdToken();
+  if (!token) throw new Error('Cần đăng nhập lại.');
+  const response = await fetch(`/api/ns-sync/${action}`, {
+    method: 'POST',
+    headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
+    body: JSON.stringify(request),
+  });
+  const data = await response.json();
+  if (!response.ok) throw new Error(data.error || `Máy chủ trả mã ${response.status}.`);
+  return data;
+}
 
 export async function saveNsLine(c: VCtx, opts: {
   kind: NsKind; period: string; teamId?: string; blockId?: string; projectId: string;
@@ -168,16 +184,12 @@ export async function saUpdateNsLine(c: VCtx, o: { line: NsLine; amount: number;
   const { line } = o;
   const plan = planProjectChange(line, o.projectId);
   const before = { amount: Number(line.amount || 0), projectId: line.projectId };
-  let newId = line.id;
-  if (!plan.changed) {
-    newId = await saveNsLine(c, { kind: 'user', period: line.period, teamId: line.teamId, projectId: line.projectId, existing: line, amount: o.amount, reason: o.reason });
-  } else {
-    newId = await saveNsLine(c, { kind: 'user', period: line.period, teamId: line.teamId, blockId: line.blockId, projectId: o.projectId, owner: { uid: line.ownerUid || '', name: line.ownerName, email: line.ownerEmail }, existing: o.existingNew || null, amount: o.amount, reason: `${o.reason} (chuyển từ dự án ${projectName(c, line.projectId)})` });
-    const { docs } = await previewWeeklyForNsLine(c, line);
-    const why = `Chuyển sang dự án ${projectName(c, o.projectId)}: ${o.reason}`;
-    await saDeleteNsLine(c, line, false, why, { ntCount: null, supportStatus: o.supportStatus || '' }, docs);
-  }
-  try { await writeAudit(c, buildSaWriteAudit({ create: false, lineId: newId, reason: o.reason, actor: actorOf(c), before, after: { amount: o.amount, projectId: o.projectId }, extra: plan.changed ? { movedFrom: line.id } : undefined })); }
+  if (!plan.changed) throw new Error('Dùng xác nhận đồng bộ để sửa số tiền.');
+  const newId = await saveNsLine(c, { kind: 'user', period: line.period, teamId: line.teamId, blockId: line.blockId, projectId: o.projectId, owner: { uid: line.ownerUid || '', name: line.ownerName, email: line.ownerEmail }, existing: o.existingNew || null, amount: o.amount, reason: `${o.reason} (chuyển từ dự án ${projectName(c, line.projectId)})` });
+  const { docs } = await previewWeeklyForNsLine(c, line);
+  const why = `Chuyển sang dự án ${projectName(c, o.projectId)}: ${o.reason}`;
+  await saDeleteNsLine(c, line, false, why, { ntCount: null, supportStatus: o.supportStatus || '' }, docs);
+  try { await writeAudit(c, buildSaWriteAudit({ create: false, lineId: newId, reason: o.reason, actor: actorOf(c), before, after: { amount: o.amount, projectId: o.projectId }, extra: { movedFrom: line.id } })); }
   catch (e: any) { console.warn('[saUpdate audit]', e?.code || e?.message); }
   if (o.notify && line.ownerEmail && line.ownerUid !== c.uid) await notifyUser(c, { email: line.ownerEmail, uid: line.ownerUid }, 'Super Admin đã điều chỉnh Ngân sách MKT của bạn', `${c.name} sửa NS ${periodLabel(line.period)}: ${projectName(c, line.projectId)} ${before.amount.toLocaleString('vi-VN')} đ → ${projectName(c, o.projectId)} ${o.amount.toLocaleString('vi-VN')} đ. Lý do: ${o.reason}`, { projectId: o.projectId, teamId: line.teamId, period: line.period, lineId: newId });
   return newId;
