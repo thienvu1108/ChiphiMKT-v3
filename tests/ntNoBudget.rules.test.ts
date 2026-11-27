@@ -55,6 +55,17 @@ describe('acceptances: bổ sung «Không có đăng ký NS»', () => {
     await assertFails(setDoc(doc(as('mod'), 'acceptances/e1'), supp({ ...manual() })));
     await assertFails(setDoc(doc(as('mod'), 'acceptances/e2'), supp({ ...manual(), supplementFor: '2026-10', ...noBudget })));
   });
+  it('Mod tạo bổ sung cùng kỳ 2026-11, có ntNoBudget, lý do và tên tự nhập → OK', async () => {
+    await assertSucceeds(setDoc(doc(as('mod'), 'acceptances/same1'), supp({
+      month: '2026-11', supplementIn: '2026-11', ...manual('Nguyễn Văn Ngoài', '2026-11'), ...noBudget,
+    })));
+  });
+  it('Mod tạo bổ sung cùng kỳ 2026-11 thiếu ntNoBudget → DENY', async () => {
+    await assertFails(setDoc(doc(as('mod'), 'acceptances/same2'), supp({ month: '2026-11', supplementIn: '2026-11' })));
+  });
+  it('Mod tạo bổ sung có ntNoBudget nhưng kỳ gốc sai định dạng → DENY', async () => {
+    await assertFails(setDoc(doc(as('mod'), 'acceptances/same3'), supp({ supplementFor: 'sai', ...noBudget })));
+  });
   it('(5) tự nhập bản thường kỳ 12 → DENY', async () => {
     await assertFails(setDoc(doc(as('mod'), 'acceptances/f1'), { ...base, ...manual() }));
     await assertFails(setDoc(doc(as('mod'), 'acceptances/f2'), { ...base, ...manual(), ...noBudget }));

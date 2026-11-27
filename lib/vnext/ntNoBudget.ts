@@ -6,7 +6,7 @@
 import { normalizeMonth } from './ntReport.js';
 import { VNEXT_PERIOD_CUTOVER } from './period.js';
 import { manualKey, isManualImplementer } from './ntManual.js';
-import { isSupplement, prevMonth } from './ntSupplement.js';
+import { isSupplement, prevMonth, suppMonths } from './ntSupplement.js';
 
 export const NT_NOBUDGET_REASON_MIN = 3;
 export const NT_NOBUDGET_REASON_MAX = 500;
@@ -26,6 +26,17 @@ export function rowSupplementFor(row: any): string {
 export function noBudgetAvailable(supplementFor: unknown): boolean {
   const p = normalizeMonth(supplementFor);
   return /^\d{4}-\d{2}$/.test(p) && p >= VNEXT_PERIOD_CUTOVER;
+}
+
+export function noBudgetSameKy(month: unknown, supplementFor: unknown): boolean {
+  const period = normalizeMonth(month);
+  return noBudgetAvailable(period) && period === normalizeMonth(supplementFor);
+}
+
+export function suppTargetOk(month: unknown, supplementFor: unknown, noBudget: boolean): boolean {
+  const period = normalizeMonth(month);
+  const target = normalizeMonth(supplementFor);
+  return suppMonths(period).includes(target) || (noBudget && noBudgetSameKy(period, target));
 }
 
 /** Hàng (nháp hoặc bản ghi) đang ở chế độ «Không có đăng ký NS»: cờ bật + là bổ sung + kỳ gốc ≥ 2026-11. */

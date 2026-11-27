@@ -11,9 +11,14 @@ import { AcceptanceSearchableSelect, SearchableItem } from './AcceptanceSearchab
 import { ManualAssigneeDialog } from './ManualAssigneeDialog';
 import { suppMonths } from '../../../lib/vnext/ntSupplement';
 import { normalizeMonth } from '../../../lib/vnext/ntReport';
-import { rowNoBudget, rowSupplementFor, noBudgetAvailable, noBudgetAssigneeOptions, activeProjects, NT_NOBUDGET_REASON_MAX } from '../../../lib/vnext/ntNoBudget';
+import { rowNoBudget, rowSupplementFor, noBudgetAvailable, noBudgetSameKy, noBudgetAssigneeOptions, activeProjects, NT_NOBUDGET_REASON_MAX } from '../../../lib/vnext/ntNoBudget';
 import { NT_MANUAL_LABEL, NT_MANUAL_VALUE, ntManualAllowed, isManualImplementer, implementerLabel, hasImplementer, implementerKey } from '../../../lib/vnext/ntManual';
-import { acceptanceAssigneeUids, acceptanceChoicesFor, acceptanceKhoiAssignees, clearStaleProject, filterAssigneeOptions, ntUsesBudgetProjects, type NtBudgetLine } from '../../../lib/vnext/ntBudgetProjects';
+import { acceptanceAssigneeUids, acceptanceChoicesFor, acceptanceKhoiAssignees, clearStaleProject, filterAssigneeOptions, ntScopeMonth, type NtBudgetLine } from '../../../lib/vnext/ntBudgetProjects';
+
+const CLEAR_ATTRIBUTION = {
+  implementerUid: '', implementerName: '', implementerManual: false,
+  projectId: '', projectName: '', projectCode: '',
+};
 import type { Support } from '../../../lib/vnext/support';
 
 interface DraftRowProps {
@@ -36,6 +41,7 @@ interface DraftRowProps {
   canManualAssignee?: boolean;
   /** Kỳ NT của tháng đang chọn đang MỞ → hiện ô «Bổ sung cho T{M-1}». */
   suppAllowed?: boolean;
+  onScopeChange?: (id: string, period?: string) => void;
   nsLines?: NtBudgetLine[];
   nsSupport?: Record<string, Partial<Support> | undefined>;
   /** Bố cục cột từ T11/2026. */
@@ -51,6 +57,7 @@ export const AcceptanceDraftRow: React.FC<DraftRowProps> = React.memo(({
   blocks,
   monthsList,
   suppAllowed = false,
+  onScopeChange,
   teamItems: propTeamItems,
   projectItems: propProjectItems,
   findTeam,
@@ -137,16 +144,23 @@ export const AcceptanceDraftRow: React.FC<DraftRowProps> = React.memo(({
   // «Không có đăng ký NS» (chỉ trong Nghiệm thu bổ sung kỳ gốc ≥ 2026-11): bỏ lọc theo đăng ký.
   const suppFor = rowSupplementFor(localDraft);
   const noBudget = rowNoBudget(localDraft);
-  const budgetChoices = useMemo(() => acceptanceChoicesFor(localDraft, nsLines, nsSupport, allUsers), [noBudget, localDraft.month, localDraft.teamId, localDraft.implementerUid, localDraft.implementerManual, nsLines, nsSupport, allUsers]);
+  const period = normalizeMonth(localDraft.month);
+  const sameKy = noBudgetSameKy(period, suppFor);
+  const scopeMonth = ntScopeMonth(localDraft);
+  useEffect(() => {
+    onScopeChange?.(draftRow.id, normalizeMonth(scopeMonth));
+    return () => onScopeChange?.(draftRow.id);
+  }, [draftRow.id, onScopeChange, scopeMonth]);
+  const budgetChoices = useMemo(() => acceptanceChoicesFor(localDraft, nsLines, nsSupport, allUsers), [localDraft, nsLines, nsSupport, allUsers]);
 
   // Kỳ ≥ 2026-11: Người phụ trách chỉ còn user đã đăng ký NS cho Phòng + kỳ này.
-  const assigneeUids = useMemo(() => noBudget ? null : acceptanceAssigneeUids({ month: localDraft.month, teamId: localDraft.teamId, lines: nsLines, support: nsSupport }), [noBudget, localDraft.month, localDraft.teamId, nsLines, nsSupport]);
+  const assigneeUids = useMemo(() => noBudget ? null : acceptanceAssigneeUids({ month: scopeMonth, teamId: localDraft.teamId, lines: nsLines, support: nsSupport }), [noBudget, scopeMonth, localDraft.teamId, nsLines, nsSupport]);
 
   // Ưu tiên blockId đã lưu (giá trị khớp dòng NS khoi) hơn giá trị resolveBlockForTeam chuẩn hoá,
   // để danh sách GĐ/TL Khối (khớp theo blockId) không lệch sau khi chọn.
   const currentDraftBlockId = localDraft.blockId || draftResolvedBlock.blockId || '';
   // GĐ Khối / Trợ lý Khối (đăng ký 'khoi' theo Khối, không thuộc Phòng) — bổ sung vào dropdown Người phụ trách.
-  const khoiAssignees = useMemo(() => acceptanceKhoiAssignees({ month: localDraft.month, blockId: currentDraftBlockId, lines: nsLines, support: nsSupport }), [localDraft.month, currentDraftBlockId, nsLines, nsSupport]);
+  const khoiAssignees = useMemo(() => noBudget ? null : acceptanceKhoiAssignees({ month: scopeMonth, blockId: currentDraftBlockId, lines: nsLines, support: nsSupport }), [noBudget, scopeMonth, currentDraftBlockId, nsLines, nsSupport]);
   const khoiUidSet = useMemo(() => new Set((khoiAssignees || []).map((k) => k.uid)), [khoiAssignees]);
 
   const projectItems = useMemo(() => {
@@ -169,7 +183,7 @@ export const AcceptanceDraftRow: React.FC<DraftRowProps> = React.memo(({
         return catalog([{ ...(p || {}), id: c.projectId, name: p?.name || c.projectName || c.projectId, rawItem: p }])[0];
       });
     }
-    if (propProjectItems) return propProjectItems;
+    if (propProjectItems && !noBudget) return propProjectItems;
     return (noBudget ? activeProjects(projects) : (projects || [])).map((p: any) => {
       const code = p.projectCode || '';
       const name = p.name || '';
@@ -255,14 +269,29 @@ export const AcceptanceDraftRow: React.FC<DraftRowProps> = React.memo(({
           </SelectContent>
         </Select>
         {(() => {
-          const opts = suppMonths(normalizeMonth(localDraft.month));
+          const opts = suppMonths(period);
           if (!opts.length || !suppAllowed) return null;
-          const cur = localDraft.supplement === true ? opts[0] : (typeof localDraft.supplement === 'string' ? localDraft.supplement : '');
+          const [year, month] = period.split('-');
           return (
-            <label className="mt-1 flex items-center gap-1 text-[10px] font-bold text-orange-700 whitespace-nowrap" title="Nghiệm thu bổ sung cho kỳ đã qua — lưu ở mục «Nghiệm thu bổ sung» của kỳ này, Super Admin duyệt thì được ghi vào kỳ gốc">
+            <label className="mt-1 flex items-center gap-1 text-[10px] font-bold text-orange-700 whitespace-nowrap" title="Lưu ở mục «Nghiệm thu bổ sung» của kỳ này, Super Admin duyệt thì được ghi vào kỳ gốc">
               Bổ sung cho
-              <select data-testid="nt-supp-toggle" className="h-5 text-[10px] border border-orange-300 rounded bg-[var(--mh-surface)]" value={cur} onChange={(e) => handleUpdateLocalFields({ supplement: e.target.value || false, ...(noBudgetAvailable(e.target.value) ? {} : { ntNoBudget: false, ntNoBudgetReason: '' }) })}>
+              <select data-testid="nt-supp-toggle" className="h-5 text-[10px] border border-orange-300 rounded bg-[var(--mh-surface)]" value={suppFor} onChange={(e) => {
+                const target = e.target.value;
+                const samePeriod = noBudgetSameKy(period, target);
+                const nextNoBudget = samePeriod || (noBudget && noBudgetAvailable(target));
+                setLocalDraft((prev: any) => {
+                  const next = {
+                    ...prev,
+                    supplement: target || false,
+                    ntNoBudget: nextNoBudget,
+                    ntNoBudgetReason: samePeriod || !nextNoBudget ? '' : prev.ntNoBudgetReason,
+                    ...(samePeriod || nextNoBudget !== noBudget ? CLEAR_ATTRIBUTION : {}),
+                  };
+                  return clearStaleProject(next, acceptanceChoicesFor(next, nsLines, nsSupport, allUsers));
+                });
+              }}>
                 <option value="">— (bản thường)</option>
+                {noBudgetAvailable(period) && <option value={period}>Kỳ T{+month}/{year} – Không có đăng ký NS</option>}
                 {opts.map((m) => <option key={m} value={m}>Kỳ T{+m.split('-')[1]}/{m.split('-')[0]}</option>)}
               </select>
             </label>
@@ -272,8 +301,11 @@ export const AcceptanceDraftRow: React.FC<DraftRowProps> = React.memo(({
           <div className="mt-1 space-y-1" data-testid="nt-supp-nobudget-box">
             <label className="flex items-center gap-1 text-[10px] font-bold text-red-700 whitespace-nowrap" title="Bổ sung cho dự án / người phụ trách KHÔNG nằm trong đăng ký NS của kỳ gốc — cần ghi lý do, Super Admin duyệt">
               <select data-testid="nt-supp-nobudget-toggle" className="h-5 text-[10px] border border-red-300 rounded bg-[var(--mh-surface)]" value={noBudget ? 'no' : 'yes'}
-                onChange={(e) => handleUpdateLocalFields({ ntNoBudget: e.target.value === 'no', ntNoBudgetReason: '', implementerUid: '', implementerName: '', implementerManual: false, projectId: '', projectName: '', projectCode: '' })}>
-                <option value="yes">Có đăng ký NS</option>
+                onChange={(e) => {
+                  const nextNoBudget = e.target.value === 'no';
+                  handleUpdateLocalFields({ ...CLEAR_ATTRIBUTION, ntNoBudget: nextNoBudget, ntNoBudgetReason: '', ...(!nextNoBudget && sameKy ? { supplement: false } : {}) });
+                }}>
+                <option value="yes" disabled={sameKy}>Có đăng ký NS</option>
                 <option value="no">Không có đăng ký</option>
               </select>
             </label>

@@ -21,7 +21,8 @@ import { ManualAssigneeDialog } from './ManualAssigneeDialog';
 import { NoBudgetBadge } from './NoBudgetBadge';
 import { suppBadge, suppStatus, SUPP_STATUS_LABEL } from '../../../lib/vnext/ntSupplement';
 import { NT_MANUAL_LABEL, NT_MANUAL_VALUE, ntManualAllowed, isManualImplementer, implementerLabel, hasImplementer, implementerKey } from '../../../lib/vnext/ntManual';
-import { acceptanceAssigneeUids, acceptanceChoicesFor, acceptanceKhoiAssignees, clearStaleProject, filterAssigneeOptions, type NtBudgetLine } from '../../../lib/vnext/ntBudgetProjects';
+import { acceptanceAssigneeUids, acceptanceChoicesFor, acceptanceKhoiAssignees, clearStaleProject, filterAssigneeOptions, ntScopeMonth, type NtBudgetLine } from '../../../lib/vnext/ntBudgetProjects';
+import { activeProjects, rowNoBudget, rowSupplementFor } from '../../../lib/vnext/ntNoBudget';
 import type { Support } from '../../../lib/vnext/support';
 
 interface RowProps {
@@ -196,10 +197,14 @@ export const AcceptanceRow: React.FC<RowProps> = React.memo(({
     });
   }, [propTeamItems, teams]);
 
-  const budgetChoices = useMemo(() => acceptanceChoicesFor(localEditState || item, nsLines, nsSupport, allUsers), [localEditState?.month, localEditState?.teamId, localEditState?.implementerUid, localEditState?.implementerManual, item.month, item.teamId, item.implementerUid, nsLines, nsSupport, allUsers]);
+  const editRow = isEditing ? (localEditState || item) : item;
+  const editNoBudget = rowNoBudget(editRow);
+  const editScopeMonth = ntScopeMonth(editRow);
+  const budgetChoices = useMemo(() => acceptanceChoicesFor(editRow, nsLines, nsSupport, allUsers), [editRow, nsLines, nsSupport, allUsers]);
 
   // Kỳ ≥ 2026-11: lọc Người phụ trách theo đăng ký NS của Phòng + kỳ.
-  const assigneeUids = useMemo(() => acceptanceAssigneeUids({ month: localEditState?.month ?? item.month, teamId: localEditState?.teamId ?? item.teamId, lines: nsLines, support: nsSupport }), [localEditState?.month, localEditState?.teamId, item.month, item.teamId, nsLines, nsSupport]);
+  const editTeamId = editRow.teamId ?? item.teamId;
+  const assigneeUids = useMemo(() => editNoBudget ? null : acceptanceAssigneeUids({ month: editScopeMonth, teamId: editTeamId, lines: nsLines, support: nsSupport }), [editNoBudget, editScopeMonth, editTeamId, nsLines, nsSupport]);
 
   // Bản ghi đã có: KHÔNG tự xoá trống dự án cũ khi mở sửa (dòng NS có thể đã bị xoá → hiện cờ «Không còn đăng ký NS»).
   // clearStaleProject chỉ chạy khi người dùng đổi Tháng / Phòng / Người phụ trách (các handler bên dưới).
@@ -219,8 +224,8 @@ export const AcceptanceRow: React.FC<RowProps> = React.memo(({
         };
       });
     }
-    if (propProjectItems) return propProjectItems;
-    return (projects || []).map((p: any) => {
+    if (propProjectItems && !editNoBudget) return propProjectItems;
+    return (editNoBudget ? activeProjects(projects) : (projects || [])).map((p: any) => {
       const code = p.projectCode || '';
       const name = p.name || '';
       const label = code ? `[${code}] ${name}` : name;
@@ -233,7 +238,7 @@ export const AcceptanceRow: React.FC<RowProps> = React.memo(({
         rawItem: p
       };
     });
-  }, [propProjectItems, projects, budgetChoices]);
+  }, [propProjectItems, projects, budgetChoices, editNoBudget]);
 
   const handleUpdateEditField = (fieldKey: string, val: any) => {
     setLocalEditState((prev: any) => ({
@@ -266,7 +271,7 @@ export const AcceptanceRow: React.FC<RowProps> = React.memo(({
     const editResolvedBlock = resolveBlockForTeam(currentEditTeam || localEditState, blocks, teams, findTeam);
     const editBlockId = localEditState.blockId || editResolvedBlock.blockId || '';
     // GĐ/TL Khối (đăng ký 'khoi' theo Khối, không thuộc Phòng) — bổ sung vào Người phụ trách.
-    const editKhoiAssignees = acceptanceKhoiAssignees({ month: localEditState.month, blockId: editBlockId, lines: nsLines, support: nsSupport });
+    const editKhoiAssignees = editNoBudget ? null : acceptanceKhoiAssignees({ month: editScopeMonth, blockId: editBlockId, lines: nsLines, support: nsSupport });
     const editKhoiUidSet = new Set((editKhoiAssignees || []).map((k) => k.uid));
 
     const currentEditProj = resolveAcceptanceProject(localEditState, projects);
@@ -399,7 +404,7 @@ export const AcceptanceRow: React.FC<RowProps> = React.memo(({
                 } else if (!localEditState.implementerUid && localEditState.implementerName) {
                   items.unshift({ value: '', label: isManualImplementer(localEditState) ? implementerLabel(localEditState) : `(cũ) ${localEditState.implementerName}`, searchString: localEditState.implementerName });
                 }
-                if (onAssignManual && ntManualAllowed(localEditState.month || item.month)) items.unshift({ value: NT_MANUAL_VALUE, label: NT_MANUAL_LABEL, searchString: 'khac tu nhap' });
+                if (onAssignManual && ntManualAllowed(localEditState.month || item.month, { supplementFor: rowSupplementFor(editRow), noBudget: editNoBudget })) items.unshift({ value: NT_MANUAL_VALUE, label: NT_MANUAL_LABEL, searchString: 'khac tu nhap' });
                 return items;
               })()}
               placeholder={(assigneeUids && assigneeUids.size === 0 && !(editKhoiAssignees && editKhoiAssignees.length)) ? 'Chưa có đăng ký NS kỳ này' : ((filterAssigneeOptions(implementerOptions(allUsers, currentEditTeamId), assigneeUids, allUsers).length || (editKhoiAssignees && editKhoiAssignees.length)) ? 'Chọn người phụ trách' : 'Phòng chưa có thành viên')}
@@ -735,13 +740,15 @@ export const AcceptanceRow: React.FC<RowProps> = React.memo(({
               value={item.implementerUid || ''}
               items={(() => {
                 const tid = matchedTeam?.id || item.teamId;
-                const assignUids = acceptanceAssigneeUids({ month: item.month, teamId: tid, lines: nsLines, support: nsSupport });
+                const noBudget = rowNoBudget(item);
+                const scopeMonth = ntScopeMonth(item);
+                const assignUids = noBudget ? null : acceptanceAssigneeUids({ month: scopeMonth, teamId: tid, lines: nsLines, support: nsSupport });
                 const opts = filterAssigneeOptions(implementerOptions(allUsers, tid, matchedTeam), assignUids, allUsers);
                 const items: any[] = opts.map((o) => ({ value: o.uid, label: o.name + (o.role === 'gdkd' ? ' · GĐKD' : ''), searchString: o.name }));
-                const kAssignees = acceptanceKhoiAssignees({ month: item.month, blockId: matchedTeam?.blockId || item.blockId, lines: nsLines, support: nsSupport });
+                const kAssignees = noBudget ? null : acceptanceKhoiAssignees({ month: scopeMonth, blockId: matchedTeam?.blockId || item.blockId, lines: nsLines, support: nsSupport });
                 (kAssignees || []).forEach((k) => { if (!items.some((i) => i.value === k.uid)) items.push({ value: k.uid, label: k.name + ' · GĐ/TL Khối', searchString: k.name }); });
                 if (item.implementerUid && !items.some((i) => i.value === item.implementerUid)) items.unshift({ value: item.implementerUid, label: `${item.implementerName || item.implementerUid} (ngoài Phòng)`, searchString: item.implementerName || '' });
-                if (onAssignManual && ntManualAllowed(item.month)) items.unshift({ value: NT_MANUAL_VALUE, label: NT_MANUAL_LABEL, searchString: 'khac tu nhap' });
+                if (onAssignManual && ntManualAllowed(item.month, { supplementFor: rowSupplementFor(item), noBudget })) items.unshift({ value: NT_MANUAL_VALUE, label: NT_MANUAL_LABEL, searchString: 'khac tu nhap' });
                 return items;
               })()}
               placeholder={item.implementerName && !item.implementerUid ? (isManualImplementer(item) ? implementerLabel(item) : `(cũ) ${item.implementerName}`) : 'Chọn người phụ trách'}
