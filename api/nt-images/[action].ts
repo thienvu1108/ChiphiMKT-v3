@@ -220,6 +220,8 @@ export default async function handler(req: any, res: any) {
     if (action === 'file') {
       const id = String(req.query?.id || '');
       const share = String(req.query?.share || '');
+      const pdf = req.query?.pdf === '1';
+      const originalLimit = 4 * 1024 * 1024;
       if (!/^[a-zA-Z0-9_-]{10,}$/.test(id)) throw new HttpError(400, 'id sai');
       if (share) {
         const link = await fsGet(`shareLinks/${share}`); // rules: chỉ GET được khi còn hạn & chưa thu hồi
@@ -232,6 +234,7 @@ export default async function handler(req: any, res: any) {
           const d = await fsGet(`acceptanceInvoices/${inv}`, me.token); // rules quyết định ai xem được
           if (!d || fv(d, 'fileId') !== id) throw new HttpError(403, 'Không có quyền');
         } else {
+          if (pdf) throw new HttpError(400, 'Thiếu mã hóa đơn');
           const img = await fsGet(`acceptanceImages/${String(req.query?.img || '')}`, me.token);
           if (!img || fv(img, 'ref') !== id) throw new HttpError(403, 'Không có quyền');
         }
@@ -240,7 +243,7 @@ export default async function handler(req: any, res: any) {
       const tok = (await tokenFor(meTok || undefined)).tok;
       // Hóa đơn (preview=1): PDF → ảnh trang 1 do Drive dựng; ảnh lớn (> 4 MB, vượt giới hạn phản hồi) → bản thu nhỏ Drive (đã xoay đúng chiều).
       const dl = !!req.query?.dl && !!String(req.query?.inv || '');
-      if (req.query?.preview && !dl) {
+      if (req.query?.preview && !dl && !pdf) {
         const m = await fetch(`https://www.googleapis.com/drive/v3/files/${id}?supportsAllDrives=true&fields=mimeType,size,thumbnailLink`, { headers: { authorization: `Bearer ${tok}` } });
         const mj: any = await m.json().catch(() => ({}));
         if (!m.ok) throw new HttpError(404, 'Không tìm thấy hóa đơn');
@@ -254,17 +257,26 @@ export default async function handler(req: any, res: any) {
           return res.status(200).send(Buffer.from(await th.arrayBuffer()));
         }
       }
-      if (dl) { // hóa đơn: mở/tải bản gốc qua app (không cần quyền Drive của người xem); giới hạn phản hồi Vercel ~4.5 MB
-        const m = await fetch(`https://www.googleapis.com/drive/v3/files/${id}?supportsAllDrives=true&fields=size`, { headers: { authorization: `Bearer ${tok}` } });
+      if (pdf || dl) { // hóa đơn: mở/tải bản gốc qua app (không cần quyền Drive của người xem); giới hạn phản hồi Vercel ~4.5 MB
+        const m = await fetch(`https://www.googleapis.com/drive/v3/files/${id}?supportsAllDrives=true&fields=size,mimeType`, { headers: { authorization: `Bearer ${tok}` } });
         const mj: any = await m.json().catch(() => ({}));
         if (!m.ok) throw new HttpError(404, 'Không tìm thấy hóa đơn');
-        if (Number(mj.size) > 4 * 1024 * 1024) throw new HttpError(413, 'Tệp lớn hơn 4 MB — mở trên Drive');
+        if (pdf && mj.mimeType !== 'application/pdf') throw new HttpError(415, 'Tệp không phải PDF');
+        if (pdf && !(Number(mj.size) > 0)) throw new HttpError(502, 'Không đọc được dung lượng PDF');
+        if (Number(mj.size) > originalLimit) throw new HttpError(413, 'Tệp lớn hơn 4 MB — mở trên Drive');
       }
       const r = await fetch(`https://www.googleapis.com/drive/v3/files/${id}?alt=media&supportsAllDrives=true`, { headers: { authorization: `Bearer ${tok}` } });
       if (!r.ok) throw new HttpError(404, 'Không tìm thấy ảnh');
-      res.setHeader('content-type', r.headers.get('content-type') || 'image/jpeg');
-      res.setHeader('cache-control', 'private, max-age=3600');
-      return res.status(200).send(Buffer.from(await r.arrayBuffer()));
+      if (pdf && Number(r.headers.get('content-length')) > originalLimit) {
+        await r.body?.cancel();
+        throw new HttpError(413, 'Tệp lớn hơn 4 MB — mở trên Drive');
+      }
+      const bytes = Buffer.from(await r.arrayBuffer());
+      if (pdf && bytes.length > originalLimit) throw new HttpError(413, 'Tệp lớn hơn 4 MB — mở trên Drive');
+      if (pdf) res.setHeader('x-content-type-options', 'nosniff');
+      res.setHeader('content-type', pdf ? 'application/pdf' : r.headers.get('content-type') || 'image/jpeg');
+      res.setHeader('cache-control', pdf ? 'no-store' : 'private, max-age=3600');
+      return res.status(200).send(bytes);
     }
     throw new HttpError(404, 'Không có action');
   } catch (e: any) {

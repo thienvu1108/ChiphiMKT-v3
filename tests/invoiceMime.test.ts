@@ -1,7 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import { inferInvoiceMime, isInvoiceFileOk, invoiceExt, isPreviewableInvoice, isDownloadOnlyInvoice, isCsvInvoice, INVOICE_ACCEPT } from '../lib/vnext/invoiceMime';
 import { mimeFromName, INVOICE_MIMES } from '../api/_lib/invoiceMime';
-import { invoiceDeckImages } from '../lib/vnext/invoiceDeck';
+import { expandPdfInvoicePages, invoiceDeckImages } from '../lib/vnext/invoiceDeck';
 
 describe('client invoice mime', () => {
   for (const type of ['', 'text/csv', 'application/vnd.ms-excel', 'text/plain', 'application/octet-stream']) {
@@ -37,10 +37,14 @@ describe('client invoice mime', () => {
     expect(isPreviewableInvoice({ mime: 'image/png', name: 'a.png' })).toBe(true);
     expect(isDownloadOnlyInvoice({ mime: 'application/zip', name: 'a.zip' })).toBe(true);
   });
-  it('deck skips csv, keeps image/pdf', () => {
+  it('deck skips csv and keeps image/PDF when expanding', async () => {
     const mk = (id: string, mime: string, name: string) => ({ id, acceptanceId: 'r1', fileId: 'f' + id, name, mime, order: 1, webViewLink: '' });
     const out = invoiceDeckImages([mk('1', 'text/csv', 'a.csv'), mk('2', 'image/png', 'a.png'), mk('3', 'application/pdf', 'a.pdf')], [{ id: 'r1' }]);
     expect(out.map((o) => o.inv)).toEqual(['2', '3']);
+    const expanded = await expandPdfInvoicePages(out, async () => 2);
+    expect(expanded.map((o) => o.id)).toEqual(['inv_2', 'inv_3', 'inv_3_p2']);
+    expect(expanded[0]).toBe(out[0]);
+    expect(expanded[2].caption).toBe('Hóa đơn (PDF, trang 2/2) · a.pdf');
   });
 });
 

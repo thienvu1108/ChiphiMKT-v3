@@ -9,7 +9,9 @@ import { ntNaming } from './NtReportPage';
 import { normalizeMonth } from '../../lib/vnext/ntReport';
 import { addPeriods, getPeriodOf } from '../../lib/vnext/period';
 import { storageFor } from './storage';
-import { PhotoViewer, type ViewerItem } from './PhotoViewer';
+import { PhotoViewer } from './PhotoViewer';
+import { useInvoicePages } from './invoicePages';
+import { invoiceDeckImages } from '../../lib/vnext/invoiceDeck';
 import type { DeckImage } from './ntDeck';
 
 import { isPreviewableInvoice, isDownloadOnlyInvoice, inferInvoiceMime, isInvoiceFileOk, invoiceExt, INVOICE_ACCEPT, INVOICE_TYPES_MSG } from '../../lib/vnext/invoiceMime';
@@ -21,11 +23,11 @@ export type Invoice = { id: string; acceptanceId: string; fileId: string; name: 
 const isPreviewableInv = (i: Invoice) => isPreviewableInvoice(i);
 const isZipOrExcel = (i: Invoice) => isDownloadOnlyInvoice(i);
 
-export function InvoiceThumb({ c, i, onOpen }: { c: VCtx; i: Invoice; onOpen?: () => void; key?: React.Key }) {
+export function InvoiceThumb({ c, i, onOpen, pages }: { c: VCtx; i: Invoice; onOpen?: () => void; pages?: number; key?: React.Key }) {
   const [src, setSrc] = useState(''); const [err, setErr] = useState(false);
   useEffect(() => { let on = true; setErr(false);
     if (!isPreviewableInv(i)) { setSrc(''); return; }
-    storageFor(c.db, 'drive').url({ id: 'inv_' + i.id, ref: i.fileId, inv: i.id } as any).then((u) => { if (on) { u ? setSrc(u) : setErr(true); } }).catch(() => on && setErr(true));
+    storageFor(c.db, 'drive').url({ id: 'inv_' + i.id, ref: i.fileId, inv: i.id }).then((u) => { if (on) { u ? setSrc(u) : setErr(true); } }).catch(() => on && setErr(true));
     return () => { on = false; }; }, [i.id, i.fileId, i.mime]);
   const body = (
     <>
@@ -33,7 +35,7 @@ export function InvoiceThumb({ c, i, onOpen }: { c: VCtx; i: Invoice; onOpen?: (
         {src ? <img src={src} alt={i.name} className="absolute inset-0 w-full h-full object-contain" style={{ imageOrientation: 'from-image' } as any} data-testid="vn-invoice-thumb-img" />
           : <span className="text-[11px] text-[var(--mh-text-3)] p-2 text-center">{isZipOrExcel(i) ? '📦 ZIP/Excel/CSV — bấm tải' : err ? (i.mime === 'application/pdf' ? '📄 PDF — bấm để mở' : '🖼️ Bấm để mở') : 'Đang tải…'}</span>}
       </div>
-      <div className="px-2 py-1 text-[11px] truncate text-[var(--mh-navy)]">{i.mime === 'application/pdf' ? '📄 ' : isZipOrExcel(i) ? '📦 ' : ''}{i.name}</div>
+      <div className="px-2 py-1 text-[11px] truncate text-[var(--mh-navy)]">{i.mime === 'application/pdf' ? '📄 ' : isZipOrExcel(i) ? '📦 ' : ''}{pages ? `PDF · ${pages} trang · ` : ''}{i.name}</div>
     </>
   );
   if (isPreviewableInv(i) && onOpen) {
@@ -52,8 +54,9 @@ const extOf = invoiceExt;
 export const fmtSize = (n: number) => (n >= 1 << 30 ? (n / (1 << 30)).toFixed(2) + ' GB' : n >= 1 << 20 ? (n / (1 << 20)).toFixed(1) + ' MB' : Math.max(1, Math.round(n / 1024)) + ' KB');
 
 export function useInvoices(c: VCtx, acceptanceId?: string) {
-  const [rows, setRows] = useState<Invoice[]>([]);
+  const [rows, setRows] = useState<Invoice[]>();
   useEffect(() => {
+    setRows(undefined);
     return listenTeamScoped(c, INVOICE_COLLECTION, acceptanceId ? [where('acceptanceId', '==', acceptanceId)] : [], setRows);
   }, [c.db, acceptanceId, c.role, gdkdTeams(c).join(',')]);
   return rows;
@@ -130,7 +133,7 @@ export function InvoiceList({ list, canDelete, onDelete }: { list: Invoice[]; ca
 }
 
 export function NtInvoiceModal({ c, record, onClose }: { c: VCtx; record: any; onClose: () => void }) {
-  const list = useInvoices(c, record.id);
+  const list = useInvoices(c, record.id) ?? [];
   const month = normalizeMonth(record.ntMonth || record.month) || addPeriods(getPeriodOf(), -1);
   const [prog, setProg] = useState<{ name: string; p: number; st: 'wait' | 'up' | 'ok' | 'err'; msg?: string; link?: string }[]>([]);
   const [busy, setBusy] = useState(false);
@@ -176,9 +179,10 @@ export function NtInvoiceModal({ c, record, onClose }: { c: VCtx; record: any; o
 }
 
 /** Báo cáo Nghiệm thu › mục Hóa đơn (riêng): theo bản ghi trong bộ lọc. */
-export function InvoiceSection({ c, records }: { c: VCtx; records: any[] }) {
-  const all = useInvoices(c);
-  const [view, setView] = useState<{ list: Invoice[]; i: number } | null>(null);
+export function InvoiceSection({ c, records, pdfPages = [] }: { c: VCtx; records: any[]; pdfPages?: DeckImage[] }) {
+  const all = useInvoices(c) ?? [];
+  const [view, setView] = useState<{ list: Invoice[]; id: string } | null>(null);
+  const pageCounts = new Map(pdfPages.filter((img) => img.page === 1 && img.inv).map((img) => [img.inv, img.pages]));
   const ids = new Set(records.map((r) => r.id));
   const by = new Map<string, Invoice[]>();
   for (const i of all) if (ids.has(i.acceptanceId)) { if (!by.has(i.acceptanceId)) by.set(i.acceptanceId, []); by.get(i.acceptanceId)!.push(i); }
@@ -188,9 +192,21 @@ export function InvoiceSection({ c, records }: { c: VCtx; records: any[] }) {
       <div className="px-4 py-3 border-b border-[var(--mh-border)] flex items-center gap-2"><div className="font-semibold text-[14px] flex-1">Hóa đơn</div><Badge c="info">{[...by.values()].flat().length} tệp · {recs.length}/{records.length} bản ghi</Badge></div>
       {!recs.length ? <Empty>Chưa có hóa đơn cho bộ lọc này</Empty> : <div className="divide-y divide-[var(--mh-border)]">{recs.map((r) => (
         <div key={r.id} className="p-3"><div className="text-[13px] font-semibold">{projectName(c, r.projectId, r.projectName)} › {r.implementerName || '—'} <span className="text-[11px] text-[var(--mh-text-3)] font-normal">{r.teamName}</span></div>
-          <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-2 my-2" data-testid="vn-invoice-thumbs">{by.get(r.id)!.slice().sort((a, b) => a.order - b.order).map((i, k, arr) => <InvoiceThumb key={i.id} c={c} i={i} onOpen={isPreviewableInv(i) ? () => setView({ list: arr.filter(isPreviewableInv), i: Math.max(0, arr.filter(isPreviewableInv).findIndex((x) => x.id === i.id)) }) : undefined} />)}</div>
+          <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-2 my-2" data-testid="vn-invoice-thumbs">{by.get(r.id)!.slice().sort((a, b) => a.order - b.order).map((i, _, arr) => <InvoiceThumb key={i.id} c={c} i={i} pages={pageCounts.get(i.id)} onOpen={isPreviewableInv(i) ? () => setView({ list: arr.filter(isPreviewableInv), id: i.id }) : undefined} />)}</div>
           <InvoiceList list={by.get(r.id)!} /></div>))}</div>}
-      {view && <PhotoViewer items={view.list.map((m) => ({ id: m.id, caption: m.name, load: () => storageFor(c.db, 'drive').url({ id: 'inv_' + m.id, ref: m.fileId, inv: m.id } as any) }))} index={view.i} onIndex={(i) => setView({ ...view, i })} onClose={() => setView(null)} />}
+      {view && <InvoiceViewer key={view.id} c={c} list={view.list} selected={view.id} onClose={() => setView(null)} />}
     </Card>
   );
+}
+
+function InvoiceViewer({ c, list, selected, onClose }: { c: VCtx; list: Invoice[]; selected: string; onClose: () => void; key?: React.Key }) {
+  const [id, setId] = useState('inv_' + selected);
+  const { images, pending, resolve } = useInvoicePages(invoiceDeckImages(list, list.map((i) => ({ id: i.acceptanceId }))), c.db);
+  const index = Math.max(0, images.findIndex((img) => img.id === id));
+  return <PhotoViewer key={String(pending)} items={images.map((img) => ({
+    id: img.id,
+    caption: [img.caption, img.warning ?? (pending && img.pdfName !== undefined ? 'Đang chuẩn bị các trang PDF…' : undefined)].filter(Boolean).join(' · '),
+    link: img.warning ? img.link : undefined,
+    load: () => resolve(img),
+  }))} index={index} onIndex={(next) => setId(images[next].id)} onClose={onClose} />;
 }

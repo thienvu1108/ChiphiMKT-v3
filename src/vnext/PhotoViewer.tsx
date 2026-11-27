@@ -1,11 +1,11 @@
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useRef, useState, type Key } from 'react';
 import { createPortal } from 'react-dom';
 import { keyAction, stepIndex, swipeAction, openableUrl } from '../lib/photoViewer';
 
-export type ViewerItem = { id: string; caption?: string; name?: string; load: () => Promise<string> };
+export type ViewerItem = { id: string; caption?: string; name?: string; link?: string; load: () => Promise<string> };
 
 /** Xem ảnh gốc toàn màn hình: Esc / ✕ / bấm nền để đóng, ◀ ▶ / phím mũi tên / vuốt để chuyển, bấm ảnh hoặc pinch để phóng to. */
-export function PhotoViewer({ items, index, onIndex, onClose }: { items: ViewerItem[]; index: number; onIndex: (i: number) => void; onClose: () => void }) {
+export function PhotoViewer({ items, index, onIndex, onClose }: { items: ViewerItem[]; index: number; onIndex: (i: number) => void; onClose: () => void; key?: Key }) {
   const it = items[index];
   const [src, setSrc] = useState(''); const [err, setErr] = useState(false); const [zoom, setZoom] = useState(false);
   const touch = useRef<{ x: number; y: number; n: number } | null>(null);
@@ -25,6 +25,7 @@ export function PhotoViewer({ items, index, onIndex, onClose }: { items: ViewerI
       <div className="flex items-center gap-2 p-2 text-white text-[13px]" onClick={(e) => e.stopPropagation()}>
         <span className="tabular-nums opacity-80">{index + 1}/{n}</span>
         <span className="flex-1 truncate">{it.caption || ''}</span>
+        {it.link && <a className={btn} href={it.link} target="_blank" rel="noreferrer">Mở trên Drive</a>}
         {src && <button type="button" className={btn} title="Mở ảnh gốc ở tab mới" data-testid="vn-photo-open" onClick={() => window.open(openableUrl(src), '_blank', 'noopener')}>↗ <span className="hidden sm:inline ml-1">Ảnh gốc</span></button>}
         <button type="button" className={btn} title="Phóng to / thu nhỏ" onClick={() => setZoom((z) => !z)}>{zoom ? '−' : '+'}</button>
         <button type="button" className={btn} title="Đóng (Esc)" aria-label="Đóng" data-testid="vn-photo-close" onClick={onClose}>✕</button>

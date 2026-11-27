@@ -9,11 +9,13 @@ import { auth } from '../firebase';
 
 export type ImgMeta = { id: string; acceptanceId: string; provider: 'drive' | 'firestore'; ref: string; name: string; caption?: string; order: number; uploadedBy: string; uploadedByName?: string; uploadedAt: string; teamId?: string };
 
+type ImageSource = Pick<ImgMeta, 'id' | 'ref'> & { inv?: string };
+
 export interface ImageStorage {
   id: 'drive' | 'firestore';
   label: string;
   upload(file: File | Blob, meta: { name: string; path: string[]; teamId?: string; acceptanceId?: string }): Promise<{ ref: string }>;
-  url(img: ImgMeta, share?: string): Promise<string>;
+  url(img: ImageSource, share?: string): Promise<string>;
   remove(img: ImgMeta): Promise<void>;
 }
 
@@ -78,7 +80,7 @@ export function driveStorage(): ImageStorage {
       return { ref: j.fileId };
     },
     async url(img, share) {
-      const inv = (img as any).inv as string | undefined; // hóa đơn: ảnh xem trước (PDF → trang 1)
+      const inv = img.inv; // hóa đơn: ảnh xem trước (PDF → trang 1)
       if (share) return `/api/nt-images/file?id=${encodeURIComponent(img.ref)}&share=${encodeURIComponent(share)}${inv ? '&preview=1' : ''}`;
       const k = 'd' + img.ref;
       if (urlCache.has(k)) return urlCache.get(k)!;

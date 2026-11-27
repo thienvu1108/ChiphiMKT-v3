@@ -2,10 +2,12 @@
 import React, { useEffect, useState } from 'react';
 import { GROUP_CHANNELS, cpl } from '../../lib/vnext/ntReport';
 import { fmt } from './ui';
+import { printWithTitle } from '../../lib/vnext/exportName';
+import type { DeckImage } from '../../lib/vnext/invoiceDeck';
 import { fitContain, jpegOrientation } from '../../lib/vnext/fitImage';
 
 export type DeckRecord = { id: string; code: string; user: string; team: string; block: string; project: string; projectId: string; cost: number; vat?: number; leads: number; groups: { label: string; cost: number; channels: { label: string; v: number }[] }[] };
-export type DeckImage = { id: string; recordId: string; caption?: string; order: number; provider: string; ref: string; inv?: string; link?: string };
+export type { DeckImage } from '../../lib/vnext/invoiceDeck';
 export type DeckData = {
   title: string; scopeLabel: string; periodLabel: string; createdAt?: string;
   /** Tên tệp xuất (exportBaseName) — có từ 26/10/2026. */
@@ -44,12 +46,17 @@ const Logo = ({ light }: any) => <div className={`font-extrabold tracking-wide t
 const H = ({ children }: any) => <div className="flex items-center gap-3 mb-[1.5%]"><div className="w-1.5 self-stretch bg-[var(--mh-accent)] rounded" /><div className="font-bold text-[clamp(11px,2vw,24px)] text-[var(--mh-navy)] flex-1 truncate">{children}</div><Logo /></div>;
 
 function ImageView({ img, resolve }: { img: DeckImage; resolve: (img: DeckImage) => Promise<string>; key?: React.Key }) {
-  const [src, setSrc] = useState('');
-  useEffect(() => { let on = true; resolve(img).then((u) => on && setSrc(u)).catch(() => {}); return () => { on = false; }; }, [img.id]);
+  const [src, setSrc] = useState<string>();
+  useEffect(() => {
+    let active = true;
+    resolve(img).catch(() => '').then((url) => { if (active) setSrc(url); });
+    return () => { active = false; };
+  }, [img.id, img.ref]);
   return (
-    <figure className="flex-1 min-w-0 flex flex-col">
-      <div className="flex-1 min-h-0 bg-[var(--mh-bg)] rounded-lg relative overflow-hidden">{src ? (img.link ? <a href={img.link} target="_blank" rel="noreferrer" className="contents" data-testid="vn-deck-invoice"><img src={src} alt={img.caption || ''} className="absolute inset-0 w-full h-full object-contain" data-testid="vn-deck-img" /></a> : <img src={src} alt={img.caption || ''} className="absolute inset-0 w-full h-full object-contain" data-testid="vn-deck-img" />) : <span className="absolute inset-0 grid place-items-center text-[11px] text-[var(--mh-text-3)]">Đang tải ảnh…</span>}</div>
+    <figure data-nt-image-pending={src === undefined ? "" : undefined} className="flex-1 min-w-0 flex flex-col">
+      <div className="flex-1 min-h-0 bg-[var(--mh-bg)] rounded-lg relative overflow-hidden">{src ? (img.link ? <a href={img.link} target="_blank" rel="noreferrer" className="contents" data-testid="vn-deck-invoice"><img src={src} alt={img.caption || ''} className="absolute inset-0 w-full h-full object-contain" data-testid="vn-deck-img" /></a> : <img src={src} alt={img.caption || ''} className="absolute inset-0 w-full h-full object-contain" data-testid="vn-deck-img" />) : <span className="absolute inset-0 grid place-items-center text-[11px] text-[var(--mh-text-3)]">{src === undefined ? 'Đang tải ảnh…' : 'Không tải được ảnh'}</span>}</div>
       {img.caption && <figcaption className="text-[clamp(8px,1.1vw,13px)] text-[var(--mh-text-2)] mt-1 text-center truncate">{img.caption}</figcaption>}
+      {img.warning && <p className="text-[clamp(8px,1vw,12px)] text-center text-[var(--mh-err)]">{img.warning}</p>}
     </figure>
   );
 }
@@ -72,7 +79,7 @@ export function buildSlides(d: DeckData, perSlide = 1) {
   return slides;
 }
 
-export function Deck({ d, resolve }: { d: DeckData; resolve: (img: DeckImage) => Promise<string> }) {
+export function Deck({ d, resolve }: { d: DeckData; resolve: (img: DeckImage) => Promise<string>; key?: React.Key }) {
   const slides = buildSlides(d);
   return (
     <div className="nt-deck space-y-4">
@@ -135,7 +142,7 @@ export function Deck({ d, resolve }: { d: DeckData; resolve: (img: DeckImage) =>
               <span className="text-[var(--mh-text-2)]">{r.groups.map((g) => `${g.label}: ${g.channels.map((c) => c.label).join(', ')}`).join(' · ')}</span>
             </div>
             <div className="flex-1 min-h-0 flex gap-[1.5%]">
-              {s.images!.length ? s.images!.map((img) => <ImageView key={img.id} img={img} resolve={resolve} />)
+              {s.images!.length ? s.images!.map((img) => <ImageView key={JSON.stringify([img.id, img.ref, img.pages, img.warning])} img={img} resolve={resolve} />)
                 : <div className="flex-1 rounded-lg border-2 border-dashed border-[var(--mh-border)] grid place-items-center text-[clamp(9px,1.4vw,18px)] text-[var(--mh-text-3)]">Chưa có ảnh Nghiệm thu</div>}
             </div>
           </Slide>
@@ -150,6 +157,28 @@ export function Deck({ d, resolve }: { d: DeckData; resolve: (img: DeckImage) =>
       })}
     </div>
   );
+}
+
+export async function printDeck(title: string) {
+  const deck = document.querySelector('.nt-deck');
+  if (!deck) return;
+  if (deck.querySelector('[data-nt-image-pending]')) {
+    await new Promise<void>((resolve, reject) => {
+      const observer = new MutationObserver(() => {
+        if (deck.querySelector('[data-nt-image-pending]')) return;
+        clearTimeout(timeout);
+        observer.disconnect();
+        resolve();
+      });
+      const timeout = setTimeout(() => {
+        observer.disconnect();
+        reject(new Error('Ảnh chưa tải xong. Hãy thử in lại.'));
+      }, 15000);
+      observer.observe(deck, { subtree: true, attributes: true, childList: true });
+    });
+  }
+  await Promise.allSettled(Array.from(deck.querySelectorAll('img'), (img) => img.decode()));
+  if (deck.isConnected) printWithTitle(title, () => document.body.classList.add('nt-print'), () => document.body.classList.remove('nt-print'));
 }
 
 /** Xuất PPTX bằng pptxgenjs (import động). */
@@ -206,12 +235,12 @@ export async function exportPptx(d: DeckData, resolve: (img: DeckImage) => Promi
     for (let k = 0; k < imgs.length; k++) {
       // Giữ tỉ lệ thật: ảnh có EXIF xoay (ảnh dọc chụp điện thoại) được xoay sẵn vì PowerPoint bỏ qua EXIF (nếu không sẽ bị bóp méo).
       const prep = await pptxImage(await resolve(imgs[k]).catch(() => ''));
-      if (!prep) continue;
-      const cap = !!imgs[k].caption;
+      const caption = [imgs[k].caption, imgs[k].warning].filter(Boolean).join(' · ');
+      const cap = !!caption;
       const box = { x: 0.4, y: 1.3, w: 9.2, h: cap ? 3.75 : 4.1 };
-      if (prep.w > 0 && prep.h > 0) { const f = fitContain(prep.w, prep.h, box); s.addImage({ data: prep.data, x: f.x, y: f.y, w: f.w, h: f.h }); }
-      else s.addImage({ data: prep.data, x: box.x, y: box.y, w: box.w, h: box.h, sizing: { type: 'contain', w: box.w, h: box.h } } as any);
-      if (cap) s.addText(imgs[k].caption!, { x: 0.4, y: 5.07, w: 9.2, h: 0.35, fontFace: font, fontSize: 9, color: '5B6B82', align: 'center' });
+      if (prep && prep.w > 0 && prep.h > 0) { const f = fitContain(prep.w, prep.h, box); s.addImage({ data: prep.data, x: f.x, y: f.y, w: f.w, h: f.h }); }
+      else if (prep) s.addImage({ data: prep.data, x: box.x, y: box.y, w: box.w, h: box.h, sizing: { type: 'contain', w: box.w, h: box.h } } as any);
+      if (cap && (prep || imgs[k].warning)) s.addText(caption, { hyperlink: imgs[k].warning && imgs[k].link ? { url: imgs[k].link! } : undefined, x: 0.4, y: 5.07, w: 9.2, h: 0.35, fontFace: font, fontSize: 9, color: '5B6B82', align: 'center' });
     }
   }
   await pptx.writeFile({ fileName });
@@ -229,8 +258,10 @@ export async function pptxImage(src: string): Promise<{ data: string; w: number;
   if (ori !== 1 && bmp) {
     const cv = document.createElement('canvas'); cv.width = w; cv.height = h;
     cv.getContext('2d')!.drawImage(bmp, 0, 0);
+    bmp.close();
     return { data: cv.toDataURL('image/jpeg', 0.92), w, h };
   }
+  bmp?.close();
   const data = await new Promise<string>((ok) => { const fr = new FileReader(); fr.onload = () => ok(String(fr.result)); fr.onerror = () => ok(''); fr.readAsDataURL(blob); });
   if (!data) return null;
   if (w && h) return { data, w, h };
