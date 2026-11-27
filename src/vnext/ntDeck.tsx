@@ -102,7 +102,7 @@ export function Deck({ d, resolve }: { d: DeckData; resolve: (img: DeckImage) =>
         if (s.kind === 'summary') return (
           <Slide key={i}>
             <H>Tổng hợp theo Nhóm & Dự án</H>
-            <div className="grid grid-cols-2 gap-[2%] flex-1 min-h-0 text-[clamp(7px,1.05vw,13px)]">
+            <div className="mh-nt-slide-tables grid grid-cols-2 gap-[2%] flex-1 min-h-0 text-[clamp(7px,1.05vw,13px)]">
               <table className="w-full self-start"><thead><tr className="bg-[var(--mh-navy)] text-white"><th className="text-left p-1">Nhóm</th><th className="text-right p-1">Chi phí (trước VAT)</th>{hasVat(d) && <><th className="text-right p-1">VAT</th><th className="text-right p-1">Sau VAT</th></>}<th className="text-right p-1">Lead*</th></tr></thead><tbody>
                 {d.groups.map((g) => <tr key={g.label} className="border-b border-[var(--mh-surface-2)]"><td className="p-1 font-semibold">{g.label}</td><td className="p-1 text-right tabular-nums">{fmt(g.cost)}</td>{hasVat(d) && <><td className="p-1 text-right tabular-nums">{fmt(g.vat || 0)}</td><td className="p-1 text-right tabular-nums">{fmt(g.cost + (g.vat || 0))}</td></>}<td className="p-1 text-right">{fmt(g.leads)}</td></tr>)}
                 <tr className="bg-[#FFF3EB] font-bold"><td className="p-1">TỔNG CỘNG</td><td className="p-1 text-right tabular-nums">{fmt(d.total.cost)}</td>{hasVat(d) && <><td className="p-1 text-right tabular-nums">{fmt(d.total.vat!)}</td><td className="p-1 text-right tabular-nums" data-testid="vn-deck-sum-withvat">{fmt(withVat(d))}</td></>}<td className="p-1 text-right">{fmt(d.total.leads)}</td></tr>
@@ -117,7 +117,7 @@ export function Deck({ d, resolve }: { d: DeckData; resolve: (img: DeckImage) =>
         if (s.kind === 'group') { const g = s.group; return (
           <Slide key={i}>
             <H>{g.label}{s.parts! > 1 ? ` (${s.part}/${s.parts})` : ''}</H>
-            <div className="flex-1 min-h-0 overflow-hidden text-[clamp(6px,0.95vw,12px)]">
+            <div className="mh-nt-slide-tables flex-1 min-h-0 overflow-hidden text-[clamp(6px,0.95vw,12px)]">
               <table className="w-full"><thead><tr className="bg-[var(--mh-navy)] text-white"><th className="text-left p-1">Dự án / User</th><th className="text-left p-1">Phòng</th>{g.channels.map((k: string) => <th key={k} className="text-right p-1">{chLabel(k)}</th>)}<th className="text-right p-1">Chi phí</th><th className="text-right p-1">Lead</th><th className="text-right p-1">Giá/lead</th></tr></thead><tbody>
                 {s.rows!.map((x: any, j: number) => x.type === 'p'
                   ? <tr key={j} className="bg-[var(--mh-navy-50)] font-semibold"><td className="p-1" colSpan={2 + g.channels.length}>{x.p.projectName}</td><td className="p-1 text-right tabular-nums">{fmt(x.p.cost)}</td><td className="p-1 text-right">{fmt(x.p.leads)}</td><td className="p-1 text-right tabular-nums">{cpl(x.p.cost, x.p.leads) ? fmt(cpl(x.p.cost, x.p.leads)) : '—'}</td></tr>

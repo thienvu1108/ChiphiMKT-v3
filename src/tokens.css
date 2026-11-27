@@ -102,6 +102,7 @@
   --header-height: 56px;
   --header-height-mobile: 52px;
   --bottom-nav-height: 64px;
+  --bottom-nav-offset: calc(var(--bottom-nav-height) + env(safe-area-inset-bottom, 0px));
   --content-max: 1440px;
   --z-sticky: 20;
   --z-header: 40;

@@ -1753,19 +1753,19 @@ export const AcceptanceManager = React.memo(({
   return (
     <div className="space-y-4">
       {/* 🌟 Header & Action Toolbar */}
-      <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4 bg-[var(--mh-surface)] p-4 rounded-3xl border border-[var(--mh-border)] shadow-sm">
+      <div className="mh-nt-toolbar flex flex-col md:flex-row justify-between items-start md:items-center gap-4 bg-[var(--mh-surface)] p-4 rounded-3xl border border-[var(--mh-border)] shadow-sm">
         <div className="flex items-center gap-3">
-          <div className="bg-indigo-600 text-white p-2.5 rounded-2xl shadow-md shadow-indigo-100">
+          <div className="mh-nt-toolbar-icon bg-indigo-600 text-white p-2.5 rounded-2xl shadow-md shadow-indigo-100">
             <FileSpreadsheet className="w-6 h-6" />
           </div>
           <div>
             <h1 className="text-base font-black text-[var(--mh-text)] uppercase tracking-tight flex items-center gap-2">
               <span>Báo cáo Nghiệm thu Marketing</span>
-              <Badge className="bg-indigo-50 text-indigo-700 border-none font-extrabold text-[10px] px-2 py-0.5">
+              <Badge className="mh-nt-toolbar-detail bg-indigo-50 text-indigo-700 border-none font-extrabold text-[10px] px-2 py-0.5">
                 Chuẩn công thức VAT & Kỳ
               </Badge>
             </h1>
-            <p className="text-xs text-[var(--mh-text-2)] font-medium">
+            <p className="mh-nt-toolbar-detail text-xs text-[var(--mh-text-2)] font-medium">
               Chỉ riêng Tháng 8 chia 2 kỳ (Kì 1 - Kì 2) | Các tháng khác hiển thị chuẩn MM.YYYY (VD: 09.2026) | VAT 10% & 8% | Tổng cột K+Q+S+Y
             </p>
           </div>
@@ -2252,7 +2252,7 @@ export const AcceptanceManager = React.memo(({
 
           <div
             ref={tableContainerRef}
-            className="overflow-x-auto overflow-y-auto max-h-[72vh] lg:max-h-[max(360px,calc(100dvh-172px))] cursor-grab border-b border-[var(--mh-border)] select-none scrollbar-thin scrollbar-thumb-slate-300 overscroll-contain [-webkit-overflow-scrolling:touch] touch-pan-x"
+            className="mh-nt-table overflow-x-auto overflow-y-auto max-h-[72vh] lg:max-h-[max(360px,calc(100dvh-172px))] cursor-grab border-b border-[var(--mh-border)] select-none scrollbar-thin scrollbar-thumb-slate-300 overscroll-contain [-webkit-overflow-scrolling:touch] touch-pan-x"
           >
             <table className="w-full text-left border-collapse min-w-[1800px] sm:min-w-[2400px] caption-bottom text-[11px] sm:text-sm [&_th]:px-1.5 [&_td]:px-1 sm:[&_th]:px-2 sm:[&_td]:px-2">
               <AcceptanceTableHeader
@@ -2431,9 +2431,9 @@ export const AcceptanceManager = React.memo(({
 
       {/* Mobile bottom sheet editor */}
       {mobileSheetItem && (
-        <div className="md:hidden fixed inset-0 z-50 flex">
+        <div className="mh-nt-editor md:hidden fixed inset-0 z-50 flex">
           <div className="absolute inset-0 bg-[var(--mh-text)]/45" onClick={() => { setMobileSheetItem(null); setEditingRowId(null); setEditingRowState(null); }} />
-          <div className="relative mt-auto w-full max-h-[88vh] bg-[var(--mh-surface)] rounded-t-2xl shadow-2xl overflow-hidden flex flex-col animate-in slide-in-from-bottom duration-200">
+          <div className="mh-landscape-sheet relative mt-auto w-full max-h-[88vh] bg-[var(--mh-surface)] rounded-t-2xl shadow-2xl overflow-hidden flex flex-col animate-in slide-in-from-bottom duration-200">
             <div className="flex items-center justify-between px-4 py-3 border-b border-[var(--mh-border)]">
               <div className="min-w-0">
                 <div className="font-bold text-[15px] truncate">{mobileSheetItem.projectName || 'Chi tiết nghiệm thu'}</div>

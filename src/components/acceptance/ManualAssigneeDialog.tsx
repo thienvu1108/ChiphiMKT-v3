@@ -15,7 +15,7 @@ export function ManualAssigneeDialog({ open, initial = '', onClose, onSave }: { 
     try { await onSave(cleanManualName(v)); onClose(); } catch (x: any) { setErr(String(x?.message || x?.code || x)); } finally { setBusy(false); }
   };
   return createPortal(
-    <div className="fixed inset-0 z-[2100] bg-black/40 flex items-end md:items-center justify-center overflow-hidden" onClick={onClose} data-testid="nt-manual-dialog">
+    <div className="mh-landscape-overlay fixed inset-0 z-[2100] bg-black/40 flex items-end md:items-center justify-center overflow-hidden" onClick={onClose} data-testid="nt-manual-dialog">
       <div className="w-full max-w-[100vw] md:max-w-md max-h-[min(92dvh,100%)] overflow-y-auto overscroll-contain bg-[var(--mh-surface)] rounded-t-2xl md:rounded-2xl shadow-2xl p-4 space-y-3 pb-[max(1rem,env(safe-area-inset-bottom))]" onClick={(e) => e.stopPropagation()} onPointerDown={(e) => e.stopPropagation()}>
         <div className="font-bold text-[15px]">Người phụ trách — tự nhập</div>
         <div className="text-[12px] text-[var(--mh-text-2)]">Chỉ áp dụng kỳ <b>Tháng 10/2026 (21/9–20/10)</b> — chưa có đăng ký NS MKT theo user — hoặc Nghiệm thu bổ sung «Không có đăng ký NS». Còn lại chỉ chọn từ danh sách.</div>

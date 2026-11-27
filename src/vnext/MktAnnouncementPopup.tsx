@@ -30,8 +30,8 @@ export const MktAnnouncementPopup: React.FC<{ onDetail: () => void }> = ({ onDet
   if (!open) return null;
 
   return createPortal(
-    <div className="fixed inset-0 z-[1300] bg-black/70 flex items-center justify-center p-4" role="dialog" aria-modal="true" aria-label="Thông báo chính sách hỗ trợ Marketing" onClick={close} data-testid="vn-mkt-popup">
-      <div className="relative w-full max-w-lg rounded-2xl overflow-hidden shadow-2xl" onClick={(e) => e.stopPropagation()}>
+    <div className="mh-landscape-overlay fixed inset-0 z-[1300] bg-black/70 flex items-center justify-center p-4" role="dialog" aria-modal="true" aria-label="Thông báo chính sách hỗ trợ Marketing" onClick={close} data-testid="vn-mkt-popup">
+      <div className="mh-announcement-panel relative w-full max-w-lg rounded-2xl overflow-hidden shadow-2xl" onClick={(e) => e.stopPropagation()}>
         {/* Nút đóng */}
         <button type="button" onClick={close} aria-label="Đóng" data-testid="vn-mkt-popup-close"
           className="absolute top-3 right-3 z-10 inline-flex items-center justify-center w-8 h-8 rounded-full bg-white/15 hover:bg-white/30 text-white transition-colors">
