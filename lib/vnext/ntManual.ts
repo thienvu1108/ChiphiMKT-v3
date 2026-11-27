@@ -43,6 +43,16 @@ export function isManualImplementer(r: any): boolean {
   return r?.implementerManual === true && !r?.implementerUid && !!r?.implementerName;
 }
 
+/** Đã có người phụ trách: chọn từ danh sách (uid) hoặc tự nhập (implementerManual + tên). */
+export function hasImplementer(r: any): boolean {
+  return !!r?.implementerUid || isManualImplementer(r);
+}
+
+/** Khoá nhận diện người phụ trách (uid, hoặc tên tự nhập) — dùng làm React key. */
+export function implementerKey(r: any): string {
+  return r?.implementerUid || (isManualImplementer(r) ? manualKey(r.implementerName) : '');
+}
+
 /** Tên hiển thị (kèm nhãn «tự nhập» khi cần). */
 export function implementerLabel(r: any, withTag = true): string {
   const n = String(r?.implementerName || '');

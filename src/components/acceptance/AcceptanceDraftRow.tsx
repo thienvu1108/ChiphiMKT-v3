@@ -12,7 +12,7 @@ import { ManualAssigneeDialog } from './ManualAssigneeDialog';
 import { suppMonths } from '../../../lib/vnext/ntSupplement';
 import { normalizeMonth } from '../../../lib/vnext/ntReport';
 import { rowNoBudget, rowSupplementFor, noBudgetAvailable, noBudgetAssigneeOptions, activeProjects, NT_NOBUDGET_REASON_MAX } from '../../../lib/vnext/ntNoBudget';
-import { NT_MANUAL_LABEL, NT_MANUAL_VALUE, ntManualAllowed, isManualImplementer, implementerLabel } from '../../../lib/vnext/ntManual';
+import { NT_MANUAL_LABEL, NT_MANUAL_VALUE, ntManualAllowed, isManualImplementer, implementerLabel, hasImplementer, implementerKey } from '../../../lib/vnext/ntManual';
 import { acceptanceAssigneeUids, acceptanceChoicesFor, acceptanceKhoiAssignees, clearStaleProject, filterAssigneeOptions, ntUsesBudgetProjects, type NtBudgetLine } from '../../../lib/vnext/ntBudgetProjects';
 import type { Support } from '../../../lib/vnext/support';
 
@@ -394,12 +394,12 @@ export const AcceptanceDraftRow: React.FC<DraftRowProps> = React.memo(({
         <AcceptanceSearchableSelect
           /* Kỳ ≥ 2026-11: khi đổi Phòng/người/kỳ, danh sách dự án đổi theo đăng ký NS của người mới.
              Remount select theo (team|người|kỳ) để Base UI không giữ lựa chọn/trạng thái cũ (bug: đổi người xong ô dự án không cập nhật, không thao tác được). */
-          key={budgetChoices ? `proj-${currentDraftTeamId}-${localDraft.implementerUid || 'none'}-${normalizeMonth(localDraft.month)}` : 'proj-all'}
+          key={budgetChoices ? `proj-${currentDraftTeamId}-${implementerKey(localDraft) || 'none'}-${normalizeMonth(localDraft.month)}` : 'proj-all'}
           testId="nt-project-select"
           value={budgetChoices && !budgetChoices.some((c) => c.projectId === currentDraftProjId) ? '' : (currentDraftProjId || '')}
           items={projectItems}
-          disabled={!!budgetChoices && (!localDraft.implementerUid || projectItems.length === 0)}
-          placeholder={!currentDraftTeamId && !currentDraftBlockId ? 'Chọn Phòng trước' : !localDraft.implementerUid ? 'Chọn người phụ trách trước' : budgetChoices && projectItems.length === 0 ? 'Chưa có đăng ký NS kỳ này' : 'Chọn Dự án'}
+          disabled={!!budgetChoices && (!hasImplementer(localDraft) || projectItems.length === 0)}
+          placeholder={!currentDraftTeamId && !currentDraftBlockId ? 'Chọn Phòng trước' : !hasImplementer(localDraft) ? 'Chọn người phụ trách trước' : budgetChoices && projectItems.length === 0 ? 'Chưa có đăng ký NS kỳ này' : 'Chọn Dự án'}
           searchPlaceholder="Tìm kiếm dự án, mã dự án..."
           triggerDisplay={
             selectedProj ? (
