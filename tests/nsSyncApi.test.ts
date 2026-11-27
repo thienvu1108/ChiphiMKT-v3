@@ -44,8 +44,7 @@ function fakeFirestore() {
           create: ({ path }: Ref, data: Data) => writes.set(path, data),
         });
         if (options?.readOnly) expect(writes.size).toBe(0);
-        clock++;
-        for (const [path, data] of writes) docs.set(path, { data, version: clock });
+        for (const [path, data] of writes) docs.set(path, { data, version: ++clock });
         return result;
       },
     },
@@ -85,6 +84,11 @@ describe('API đồng bộ số tiền NS', () => {
     const body = { ...edit, version: preview.data.version };
     const committed = await call('commit', body);
     expect(committed).toMatchObject({ status: 200, data: { replayed: false, after: { amount: 99 } } });
+    const operation = mock.docs.get(`nsSyncOps/${operationId}`)!;
+    const committedLine = mock.docs.get(linePath)!;
+    expect(operation.version).not.toBe(committedLine.version);
+    expect(operation.data.result.committedUpdatedAt).toBe(committedLine.data.updatedAt);
+    expect(committed.data.committedUpdatedAt).toBe(new Date(committedLine.data.updatedAt).toISOString());
     expect(mock.docs.get(linePath)?.data).toMatchObject({ amount: 99, projectId: 'P', ownerUid: 'U', teamId: 'T', period: '2026-11' });
     expect(mock.docs.get(`auditLogs/${operationId}`)?.data).toMatchObject({ action: 'NS_LINE_SA_UPDATE', locked: true, source: 'ns-sync', operationId });
     expect(mock.docs.get(`nsLineHistory/${operationId}`)?.data.changes).toContainEqual({ field: 'amount', from: '10', to: '99' });
@@ -100,6 +104,23 @@ describe('API đồng bộ số tiền NS', () => {
     expect(await call('reverse', { ...reverse, dryRun: false, version: reversePreview.data.version })).toMatchObject({ status: 200, data: { reverseOf: operationId } });
     expect(mock.docs.get(linePath)?.data.amount).toBe(10);
     expect(mock.docs.has(`auditLogs/${operationId}`)).toBe(true);
+  });
+
+  it.each([
+    { amount: 42 },
+    { updatedAt: '2099-01-01T00:00:00.000Z' },
+  ])('chặn đảo khi dòng NS đã thay đổi: %j', async (patch) => {
+    const preview = await call('preview', edit);
+    expect(await call('commit', { ...edit, version: preview.data.version })).toMatchObject({ status: 200 });
+    const reverse = { ...edit, operationId: reverseId, reverseOf: operationId, notify: false };
+    const reversePreview = await call('reverse', { ...reverse, dryRun: true });
+    expect(reversePreview.status).toBe(200);
+    const line = mock.docs.get(linePath)!;
+    mock.docs.set(linePath, { data: { ...line.data, ...patch }, version: line.version + 1 });
+    const conflict = { status: 409, data: { code: 'version_conflict' } };
+    expect(await call('reverse', { ...reverse, dryRun: true })).toMatchObject(conflict);
+    expect(await call('reverse', { ...reverse, dryRun: false, version: reversePreview.data.version })).toMatchObject(conflict);
+    expect(mock.docs.has(`nsSyncOps/${reverseId}`)).toBe(false);
   });
 
   it('chặn commit nếu dòng đổi sau preview, kể cả khi số tiền và updatedAt giữ nguyên', async () => {

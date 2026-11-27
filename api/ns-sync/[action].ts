@@ -13,7 +13,7 @@ import {
 import { databaseId } from '../_lib/dbId.js';
 import { linkAdminApp } from '../_lib/linkOnLoginExec.js';
 
-type Result = NsSyncPlan & { operationId: string; docsWritten: string[]; reverseOf?: string };
+type Result = NsSyncPlan & { operationId: string; docsWritten: string[]; committedUpdatedAt: string; reverseOf?: string };
 type Operation = { requestHash: string; result: Result };
 const stamp = (t: Timestamp | undefined) => t ? `${t.seconds}:${t.nanoseconds}` : '';
 const revision = (line: DocumentSnapshot, support: DocumentSnapshot) => `${stamp(line.updateTime)}/${stamp(support.updateTime)}`;
@@ -68,8 +68,7 @@ export async function handleNsSync(action: string, req: any, res: any) {
       const replay = dryRun ? undefined : replayNsSync(prior, requestHash);
       if (replay) return { response: { ...replay, replayed: true } };
 
-      const original = reverse ? await tx.get(db.collection('nsSyncOps').doc(reverseOf)) : null;
-      const old = original?.data() as Operation | undefined;
+      const old = reverse ? (await tx.get(db.collection('nsSyncOps').doc(reverseOf))).data() as Operation | undefined : undefined;
       if (reverse && !old) throw new NsSyncError(404, 'operation_not_found', 'Không tìm thấy giao dịch để đảo.');
       const lineId = edit?.lineId ?? old!.result.lineId;
       const lineRef = db.collection(NS_COLLECTION).doc(lineId);
@@ -78,11 +77,12 @@ export async function handleNsSync(action: string, req: any, res: any) {
       );
       const line = snap.exists ? { ...normalizeLegacyFieldValues(snap.data()), id: snap.id } as NsLine : null;
       const currentVersion = revision(snap, supportSnap);
-      if (old && (!snap.updateTime || !original?.updateTime?.isEqual(snap.updateTime))) throw versionConflict();
+      if (old && (!line || !old.result.committedUpdatedAt || line.amount !== old.result.after.amount ||
+        line.updatedAt !== old.result.committedUpdatedAt)) throw versionConflict();
       if (!dryRun && currentVersion !== version) throw versionConflict();
       const requested = edit ?? amountEdit({
         lineId, amount: old!.result.before.amount,
-        expectedAmount: old!.result.after.amount, expectedUpdatedAt: line?.updatedAt ?? null,
+        expectedAmount: old!.result.after.amount, expectedUpdatedAt: old!.result.committedUpdatedAt,
       });
       const now = new Date();
       const locks = normLocks(locksSnap.data());
@@ -92,11 +92,11 @@ export async function handleNsSync(action: string, req: any, res: any) {
 
       const historyRef = db.collection(HISTORY_COLLECTION).doc(options.operationId);
       const auditRef = db.collection('auditLogs').doc(options.operationId);
+      const at = now.toISOString();
       const result: Result = {
-        ...plan, operationId: options.operationId, ...(reverse ? { reverseOf } : {}),
+        ...plan, operationId: options.operationId, committedUpdatedAt: at, ...(reverse ? { reverseOf } : {}),
         docsWritten: [lineRef.path, historyRef.path, auditRef.path, opRef.path],
       };
-      const at = now.toISOString();
       const actor = { uid, role: 'super_admin', name: String(profile?.displayName || profile?.fullName || profile?.name || '') };
       const patch = {
         amount: plan.after.amount, updatedAt: at, updatedBy: uid,
