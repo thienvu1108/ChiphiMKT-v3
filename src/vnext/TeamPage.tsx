@@ -1,3 +1,4 @@
+import { NoBudgetBadge } from '../components/acceptance/NoBudgetBadge';
 import { isSupplement, suppStatus, suppViewLabel, ntCountsInTotals } from '../../lib/vnext/ntSupplement';
 import React, { useEffect, useMemo, useState } from 'react';
 import { implementerLabel } from '../../lib/vnext/ntManual';
@@ -222,7 +223,7 @@ function TeamNt({ c, tid, period }: { c: VCtx; tid: string; period: string }) {
           <thead><tr><Th>Dự án</Th><Th>Người phụ trách</Th><Th>Trạng thái</Th><Th>Chi phí (trước VAT)</Th></tr></thead>
           <tbody>{rows.map((a) => (
             <tr key={a.id} data-testid="vn-team-nt-row" className={scope === 'all' ? 'cursor-pointer hover:bg-[#F6F8FB]' : ''} onClick={scope === 'all' ? (open as any) : undefined}>
-              <Td>{projectName(c, a.projectId, a.projectName)}{isSupplement(a) && <div data-testid="vn-team-nt-supp" className={`text-[11px] font-bold ${suppStatus(a) === 'rejected' ? 'text-red-600' : 'text-orange-700'}`}>{suppViewLabel(a)}</div>}</Td>
+              <Td>{projectName(c, a.projectId, a.projectName)}<NoBudgetBadge rec={a} />{isSupplement(a) && <div data-testid="vn-team-nt-supp" className={`text-[11px] font-bold ${suppStatus(a) === 'rejected' ? 'text-red-600' : 'text-orange-700'}`}>{suppViewLabel(a)}</div>}</Td>
               <Td>{implementerLabel(a) || (a.implementerUid ? userName(c, a.implementerUid) : '—')}</Td>
               <Td>{a.status || '—'}</Td>
               <Td>{fmt(recordCostBeforeVat(a))}</Td>

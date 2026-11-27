@@ -120,7 +120,22 @@ export function buildReport(records: any[], filter: { month?: string; teamIds?: 
   const projects = [...byProject.values()].sort((a, b) => b.cost - a.cost);
   const cost = projects.reduce((s, p) => s + p.cost, 0), vat = projects.reduce((s, p) => s + p.vat, 0);
   const total = { cost, vat, withVat: cost + vat, leads: projects.reduce((s, p) => s + p.leads, 0) };
-  return { records: recs, groups, projects, total };
+  return { records: recs, groups, projects, total, noBudget: splitNoBudget(recs).noBudget };
+}
+
+/** Bản ghi Nghiệm thu bổ sung «Không có đăng ký NS» (ntNoBudget). */
+export function isNoBudgetRec(r: any): boolean { return r?.ntNoBudget === true && !!r?.supplementFor; }
+
+/**
+ * Tách số «Trong đó NT ngoài đăng ký NS» khỏi tổng. Bản ngoài ĐK NS vẫn nằm trong tổng (đã tính ở buildReport);
+ * NS của chúng = 0 nên không cộng vào NS. recs = các bản đã tính vào tổng (isAccepted).
+ */
+export function splitNoBudget(recs: any[]) {
+  const acc = (list: any[]) => ({ records: list.length, cost: list.reduce((s, r) => s + recordCostBeforeVat(r), 0), vat: list.reduce((s, r) => s + recordVat(r), 0) });
+  const all = (recs || []).filter((r) => isAccepted(r));
+  const nb = all.filter(isNoBudgetRec);
+  const t = acc(all), n = acc(nb);
+  return { total: { ...t, withVat: t.cost + t.vat }, noBudget: { ...n, withVat: n.cost + n.vat } };
 }
 
 export const cpl = (cost: number, leads: number) => (leads > 0 ? Math.round(cost / leads) : null);

@@ -18,8 +18,9 @@ import { AmountLinesEditor, AmountCellButton } from './AmountLinesEditor';
 import { implementerOptions } from '../../../lib/vnext/onboarding';
 import { AcceptanceSearchableSelect, SearchableItem } from './AcceptanceSearchableSelect';
 import { ManualAssigneeDialog } from './ManualAssigneeDialog';
+import { NoBudgetBadge } from './NoBudgetBadge';
 import { suppBadge, suppStatus, SUPP_STATUS_LABEL } from '../../../lib/vnext/ntSupplement';
-import { NT_MANUAL_LABEL, NT_MANUAL_VALUE, ntManualAllowed, isManualImplementer, implementerLabel } from '../../../lib/vnext/ntManual';
+import { NT_MANUAL_LABEL, NT_MANUAL_VALUE, ntManualAllowed, isManualImplementer, implementerLabel, hasImplementer, implementerKey } from '../../../lib/vnext/ntManual';
 import { acceptanceAssigneeUids, acceptanceChoicesFor, acceptanceKhoiAssignees, clearStaleProject, filterAssigneeOptions, type NtBudgetLine } from '../../../lib/vnext/ntBudgetProjects';
 import type { Support } from '../../../lib/vnext/support';
 
@@ -438,12 +439,12 @@ export const AcceptanceRow: React.FC<RowProps> = React.memo(({
         <TableCell className="p-1 min-w-[180px]">
           <AcceptanceSearchableSelect
             /* Remount theo (team|người|kỳ) để danh sách dự án đổi theo người phụ trách mới (Base UI giữ trạng thái cũ nếu không remount). */
-            key={budgetChoices ? `proj-${currentEditTeamId}-${localEditState?.implementerUid || 'none'}-${localEditState?.month || ''}` : 'proj-all'}
+            key={budgetChoices ? `proj-${currentEditTeamId}-${implementerKey(localEditState) || 'none'}-${localEditState?.month || ''}` : 'proj-all'}
             testId="nt-project-select"
             value={budgetChoices && !budgetChoices.some((c) => c.projectId === currentEditProjId) ? '' : currentEditProjId}
             items={projectItems}
-            disabled={!!budgetChoices && (!(localEditState?.implementerUid) || projectItems.length === 0)}
-            placeholder={!currentEditTeamId && !editBlockId ? 'Chọn Phòng trước' : !(localEditState?.implementerUid) ? 'Chọn người phụ trách trước' : budgetChoices && projectItems.length === 0 ? 'Chưa có đăng ký NS kỳ này' : 'Chọn Dự án'}
+            disabled={!!budgetChoices && (!hasImplementer(localEditState) || projectItems.length === 0)}
+            placeholder={!currentEditTeamId && !editBlockId ? 'Chọn Phòng trước' : !hasImplementer(localEditState) ? 'Chọn người phụ trách trước' : budgetChoices && projectItems.length === 0 ? 'Chưa có đăng ký NS kỳ này' : 'Chọn Dự án'}
             searchPlaceholder="Tìm kiếm dự án, mã dự án..."
             triggerClassName="h-7 text-[11px] font-bold border-indigo-200 bg-[var(--mh-surface)] rounded"
             triggerDisplay={
@@ -692,6 +693,7 @@ export const AcceptanceRow: React.FC<RowProps> = React.memo(({
           <div className="mt-0.5 flex flex-col items-start gap-0.5" data-testid="nt-supp-badge">
             <Badge variant="outline" className="bg-orange-50 text-orange-700 border-orange-300 font-black text-[10px] px-1.5 py-0">{suppBadge(item)}</Badge>
             <span className={`text-[9px] font-bold ${suppStatus(item) === 'approved' ? 'text-emerald-700' : suppStatus(item) === 'rejected' ? 'text-red-600' : 'text-amber-600'}`}>{SUPP_STATUS_LABEL[suppStatus(item) as 'pending']}</span>
+            <NoBudgetBadge rec={item} />
           </div>
         )}
       </TableCell>

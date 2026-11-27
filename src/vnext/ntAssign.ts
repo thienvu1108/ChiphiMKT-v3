@@ -6,7 +6,7 @@ import { asArr } from './ctx';
 import { doc, getDoc, deleteDoc, writeBatch, type Firestore } from 'firebase/firestore';
 import { ntKey, findDuplicate } from '../../lib/vnext/onboarding';
 import { normalizeMonth } from '../../lib/vnext/ntReport';
-import { manualAttributionPatch } from '../../lib/vnext/ntManual';
+import { manualAttributionPatch, type NtManualOpts } from '../../lib/vnext/ntManual';
 import { isSupplement, suppKeySuffix } from '../../lib/vnext/ntSupplement';
 
 export type NtAttribution = { uid: string; name: string; teamId: string; blockId: string; month: string; projectId: string; supp?: boolean };
@@ -76,16 +76,16 @@ export async function assignImplementer(db: Firestore, all: any[], rec: any, nex
 }
 
 /** Thêm vào batch: giải phóng khoá ntKeys cũ (nếu bản ghi đang gán uid) → patch tên tự nhập (chỉ Tháng 10/2026). */
-export function ntManualOps(db: Firestore, batch: ReturnType<typeof writeBatch>, old: any, month: unknown, name: string, by?: { uid?: string; email?: string }) {
-  const patch = manualAttributionPatch(month, name, by);
+export function ntManualOps(db: Firestore, batch: ReturnType<typeof writeBatch>, old: any, month: unknown, name: string, by?: { uid?: string; email?: string }, opts?: NtManualOpts) {
+  const patch = manualAttributionPatch(month, name, by, opts);
   const oldKey = old?.implementerUid && old?.ntMonth && old?.projectId ? ntKey(old.ntMonth, old.implementerUid, old.projectId) + suppKeySuffix(old) : '';
   if (oldKey) batch.delete(doc(db, 'ntKeys', oldKey));
   return patch;
 }
 
-export async function assignManualImplementer(db: Firestore, rec: any, name: string, by?: { uid?: string; email?: string }) {
+export async function assignManualImplementer(db: Firestore, rec: any, name: string, by?: { uid?: string; email?: string }, opts?: NtManualOpts) {
   const b = writeBatch(db);
-  const patch = ntManualOps(db, b, rec, rec?.month || rec?.ntMonth, name, by);
+  const patch = ntManualOps(db, b, rec, rec?.month || rec?.ntMonth, name, by, opts);
   b.update(doc(db, 'acceptances', rec.id), patch);
   await b.commit();
   return patch;

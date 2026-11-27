@@ -1,3 +1,4 @@
+import { NoBudgetBadge } from '../components/acceptance/NoBudgetBadge';
 import { isSupplement, suppStatus, suppViewLabel } from '../../lib/vnext/ntSupplement';
 import { pastBlock } from './locks';
 import { useDirtyGuard } from '../lib/chunkReload';
@@ -11,12 +12,13 @@ import { ntFileName, ntDrivePath, ntKey, findDuplicate, implementerOptions } fro
 import { assignImplementer, assignManualImplementer } from './ntAssign';
 import { NT_MANUAL_FEATURE, NT_MANUAL_LABEL, NT_MANUAL_VALUE, ntManualAllowed, isManualImplementer, implementerLabel } from '../../lib/vnext/ntManual';
 import { ManualAssigneeDialog } from '../components/acceptance/ManualAssigneeDialog';
-import { buildReport, buildReconcile, normalizeMonth, isAccepted, GROUP_ORDER, GROUP_LABEL, GROUP_CHANNELS, groupCost, recordVat, channelValue, clampShareDays, newToken } from '../../lib/vnext/ntReport';
+import { buildReport, buildReconcile, splitNoBudget, isNoBudgetRec, recordCostBeforeVat, normalizeMonth, isAccepted, GROUP_ORDER, GROUP_LABEL, GROUP_CHANNELS, groupCost, recordVat, channelValue, clampShareDays, newToken } from '../../lib/vnext/ntReport';
 import { periodLabel, getPeriodOf, addPeriods } from '../../lib/vnext/period';
 import { exportBaseName, printWithTitle, blockCodeOf, teamCodeOf } from '../../lib/vnext/exportName';
 import { Deck, exportPptx, type DeckData, type DeckImage } from './ntDeck';
 import { listenTeamScoped } from './teamScoped';
 import { PhotoViewer } from './PhotoViewer';
+import { loadXlsx } from '../lib/loadXlsx';
 import { storageFor, saveImageMeta, driveStatus, type ImgMeta } from './storage';
 import { InvoiceSection, NtInvoiceModal, INVOICE_FEATURE, useInvoices, invoiceDeckImages, type Invoice } from './InvoiceViews';
 import { extractImageFiles, readClipboardImages, pasteSummary } from '../../lib/vnext/pasteImages';
@@ -81,16 +83,33 @@ export default function NtReportPage({ c, fixedBlockIds, fixedTeamIds }: { c: VC
   const filtered = base.filter((a) => (!blockId || (a.blockId || blockOfTeam(c, a.teamId)) === blockId) && (level === 'khoi' || !teamId || a.teamId === teamId) && (level !== 'user' || !userKey || a.implementerName === userKey));
   const rep = useMemo(() => buildReport(filtered, { projectId: projectId || undefined }, c.projects), [filtered, projectId, c.projects]);
   const scopeLabel = level === 'user' && userKey ? `User: ${userKey}${teamId ? ' · ' + teamName(c, teamId) : ''}` : level !== 'khoi' && teamId ? `Phòng ${teamName(c, teamId)}` : blockId ? `Khối ${blockName(c, blockId)}` : allowedTeams ? 'Phạm vi được giao' : 'Toàn hệ thống';
+  const nb = useMemo(() => splitNoBudget(rep.records).noBudget, [rep.records]);
   const invoices = useInvoices(c);
   const deck = useMemo(() => toDeck(c, rep, images, 'Báo cáo Nghiệm thu', scopeLabel, month, invoices), [rep, images, scopeLabel, month, invoices]);
   const resolve = (img: DeckImage) => storageFor(c.db, img.provider).url(img as any);
   const blkCodes = blockId ? [blockCodeOf(c.blocks.find((b) => b.id === blockId)) || blockId] : [...new Set(filtered.map((a) => a.blockId || blockOfTeam(c, a.teamId)).filter(Boolean))].map((b) => blockCodeOf(c.blocks.find((x) => x.id === b)) || b);
   const fname = exportBaseName({ blockCode: blkCodes, month, teamCode: level !== 'khoi' && teamId ? (teamCodeOf(c.teams.find((t) => t.id === teamId)) || teamName(c, teamId)) : '', projectName: projectId ? (rep.projects.find((p) => p.projectId === projectId)?.projectName || projectName(c, projectId)) : '' });
 
+  // Excel: mỗi bản ghi «Đã nghiệm thu» (đã lọc); cột «NGOÀI ĐK NS» (Có/—) + lý do cho bản bổ sung không có đăng ký NS.
+  const exportExcel = async () => {
+    try {
+      const XLSX = await loadXlsx();
+      const data = rep.records.map((r: any) => ({
+        'THÁNG': r.month || '', 'MÃ': shortCode(r.id), 'PHÒNG': r.teamName || teamName(c, r.teamId), 'NGƯỜI PHỤ TRÁCH': r.implementerName || '',
+        'DỰ ÁN': projectName(c, r.projectId, r.projectName), 'CHI PHÍ (TRƯỚC VAT)': recordCostBeforeVat(r), 'VAT': recordVat(r),
+        'NGOÀI ĐK NS': isNoBudgetRec(r) ? 'Có' : '—', 'LÝ DO NGOÀI ĐK NS': isNoBudgetRec(r) ? String(r.ntNoBudgetReason || '') : '',
+      }));
+      const ws = XLSX.utils.json_to_sheet(data); const wb = XLSX.utils.book_new();
+      XLSX.utils.book_append_sheet(wb, ws, 'Báo cáo Nghiệm thu');
+      XLSX.writeFile(wb, fname + '.xlsx');
+    } catch (e: any) { toast('Lỗi xuất Excel: ' + (e?.message || e), 'err'); }
+  };
+
   return (
     <Shell title="Báo cáo Nghiệm thu" sub="Tự động từ bản ghi «Đã nghiệm thu» · Tổng → Nhóm → Dự án → bản ghi · Chi phí trước VAT, VAT và Tổng sau VAT (khớp mục Nghiệm thu MKT)"
       actions={<>
         <Btn onClick={() => printWithTitle(fname, () => document.body.classList.add('nt-print'), () => document.body.classList.remove('nt-print'))}>⬇ PDF</Btn>
+        <Btn onClick={() => exportExcel()} data-testid="nt-report-xlsx">⬇ Excel</Btn>
         <Btn onClick={async () => { toast('Đang tạo PPTX…'); try { await exportPptx(deck, resolve, fname + '.pptx'); } catch (e: any) { toast('Lỗi xuất PPTX: ' + e.message, 'err'); } }}>⬇ PPTX</Btn>
         {mgr && vnCan(c, 'vn.share_links.manage') && <Btn primary onClick={() => setShareOpen(true)}>🔗 Link chia sẻ</Btn>}
       </>}>
@@ -103,6 +122,7 @@ export default function NtReportPage({ c, fixedBlockIds, fixedTeamIds }: { c: VC
         <Field label="Dự án"><SearchSelect value={projectId} onChange={setProjectId} options={[{ value: '', label: 'Tất cả' }, ...rep.projects.map((p) => ({ value: p.projectId, label: p.projectName }))]} /></Field>
       </div>
       <div className="grid grid-cols-2 lg:grid-cols-5 gap-3 nt-noprint">
+        {nb.records > 0 && <div className="col-span-2 lg:col-span-5 text-[12px] text-[var(--mh-err)] font-semibold" data-testid="nt-report-nobudget">Trong đó NT ngoài đăng ký NS: {nb.records} bản ghi · {fmtM(nb.cost)} (trước VAT) — đã tính vào tổng, NS = 0</div>}
         <Kpi label="Bản ghi Đã nghiệm thu" value={rep.records.length} />
         <Kpi label="Chi phí (trước VAT)" value={fmtM(rep.total.cost)} hint={`VAT ${fmt(rep.total.vat)} đ`} />
         <Kpi label="Tổng sau VAT" value={fmtM(rep.total.withVat)} hint={`${fmt(rep.total.withVat)} đ`} />
@@ -405,6 +425,7 @@ function NtAssign({ c, month, allowedTeams, images, store }: { c: VCtx; month: s
               <div className="font-semibold text-[14px]">{projectName(c, a.projectId, a.projectName)}</div>
               <div className="text-[11px] text-[var(--mh-text-3)]">#{shortCode(a.id)} · {a.teamName || teamName(c, a.teamId)} · {a.status || ''}</div>
               {isSupplement(a) && <div data-testid="vn-nt-supp" className={`text-[11px] font-bold ${suppStatus(a) === 'rejected' ? 'text-red-600' : 'text-orange-700'}`}>{suppViewLabel(a)}</div>}
+              <NoBudgetBadge rec={a} />
               <Field label="Người phụ trách"><SearchSelect value={pick[a.id] ?? a.implementerUid ?? ''} onChange={(v: string) => { if (v === NT_MANUAL_VALUE) { setManualFor(a); return; } setPick((p) => ({ ...p, [a.id]: v })); }} data-testid="vn-nt-implementer"
                 options={[{ value: '', label: !a.teamId ? 'Chọn Phòng trước' : (isManualImplementer(a) ? implementerLabel(a) : opts.length ? (a.implementerName && !a.implementerUid ? `(cũ) ${a.implementerName}` : '— Chọn —') : 'Phòng chưa có thành viên') },
                   ...(canManual && a.teamId ? [{ value: NT_MANUAL_VALUE, label: NT_MANUAL_LABEL }] : []),
@@ -426,7 +447,7 @@ function NtAssign({ c, month, allowedTeams, images, store }: { c: VCtx; month: s
           const n = images.filter((i) => i.acceptanceId === a.id).length;
           return (
             <tr key={a.id} data-testid="vn-nt-row">
-              <Td>{projectName(c, a.projectId, a.projectName)}<div className="text-[11px] text-[var(--mh-text-3)]">#{shortCode(a.id)} · {a.status || ''}</div>{isSupplement(a) && <div data-testid="vn-nt-supp" className={`text-[11px] font-bold ${suppStatus(a) === 'rejected' ? 'text-red-600' : 'text-orange-700'}`}>{suppViewLabel(a)}</div>}</Td>
+              <Td>{projectName(c, a.projectId, a.projectName)}<NoBudgetBadge rec={a} /><div className="text-[11px] text-[var(--mh-text-3)]">#{shortCode(a.id)} · {a.status || ''}</div>{isSupplement(a) && <div data-testid="vn-nt-supp" className={`text-[11px] font-bold ${suppStatus(a) === 'rejected' ? 'text-red-600' : 'text-orange-700'}`}>{suppViewLabel(a)}</div>}</Td>
               <Td>{a.teamName || teamName(c, a.teamId)}</Td>
               <Td><SearchSelect value={pick[a.id] ?? a.implementerUid ?? ''} onChange={(v: string) => { if (v === NT_MANUAL_VALUE) { setManualFor(a); return; } setPick((p) => ({ ...p, [a.id]: v })); }} data-testid="vn-nt-implementer"
                 options={[{ value: '', label: !a.teamId ? 'Chọn Phòng trước' : (isManualImplementer(a) ? implementerLabel(a) : opts.length ? (a.implementerName && !a.implementerUid ? `(cũ) ${a.implementerName}` : '— Chọn —') : 'Phòng chưa có thành viên') },
