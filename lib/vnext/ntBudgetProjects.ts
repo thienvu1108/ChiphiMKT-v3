@@ -3,12 +3,12 @@
  * của đúng người phụ trách + đúng Phòng + đúng kỳ. Không xét ngày tạo bản ghi.
  * Kỳ trước mốc: null = giữ danh mục dự án đầy đủ (hành vi cũ).
  */
-import { VNEXT_PERIOD_CUTOVER, periodKey } from './period';
-import { normalizeMonth } from './ntReport';
-import type { NsLine } from './budget';
-import { isNsReportableLine, type Support } from './support';
-import './banSupport';
-import { rowNoBudget } from './ntNoBudget';
+import { VNEXT_PERIOD_CUTOVER, periodKey } from './period.js';
+import { normalizeMonth } from './ntReport.js';
+import type { NsLine } from './budget.js';
+import { isNsReportableLine, type Support } from './support.js';
+import './banSupport.js';
+import { rowNoBudget } from './ntNoBudget.js';
 
 export const NT_BUDGET_PROJECTS_FROM = VNEXT_PERIOD_CUTOVER;
 

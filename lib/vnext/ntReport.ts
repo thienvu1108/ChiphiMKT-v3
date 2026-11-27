@@ -1,5 +1,5 @@
-import { ntCountsInTotals } from './ntSupplement';
-import { displayProjectName } from './projectRef';
+import { ntCountsInTotals } from './ntSupplement.js';
+import { displayProjectName } from './projectRef.js';
 /**
  * Báo cáo Nghiệm thu MKT tự động.
  * Chỉ bản ghi "Đã nghiệm thu". Tổng → Nhóm → Dự án → bản ghi user. Chi phí TRƯỚC VAT.

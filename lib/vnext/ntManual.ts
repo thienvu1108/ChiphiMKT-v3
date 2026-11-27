@@ -5,7 +5,7 @@
  * ntMonth = '2026-10'. Mọi màn hình / báo cáo / xuất file đọc implementerName nên hiển thị đúng.
  * firestore.rules kiểm tra lại (ntManualOk): chỉ tháng 10.2026, tên 1–120 ký tự, quyền vn.nt_records.manual_assignee.
  */
-import { normalizeMonth } from './ntReport';
+import { normalizeMonth } from './ntReport.js';
 
 export const NT_MANUAL_MONTH = '2026-10';
 export const NT_MANUAL_FEATURE = 'vn.nt_records.manual_assignee';
