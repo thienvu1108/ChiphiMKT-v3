@@ -110,6 +110,174 @@
   border-color: var(--mh-border);
 }
 
+@media screen and (orientation: landscape) and (max-height: 500px) and (width < 64rem) {
+  :root {
+    --header-height-mobile: 40px;
+    --bottom-nav-height: 46px;
+    --mh-safe-top: env(safe-area-inset-top, 0px);
+    --mh-safe-right: env(safe-area-inset-right, 0px);
+    --mh-safe-bottom: env(safe-area-inset-bottom, 0px);
+    --mh-safe-left: env(safe-area-inset-left, 0px);
+    --bottom-nav-offset: calc(var(--bottom-nav-height) + var(--mh-safe-bottom));
+    --mh-mobile-top-offset: calc(var(--header-height-mobile) + var(--mh-safe-top));
+    --mh-modal-height: calc(100dvh - var(--mh-safe-top) - var(--mh-safe-bottom) - 16px);
+    scroll-padding-top: calc(var(--mh-mobile-top-offset) + 8px);
+    scroll-padding-bottom: calc(var(--bottom-nav-offset) + 8px);
+  }
+
+  .mh-app, .mh-shell-body {
+    min-height: 100dvh;
+  }
+
+  .mh-mtop, .mh-content {
+    padding-inline: calc(12px + var(--mh-safe-left)) calc(12px + var(--mh-safe-right));
+  }
+
+  .mh-mtop {
+    flex-shrink: 0;
+    height: var(--mh-mobile-top-offset);
+    padding-top: var(--mh-safe-top);
+  }
+
+  .mh-content {
+    padding-block: 8px calc(var(--bottom-nav-offset) + 8px);
+  }
+
+  .mh-bnav {
+    min-height: 0;
+    padding-inline: var(--mh-safe-left) var(--mh-safe-right);
+    padding-bottom: var(--mh-safe-bottom);
+    overflow: hidden;
+  }
+
+  .mh-bnav button {
+    min-width: 0;
+    flex-direction: row;
+    gap: 5px;
+    padding-inline: 4px;
+  }
+
+  .mh-bnav button > svg {
+    width: 18px;
+    height: 18px;
+    flex-shrink: 0;
+  }
+
+  .mh-bnav-label {
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    line-height: 1.1;
+  }
+
+  /* Keep only the app header pinned. Table headers stay pinned inside their own scrollports. */
+  .mh-section-tabs {
+    position: static;
+  }
+
+  .mh-section-tabs [role="tablist"] {
+    display: flex;
+    flex-wrap: wrap;
+  }
+
+  .mh-section-tabs [role="tab"] {
+    width: auto;
+    max-width: 100%;
+    flex-direction: row;
+  }
+
+  .mh-nt-toolbar, .mh-vn-page-header {
+    flex-flow: row wrap;
+    align-items: center;
+    gap: 8px;
+  }
+
+  .mh-nt-toolbar {
+    padding: 8px 12px;
+  }
+
+  .mh-nt-toolbar-icon {
+    padding: 6px;
+  }
+
+  .mh-nt-toolbar-icon svg {
+    width: 18px;
+    height: 18px;
+  }
+
+  .mh-nt-toolbar-detail {
+    display: none;
+  }
+
+  .mh-nt-table {
+    isolation: isolate;
+    max-height: calc(100dvh - var(--mh-mobile-top-offset) - var(--bottom-nav-offset) - 16px);
+    touch-action: pan-x pan-y pinch-zoom;
+    overscroll-behavior-y: auto;
+  }
+
+  .mh-content .overflow-x-auto {
+    max-width: 100%;
+    -webkit-overflow-scrolling: touch;
+  }
+
+  .mh-nt-slide-tables {
+    grid-template-columns: repeat(2, minmax(min-content, 1fr));
+    overflow: auto;
+  }
+
+  /* Overlays cover the nav, so their scrollports use the safe viewport directly. */
+  .mh-landscape-overlay {
+    height: 100dvh;
+    padding: calc(8px + var(--mh-safe-top)) calc(8px + var(--mh-safe-right))
+      calc(8px + var(--mh-safe-bottom)) calc(8px + var(--mh-safe-left));
+  }
+
+  .mh-landscape-overlay > div {
+    max-height: 100%;
+  }
+
+  .mh-landscape-overlay .mh-modal-header {
+    height: 44px;
+  }
+
+  .mh-landscape-overlay .mh-modal-body {
+    padding: 12px;
+  }
+
+  .mh-landscape-overlay .mh-modal-footer {
+    padding: 8px 12px;
+  }
+
+  .mh-landscape-sheet {
+    max-height: calc(var(--mh-modal-height) + var(--mh-safe-bottom));
+    padding-inline: calc(8px + var(--mh-safe-left)) calc(8px + var(--mh-safe-right));
+  }
+
+  .mh-nt-editor {
+    display: flex;
+  }
+
+  .mh-nt-editor .mh-landscape-sheet {
+    padding-bottom: var(--mh-safe-bottom);
+  }
+
+  .mh-landscape-overlay > .mh-announcement-panel {
+    overflow-y: auto;
+    overscroll-behavior: contain;
+  }
+
+  [data-slot="dialog-content"] {
+    top: calc((100dvh + var(--mh-safe-top) - var(--mh-safe-bottom)) / 2);
+    left: calc((100% + var(--mh-safe-left) - var(--mh-safe-right)) / 2);
+    width: calc(100% - var(--mh-safe-left) - var(--mh-safe-right) - 16px);
+    max-height: var(--mh-modal-height);
+    overflow: auto;
+    overscroll-behavior: contain;
+  }
+}
+
 @media print {
   body.nt-print * { visibility: hidden; }
   body.nt-print .nt-deck, body.nt-print .nt-deck * { visibility: visible; }

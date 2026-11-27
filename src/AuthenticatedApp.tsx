@@ -13652,7 +13652,7 @@ export default function AuthenticatedApp() {
                 opacity: 1,
                 translateY: isHeaderVisible ? 0 : -100
               }}
-              className="md:sticky z-35 transition-all duration-300 mb-3"
+              className="mh-section-tabs md:sticky z-35 transition-all duration-300 mb-3"
               style={isMobile ? undefined : {
                 top: isScrolled ? '64px' : '96px'
               }}
