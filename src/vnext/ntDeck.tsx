@@ -9,7 +9,7 @@ import { fitContain, jpegOrientation } from '../../lib/vnext/fitImage';
 export type DeckRecord = { id: string; code: string; user: string; team: string; block: string; project: string; projectId: string; cost: number; vat?: number; leads: number; groups: { label: string; cost: number; channels: { label: string; v: number }[] }[] };
 export type { DeckImage } from '../../lib/vnext/invoiceDeck';
 export type DeckData = {
-  title: string; scopeLabel: string; periodLabel: string; createdAt?: string;
+  title: string; scopeLabel: string; periodLabel: string; createdAt?: string; extraLines?: [string, string][];
   /** Tên tệp xuất (exportBaseName) — có từ 26/10/2026. */
   fileName?: string;
   groups: { label: string; cost: number; vat?: number; leads: number; channels: string[]; projects: { projectId: string; projectName: string; cost: number; leads: number; rows: { id: string; user: string; team: string; code: string; cost: number; leads: number | null; channels: Record<string, number> }[] }[] }[];
@@ -29,7 +29,7 @@ export function coverInfo(d: DeckData) {
   const r = d.records || [];
   const list = (a: string[], n = 8) => (a.length ? (a.length > n ? `${a.slice(0, n).join(', ')} +${a.length - n}` : a.join(', ')) : '—');
   const blocks = uniq(r.map((x) => x.block)), teams = uniq(r.map((x) => x.team)), users = uniq(r.map((x) => x.user)), projects = uniq(r.map((x) => x.project));
-  return { blocks, teams, users, projects, lines: [['Khối', list(blocks)], ['Phòng', list(teams)], ['Người triển khai', list(users)], [`Dự án triển khai (${projects.length})`, list(projects, 12)]] as [string, string][] };
+  return { blocks, teams, users, projects, lines: [['Khối', list(blocks)], ['Phòng', list(teams)], ['Người triển khai', list(users)], [`Dự án triển khai (${projects.length})`, list(projects, 12)], ...(d.extraLines || [])] as [string, string][] };
 }
 
 const chLabel = (k: string) => Object.values(GROUP_CHANNELS).flat().find((c) => c.key === k)?.label || k;
