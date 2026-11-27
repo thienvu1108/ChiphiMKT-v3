@@ -54,13 +54,13 @@ import {
 import { toast } from 'sonner';
 import { assignImplementer, assignManualImplementer, ntAttributionOps, ntDuplicateOf, ntManualOps, ntDeleteOps, ntKeyOf, releaseOrphanNtKey } from '../vnext/ntAssign';
 import { NoBudgetBadge } from './acceptance/NoBudgetBadge';
-import { rowNoBudget, rowSupplementFor, noBudgetAvailable, noBudgetPatch, validateNoBudgetReason, noBudgetManualDuplicate, isNoBudgetRecord, noBudgetReasonText, NT_NOBUDGET_BADGE } from '../../lib/vnext/ntNoBudget';
+import { rowNoBudget, rowSupplementFor, noBudgetAvailable, noBudgetPatch, validateNoBudgetReason, noBudgetManualDuplicate, isNoBudgetRecord, noBudgetReasonText, noBudgetSameKy, suppTargetOk, NT_NOBUDGET_BADGE } from '../../lib/vnext/ntNoBudget';
 import { NT_MANUAL_FEATURE, ntManualAllowed, isManualImplementer, implementerLabel, manualAttributionPatch } from '../../lib/vnext/ntManual';
 import { vnCan } from '../vnext/ctx';
 import { ManualAssigneeDialog } from './acceptance/ManualAssigneeDialog';
 import { normalizeMonth } from '../../lib/vnext/ntReport';
 import { ntKey as ntKeyStr } from '../../lib/vnext/onboarding';
-import { prevMonth, isSupplement, suppIn, suppMonths, ntDeniedMsg, suppStatus, suppBadge, suppCounts, suppDecisionPatch, ntCountsInTotals, SUPP_STATUS_LABEL, suppMissingFiles, suppMissingBadge } from '../../lib/vnext/ntSupplement';
+import { isSupplement, suppIn, suppMonths, ntDeniedMsg, suppStatus, suppBadge, suppCounts, suppDecisionPatch, ntCountsInTotals, SUPP_STATUS_LABEL, suppMissingFiles, suppMissingBadge } from '../../lib/vnext/ntSupplement';
 import { format } from 'date-fns';
 
 import { AcceptanceTableHeader } from './acceptance/AcceptanceTableHeader';
@@ -87,7 +87,7 @@ import {
 } from './acceptance/acceptanceUtils';
 import { exportFileName, blockCodeOf, teamCodeOf } from '../../lib/vnext/exportName';
 import { getPeriodOf } from '../../lib/vnext/period';
-import { acceptanceChoicesFor, acceptanceKhoiAssignees, khoiManagerBlockId, ntUsesBudgetProjects, projectAllowedForAcceptance, ntNoNsRegistration, ntPeriodKey } from '../../lib/vnext/ntBudgetProjects';
+import { acceptanceChoicesFor, acceptanceKhoiAssignees, khoiManagerBlockId, ntScopeMonth, ntUsesBudgetProjects, projectAllowedForAcceptance, ntNoNsRegistration, ntPeriodKey } from '../../lib/vnext/ntBudgetProjects';
 
 import { showNtImageUpload, showNtInvoiceUpload } from '../lib/ntUploadGate';
 export const AcceptanceManager = React.memo(({ 
@@ -257,16 +257,25 @@ export const AcceptanceManager = React.memo(({
   // Editing row state
   const [editingRowId, setEditingRowId] = useState<string | null>(null);
   const [editingRowState, setEditingRowState] = useState<any | null>(null);
+  const [draftScopes, setDraftScopes] = useState<Record<string, string>>({});
+  const onDraftScopeChange = useCallback((id: string, period?: string) => {
+    setDraftScopes((prev) => {
+      if (period !== undefined) return { ...prev, [id]: period };
+      const next = { ...prev };
+      delete next[id];
+      return next;
+    });
+  }, []);
   const nsPeriods = useMemo(() => {
     const s = new Set<string>();
     const add = (m: unknown) => { const p = normalizeMonth(m); if (/^\d{4}-\d{2}$/.test(p) && p >= '2026-11') s.add(p); };
-    draftRows.forEach((d) => { add(d.month); add(d.supplementFor); });
-    add(editingRowState?.month);
-    add(editingRowState?.supplementFor);
+    if (editingRowState) { add(editingRowState.month); add(editingRowState.supplementFor); add(ntScopeMonth(editingRowState)); }
+    draftRows.forEach((d) => { add(d.month); add(d.supplementFor); add(draftScopes[d.id] ?? ntScopeMonth(d)); });
     add(acceptanceMonthFilter);
     if (!s.size) add(getPeriodOf());
-    return [...s].slice(0, 10);
-  }, [draftRows, editingRowState?.month, editingRowState?.supplementFor, acceptanceMonthFilter]);
+    if (suppView) suppMonths(normalizeMonth(acceptanceMonthFilter)).forEach(add);
+    return [...s].slice(0, 30);
+  }, [draftRows, draftScopes, editingRowState, acceptanceMonthFilter, suppView]);
   const [nsLines, setNsLines] = useState<any[]>([]);
   const [nsSupport, setNsSupport] = useState<Record<string, any>>({});
   const [nsReady, setNsReady] = useState(false);
@@ -277,8 +286,8 @@ export const AcceptanceManager = React.memo(({
     let linesReady = false;
     let supReady = false;
     const done = () => { if (linesReady && supReady) setNsReady(true); };
-    const qLines = fsQuery(collection(db, 'ns_lines'), fsWhere('period', 'in', nsPeriods.slice(0, 10)));
-    const qSup = fsQuery(collection(db, 'nsSupport'), fsWhere('period', 'in', nsPeriods.slice(0, 10)));
+    const qLines = fsQuery(collection(db, 'ns_lines'), fsWhere('period', 'in', nsPeriods));
+    const qSup = fsQuery(collection(db, 'nsSupport'), fsWhere('period', 'in', nsPeriods));
     const u1 = onSnapshot(qLines, (s) => {
       setNsLines(s.docs.map((d) => ({ id: d.id, ...d.data() })));
       linesReady = true; done();
@@ -292,22 +301,22 @@ export const AcceptanceManager = React.memo(({
     return () => { u1(); u2(); };
   }, [canCreate, canEdit, nsKey]);
   const unregisteredProjectReason = useCallback((row: any) => {
-    if (!ntUsesBudgetProjects(row?.month)) return '';
+    if (!ntUsesBudgetProjects(ntScopeMonth(row))) return '';
     if (rowNoBudget(row)) return ''; // Nghiệm thu bổ sung «Không có đăng ký NS»: bỏ kiểm tra đăng ký
-    if (!nsReady) return 'Đang tải đăng ký ngân sách của kỳ này.';
+    if (!nsReady || !nsPeriods.includes(ntPeriodKey(ntScopeMonth(row)))) return 'Đang tải đăng ký ngân sách của kỳ này.';
     const choices = acceptanceChoicesFor(row, nsLines, nsSupport, allUsers);
     if (!projectAllowedForAcceptance(choices, row?.projectId)) return 'Dự án không nằm trong đăng ký NS của người phụ trách tại Phòng và kỳ này.';
     return '';
-  }, [ntCtx, nsReady, nsLines, nsSupport, allUsers]);
+  }, [nsReady, nsPeriods, nsLines, nsSupport, allUsers]);
   // Cờ «Không còn đăng ký NS»: chỉ khi đã tải NS đúng kỳ của bản ghi (nsPeriods) — tránh cờ sai ở kỳ chưa tải.
   const noNsFlagOf = useCallback((row: any) => {
-    const per = ntPeriodKey(row?.ntMonth || row?.month);
+    const per = ntPeriodKey(ntScopeMonth(row));
     if (!per || !nsPeriods.includes(per)) return false;
     return ntNoNsRegistration(row, acceptanceChoicesFor(row, nsLines, nsSupport, allUsers), nsReady);
   }, [nsReady, nsLines, nsSupport, allUsers, nsPeriods]);
   // Khối chuẩn nếu Người phụ trách là GĐ/TL Khối (đăng ký 'khoi'); '' nếu không phải. Nguồn: dòng NS khoi.
   const khoiBlockIdOf = useCallback((row: any) => khoiManagerBlockId({
-    month: row?.month,
+    month: ntScopeMonth(row),
     uid: row?.implementerManual ? '' : row?.implementerUid,
     lines: nsLines, support: nsSupport, preferBlockId: row?.blockId,
   }), [nsLines, nsSupport]);
@@ -771,9 +780,13 @@ export const AcceptanceManager = React.memo(({
       toast.error('Vui lòng chọn Dự án cho dòng nghiệm thu!');
       return;
     }
+    const draftNoBudget = rowNoBudget(draftRow);
+    if (noBudgetSameKy(draftRow.month, rowSupplementFor(draftRow)) && !draftNoBudget) {
+      toast.error('Bổ sung cùng kỳ bắt buộc chọn «Không có đăng ký NS»');
+      return;
+    }
     const scopeErr = unregisteredProjectReason(draftRow);
     if (scopeErr) { toast.error(scopeErr); return; }
-    const draftNoBudget = rowNoBudget(draftRow);
     if (draftNoBudget) {
       const reasonErr = validateNoBudgetReason(draftRow.ntNoBudgetReason);
       if (reasonErr) { toast.error(reasonErr); return; }
@@ -910,7 +923,7 @@ export const AcceptanceManager = React.memo(({
       };
 
       lastPayload = payload;
-      let suppSel = draftRow.supplement === true ? prevMonth(normalizeMonth(payload.month)) : (typeof draftRow.supplement === 'string' ? draftRow.supplement : '');
+      let suppSel = normalizeMonth(rowSupplementFor(draftRow));
       {
         const r0 = isSuperAdmin ? 'super_admin' : 'x';
         const lkOf = () => lockBlock(r0, 'nt', String(payload.month || '')) || pastBlock(r0, 'nt', (payload as any).ntMonth);
@@ -925,10 +938,10 @@ export const AcceptanceManager = React.memo(({
         }
         if (lk) { toast.error(lk); return; }
       }
-      if (suppSel && suppOpenFor(payload.month)) {
-        // Nghiệm thu bổ sung: lưu ở kỳ đang mở (month = supplementIn = M), cho kỳ cũ suppSel, chờ Super Admin duyệt.
+      if (suppSel && (isSuperAdmin || suppOpenFor(payload.month))) {
+        // Lưu ở kỳ nộp, chờ Super Admin duyệt vào kỳ gốc.
         const M = normalizeMonth(payload.month);
-        if (!suppMonths(M).includes(suppSel)) { toast.error('Kỳ bổ sung phải là kỳ trước kỳ đang lưu (tối đa 12 kỳ)'); return; }
+        if (!suppTargetOk(M, suppSel, draftNoBudget)) { toast.error('Kỳ bổ sung phải nằm trong 12 kỳ trước hoặc là kỳ đang lưu với «Không có đăng ký NS»'); return; }
         const at = new Date().toISOString();
         Object.assign(payload, { supplementFor: suppSel, supplementIn: M, supplementStatus: 'pending', supplementHistory: [{ from: '', to: 'pending', by: user?.email || user?.uid || '', at, note: 'Tạo bản bổ sung' }] });
       }
@@ -1223,7 +1236,7 @@ export const AcceptanceManager = React.memo(({
     if (scopeErr) return toast.error(scopeErr);
     const tm = teamLookup.findTeam?.(item.teamId) || teams.find((t: any) => t.id === item.teamId);
     // Nếu người được gán là GĐ/TL Khối → ghim blockId theo dòng NS khoi, teamId để trống.
-    const khoiBid = khoiManagerBlockId({ month, uid, lines: nsLines, support: nsSupport, preferBlockId: item.blockId });
+    const khoiBid = khoiManagerBlockId({ month: ntScopeMonth(item), uid, lines: nsLines, support: nsSupport, preferBlockId: item.blockId });
     const blockId = khoiBid || item.blockId || tm?.blockId || '';
     try {
       await assignImplementer(db, acceptancesRef.current || acceptances, item, { uid, name, teamId: khoiBid ? '' : (item.teamId || tm?.id || ''), blockId, month, projectId: item.projectId }, { uid: user?.uid, email: user?.email });
@@ -2297,7 +2310,8 @@ export const AcceptanceManager = React.memo(({
                     onOpenCalculator={handleOpenCalculator}
                     allUsers={allUsers}
                     canManualAssignee={canManualAssignee}
-                    suppAllowed={suppOpenFor(draft.month)}
+                    suppAllowed={isSuperAdmin || suppOpenFor(draft.month)}
+                    onScopeChange={onDraftScopeChange}
                   />
                 ))}
 
@@ -2472,7 +2486,7 @@ export const AcceptanceManager = React.memo(({
                   <div className="text-[11px] text-[var(--mh-text-2)] mb-1">Người phụ trách</div>
                   <div className="text-sm font-semibold text-[var(--mh-text)] truncate">{implementerLabel(mobileSheetItem) || 'Chưa gán'}</div>
                 </div>
-                {canManualAssignee && ntManualAllowed(mobileSheetItem.month) && (
+                {canManualAssignee && ntManualAllowed(mobileSheetItem.month, { supplementFor: rowSupplementFor(mobileSheetItem), noBudget: rowNoBudget(mobileSheetItem) }) && (
                   <Button variant="outline" className="h-9 rounded-lg text-[12px]" data-testid="vn-acc-sheet-manual" onClick={() => setSheetManualOpen(true)}>✎ Khác – tự nhập</Button>
                 )}
               </div>

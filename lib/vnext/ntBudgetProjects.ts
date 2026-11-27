@@ -8,9 +8,13 @@ import { normalizeMonth } from './ntReport.js';
 import type { NsLine } from './budget.js';
 import { isNsReportableLine, type Support } from './support.js';
 import './banSupport.js';
-import { rowNoBudget } from './ntNoBudget.js';
+import { rowNoBudget, rowSupplementFor } from './ntNoBudget.js';
 
 export const NT_BUDGET_PROJECTS_FROM = VNEXT_PERIOD_CUTOVER;
+
+export function ntScopeMonth<T>(row: { month?: T; supplementFor?: string; supplement?: unknown }): T | string | undefined {
+  return rowSupplementFor(row) || row.month;
+}
 
 export type NtBudgetLine = {
   id?: string;
@@ -105,7 +109,7 @@ export function acceptanceChoicesFor(row: { month?: unknown; teamId?: string; bl
   const personUid = row.implementerManual ? '' : String(row.implementerUid || '');
   const user = users.find((u) => (u.uid || u.id) === personUid);
   return acceptanceBudgetProjects({
-    month: row.month,
+    month: ntScopeMonth(row),
     teamId: row.teamId,
     blockId: row.blockId,
     personUid,

@@ -2,10 +2,45 @@ import { describe, it, expect } from 'vitest';
 import { ntManualAllowed, manualAttributionPatch } from '../lib/vnext/ntManual';
 import {
   rowSupplementFor, noBudgetAvailable, rowNoBudget, validateNoBudgetReason, noBudgetPatch, noBudgetAssigneeOptions,
-  activeProjects, noBudgetManualDuplicate, isNoBudgetRecord, noBudgetReasonText,
+  activeProjects, noBudgetManualDuplicate, isNoBudgetRecord, noBudgetReasonText, noBudgetSameKy, suppTargetOk,
 } from '../lib/vnext/ntNoBudget';
-import { acceptanceChoicesFor, projectAllowedForAcceptance } from '../lib/vnext/ntBudgetProjects';
+import { acceptanceChoicesFor, ntScopeMonth, projectAllowedForAcceptance } from '../lib/vnext/ntBudgetProjects';
+import { ntCountsInTotals, suppKeySuffix } from '../lib/vnext/ntSupplement';
 import { splitNoBudget, buildReport, buildReconcile } from '../lib/vnext/ntReport';
+
+describe('Kỳ gốc của nghiệm thu bổ sung', () => {
+  it('lọc theo kỳ gốc cho cả bản nháp và bản đã lưu', () => {
+    const row = { month: '2026-11', teamId: 'T1', implementerUid: 'u1' };
+    expect(ntScopeMonth(row)).toBe('2026-11');
+    expect(ntScopeMonth({ ...row, supplement: true })).toBe('2026-10');
+    expect(ntScopeMonth({ ...row, supplement: '2026-09' })).toBe('2026-09');
+    const saved = { ...row, supplementFor: '2026-10' };
+    expect(ntScopeMonth(saved)).toBe('2026-10');
+    expect(acceptanceChoicesFor(row, [], undefined)).toEqual([]);
+    expect(acceptanceChoicesFor(saved, [], undefined)).toBeNull();
+    expect(acceptanceChoicesFor({ ...row, supplement: '2026-10' }, [], undefined)).toBeNull();
+  });
+
+  it('chỉ cho bổ sung cùng kỳ từ T11 khi không có đăng ký NS', () => {
+    expect(noBudgetSameKy('11.2026', '2026-11')).toBe(true);
+    expect(noBudgetSameKy('2026-10', '2026-10')).toBe(false);
+    expect(noBudgetSameKy('2026-12', '2026-11')).toBe(false);
+    expect(suppTargetOk('2026-11', '2026-11', true)).toBe(true);
+    expect(suppTargetOk('2026-11', '2026-11', false)).toBe(false);
+    expect(suppTargetOk('2026-10', '2026-10', true)).toBe(false);
+    expect(suppTargetOk('2026-11', '2026-12', true)).toBe(false);
+    expect(suppTargetOk('2026-11', '2025-11', false)).toBe(true);
+    expect(suppTargetOk('2026-11', '2025-10', true)).toBe(false);
+  });
+
+  it('giữ hậu tố khoá và chỉ tính bản bổ sung cùng kỳ khi đã duyệt', () => {
+    const row = { month: '2026-11', supplementFor: '2026-11', supplementIn: '2026-11', ntNoBudget: true };
+    expect(suppKeySuffix(row)).toBe('_bs');
+    expect(ntCountsInTotals({ ...row, supplementStatus: 'pending' })).toBe(false);
+    expect(ntCountsInTotals({ ...row, supplementStatus: 'rejected' })).toBe(false);
+    expect(ntCountsInTotals({ ...row, supplementStatus: 'approved' })).toBe(true);
+  });
+});
 
 describe('ntManualAllowed / manualAttributionPatch mở rộng', () => {
   it('giữ hành vi cũ khi không truyền opts', () => {
