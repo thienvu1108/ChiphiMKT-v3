@@ -92,7 +92,7 @@ export const AcceptanceDraftRow: React.FC<DraftRowProps> = React.memo(({
 
   const comp = useMemo(() => getRowComputed(localDraft), [localDraft]);
   // Người cùng triển khai — tự lấy từ Đăng ký MKT theo Người phụ trách + Dự án + kỳ.
-  const coImpl = useMemo(() => coImplementerOf(localDraft, nsLines), [localDraft.implementerUid, localDraft.projectId, localDraft.month, localDraft.implementerManual, nsLines]);
+  const coImpl = useMemo(() => coImplementerOf(localDraft, nsLines, allUsers), [localDraft, nsLines, allUsers]);
 
   const selectedTeam = useMemo(() => {
     return (findTeam

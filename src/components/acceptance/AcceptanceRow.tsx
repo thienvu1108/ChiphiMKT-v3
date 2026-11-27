@@ -431,7 +431,7 @@ export const AcceptanceRow: React.FC<RowProps> = React.memo(({
         {/* Col: NGƯỜI CÙNG TRIỂN KHAI — tự đồng bộ từ Đăng ký MKT */}
         {newLayout && (
         <TableCell className="p-1 min-w-[130px] text-xs text-[var(--mh-text)]" data-testid="nt-coimpl-cell">
-          {(() => { const v = coImplementerOf(localEditState, nsLines); return v ? <span className="font-semibold">{v}</span> : <span className="text-[var(--mh-text-3)] italic">—</span>; })()}
+          {(() => { const v = coImplementerOf(localEditState, nsLines, allUsers); return v ? <span className="font-semibold">{v}</span> : <span className="text-[var(--mh-text-3)] italic">—</span>; })()}
         </TableCell>
         )}
 
@@ -763,7 +763,7 @@ export const AcceptanceRow: React.FC<RowProps> = React.memo(({
       {/* Col: NGƯỜI CÙNG TRIỂN KHAI — đồng bộ từ Đăng ký MKT (ưu tiên giá trị đã lưu) */}
       {newLayout && (
       <TableCell className="p-1 text-xs text-[var(--mh-text)] min-w-[130px] max-w-[180px]" data-testid="nt-coimpl-cell">
-        {(() => { const v = item.coImplementer || coImplementerOf(item, nsLines); return v ? <span className="font-semibold truncate block" title={v}>{v}</span> : <span className="text-[var(--mh-text-3)] italic">—</span>; })()}
+        {(() => { const v = coImplementerOf(item, nsLines, allUsers); return v ? <span className="font-semibold truncate block" title={v}>{v}</span> : <span className="text-[var(--mh-text-3)] italic">—</span>; })()}
       </TableCell>
       )}
 

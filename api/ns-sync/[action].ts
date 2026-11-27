@@ -12,9 +12,10 @@ import {
 } from '../../lib/vnext/nsSync.js';
 import { databaseId } from '../_lib/dbId.js';
 import { linkAdminApp } from '../_lib/linkOnLoginExec.js';
+import { moveNsProject, reverseNsProject, type MoveOperation } from '../_lib/nsProjectMove.js';
 
 type Result = NsSyncPlan & { operationId: string; docsWritten: string[]; committedUpdatedAt: string; reverseOf?: string };
-type Operation = { requestHash: string; result: Result };
+type Operation = MoveOperation & { requestHash: string; result: Result };
 const stamp = (t: Timestamp | undefined) => t ? `${t.seconds}:${t.nanoseconds}` : '';
 const revision = (line: DocumentSnapshot, support: DocumentSnapshot) => `${stamp(line.updateTime)}/${stamp(support.updateTime)}`;
 
@@ -54,7 +55,7 @@ export async function handleNsSync(action: string, req: any, res: any) {
       throw new NsSyncError(400, 'invalid_reverse', 'Cần reverseOf, UUID mới và lựa chọn dryRun.');
     }
     const version = dryRun ? '' : body.version;
-    if (!dryRun && (typeof version !== 'string' || !/^\d+:\d+\/(\d+:\d+)?$/.test(version) || version.length > 80)) {
+    if (!dryRun && (typeof version !== 'string' || !/^(\d+:\d+\/(\d+:\d+)?|[a-f0-9]{64})$/.test(version) || version.length > 80)) {
       throw new NsSyncError(400, 'missing_preview', 'Cần phiên bản từ bước xem trước.');
     }
     const edit = reverse ? null : amountEdit(body);
@@ -62,20 +63,48 @@ export async function handleNsSync(action: string, req: any, res: any) {
     const opRef = db.collection('nsSyncOps').doc(options.operationId);
     const ret = await db.runTransaction(async (tx) => {
       const profile = (await tx.get(db.collection('users').doc(uid))).data();
+      if (edit?.projectId && profile?.role !== 'super_admin') {
+        throw new NsSyncError(409, 'forbidden', 'Chỉ Super Admin được đổi dự án đăng ký NS.');
+      }
       requireSuperAdmin(profile?.role);
       const prior = (await tx.get(opRef)).data() as Operation | undefined;
       if (dryRun && prior) throw new NsSyncError(409, 'operation_conflict', 'UUID đã được sử dụng.');
       const replay = dryRun ? undefined : replayNsSync(prior, requestHash);
       if (replay) return { response: { ...replay, replayed: true } };
 
-      const old = reverse ? (await tx.get(db.collection('nsSyncOps').doc(reverseOf))).data() as Operation | undefined : undefined;
+      const original = reverse ? await tx.get(db.collection('nsSyncOps').doc(reverseOf)) : undefined;
+      const old = original?.data() as Operation | undefined;
       if (reverse && !old) throw new NsSyncError(404, 'operation_not_found', 'Không tìm thấy giao dịch để đảo.');
+      if (old?.result.newLineId && !old.undo) throw new NsSyncError(409, 'invalid_reverse', 'Giao dịch đổi dự án này đã là một lần đảo.');
       const lineId = edit?.lineId ?? old!.result.lineId;
       const lineRef = db.collection(NS_COLLECTION).doc(lineId);
       const [snap, supportSnap, locksSnap] = await tx.getAll(
         lineRef, db.collection(SUPPORT_COLLECTION).doc(lineId), db.doc('vnLocks/current'),
       );
       const line = snap.exists ? { ...normalizeLegacyFieldValues(snap.data()), id: snap.id } as NsLine : null;
+      const now = new Date();
+      const at = now.toISOString();
+      const locks = normLocks(locksSnap.data());
+      const locked = !!line && (pastLocked(locks.pastLock?.ns, line.period, +now) || !!activeLock(locks, 'nsEdit', line.period, +now));
+      const actor = { uid, role: 'super_admin', name: String(profile?.displayName || profile?.fullName || profile?.name || '') };
+      const moveContext = { db, tx, opRef, source: snap, support: supportSnap, locks: locksSnap, actor, options, at, dryRun, version, requestHash };
+      const notificationFor = (plan: NsSyncPlan) =>
+        !dryRun && options.notify && typeof line?.ownerEmail === 'string' && line.ownerEmail && line.ownerUid !== uid ? {
+          type: 'ns_edit', title: 'Super Admin đã điều chỉnh Ngân sách MKT của bạn',
+          message: `NS kỳ ${line.period}: ${plan.before.amount.toLocaleString('vi-VN')} → ${plan.after.amount.toLocaleString('vi-VN')} đ. ${plan.newLineId ? 'Đã đổi dự án. ' : ''}Lý do: ${options.reason}`,
+          targetEmails: [line.ownerEmail.toLowerCase()], targetUid: line.ownerUid!,
+          createdBy: uid, creatorEmail: String(profile?.email || ''), createdAt: at, readBy: [],
+          lineId: plan.newLineId ?? lineId, period: line.period, projectId: plan.after.projectId, teamId: line.teamId!,
+        } : undefined;
+      if (old?.undo) {
+        const result = await reverseNsProject(moveContext, original!, old, locked);
+        return { ...result, notification: notificationFor(result.response) };
+      }
+      if (edit?.projectId && edit.projectId !== line?.projectId) {
+        const plan = planNsAmount(actor.role, edit, line, supportSnap.data(), locked);
+        const result = await moveNsProject(moveContext, line!, edit, plan);
+        return { ...result, notification: notificationFor(result.response) };
+      }
       const currentVersion = revision(snap, supportSnap);
       if (old && (!line || !old.result.committedUpdatedAt || line.amount !== old.result.after.amount ||
         line.updatedAt !== old.result.committedUpdatedAt)) throw versionConflict();
@@ -84,20 +113,15 @@ export async function handleNsSync(action: string, req: any, res: any) {
         lineId, amount: old!.result.before.amount,
         expectedAmount: old!.result.after.amount, expectedUpdatedAt: old!.result.committedUpdatedAt,
       });
-      const now = new Date();
-      const locks = normLocks(locksSnap.data());
-      const locked = !!line && (pastLocked(locks.pastLock?.ns, line.period, +now) || !!activeLock(locks, 'nsEdit', line.period, +now));
       const plan = planNsAmount(profile?.role, requested, line, supportSnap.data(), locked);
       if (dryRun) return { response: { ...plan, version: currentVersion, impacts: NS_SYNC_IMPACTS, operationId: options.operationId } };
 
       const historyRef = db.collection(HISTORY_COLLECTION).doc(options.operationId);
       const auditRef = db.collection('auditLogs').doc(options.operationId);
-      const at = now.toISOString();
       const result: Result = {
         ...plan, operationId: options.operationId, committedUpdatedAt: at, ...(reverse ? { reverseOf } : {}),
         docsWritten: [lineRef.path, historyRef.path, auditRef.path, opRef.path],
       };
-      const actor = { uid, role: 'super_admin', name: String(profile?.displayName || profile?.fullName || profile?.name || '') };
       const patch = {
         amount: plan.after.amount, updatedAt: at, updatedBy: uid,
         history: appendHistory(line!, { at, byUid: uid, byName: actor.name, byRole: actor.role, action: 'update', from: plan.before.amount, to: plan.after.amount, reason: options.reason }),
@@ -112,14 +136,7 @@ export async function handleNsSync(action: string, req: any, res: any) {
         timestamp: FieldValue.serverTimestamp(),
       });
       tx.create(opRef, { status: 'committed', actor, requestHash, result, timestamp: FieldValue.serverTimestamp() });
-      const notification = options.notify && typeof line!.ownerEmail === 'string' && line!.ownerEmail && line!.ownerUid !== uid ? {
-        type: 'ns_edit', title: 'Super Admin đã điều chỉnh Ngân sách MKT của bạn',
-        message: `NS kỳ ${line!.period}: ${plan.before.amount.toLocaleString('vi-VN')} → ${plan.after.amount.toLocaleString('vi-VN')} đ. Lý do: ${options.reason}`,
-        targetEmails: [line!.ownerEmail.toLowerCase()], targetUid: line!.ownerUid!,
-        createdBy: uid, creatorEmail: String(profile?.email || ''), createdAt: at, readBy: [],
-        lineId, period: line!.period, projectId: line!.projectId, teamId: line!.teamId!,
-      } : undefined;
-      return { response: { ...result, replayed: false }, notification };
+      return { response: { ...result, replayed: false }, notification: notificationFor(result) };
     }, dryRun ? { readOnly: true } : undefined);
 
     if (ret.notification) {

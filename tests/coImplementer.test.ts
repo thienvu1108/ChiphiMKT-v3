@@ -26,4 +26,13 @@ describe('coImplementerOf — đồng bộ Người cùng triển khai từ Đă
     expect(coImplementerOf({ projectId: 'p1', month: '2026-12' }, lines)).toBe('');
     expect(coImplementerOf({ implementerUid: 'u1', month: '2026-12' }, lines)).toBe('');
   });
+  it('ưu tiên tên live theo reference và alias, kể cả khi giá trị live đã bị xoá', () => {
+    const row = { implementerUid: 'old', projectId: 'p1', ntMonth: '2027-01', supplementFor: '2026-12',
+      nsLineId: 'ref', coImplementer: 'Snapshot cũ' };
+    const accounts = [{ uid: 'u1', aliasUids: ['old'] }];
+    const live = [{ ...lines[0], id: 'ref', coImplementer: '' }, { ...lines[0], id: 'other' }];
+    expect(coImplementerOf(row, live, accounts)).toBe('');
+    expect(coImplementerOf({ ...row, nsLineId: 'missing' }, live, accounts)).toBe('Snapshot cũ');
+    expect(coImplementerOf({ ...row, ntNoBudget: true }, live, accounts)).toBe('');
+  });
 });

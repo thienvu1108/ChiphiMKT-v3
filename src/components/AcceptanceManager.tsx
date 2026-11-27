@@ -260,12 +260,13 @@ export const AcceptanceManager = React.memo(({
   const nsPeriods = useMemo(() => {
     const s = new Set<string>();
     const add = (m: unknown) => { const p = normalizeMonth(m); if (/^\d{4}-\d{2}$/.test(p) && p >= '2026-11') s.add(p); };
-    draftRows.forEach((d) => add(d.month));
+    draftRows.forEach((d) => { add(d.month); add(d.supplementFor); });
     add(editingRowState?.month);
+    add(editingRowState?.supplementFor);
     add(acceptanceMonthFilter);
     if (!s.size) add(getPeriodOf());
     return [...s].slice(0, 10);
-  }, [draftRows, editingRowState?.month, acceptanceMonthFilter]);
+  }, [draftRows, editingRowState?.month, editingRowState?.supplementFor, acceptanceMonthFilter]);
   const [nsLines, setNsLines] = useState<any[]>([]);
   const [nsSupport, setNsSupport] = useState<Record<string, any>>({});
   const [nsReady, setNsReady] = useState(false);
@@ -781,7 +782,7 @@ export const AcceptanceManager = React.memo(({
 
     const comp = getRowComputed(draftRow);
     // Người cùng triển khai — đồng bộ từ Đăng ký MKT theo Người phụ trách + Dự án + kỳ.
-    const coImpl = coImplementerOf(draftRow, nsLines);
+    const coImpl = coImplementerOf(draftRow, nsLines, allUsers);
     const tm = (teamLookup.findTeam
       ? (teamLookup.findTeam(draftRow.teamId) || teamLookup.findTeam(draftRow.teamCode) || teamLookup.findTeam(draftRow.teamName))
       : null) || (teams || []).find((t: any) => 
@@ -1018,7 +1019,8 @@ export const AcceptanceManager = React.memo(({
         );
 
     const pr = resolveAcceptanceProject(updatedState, projects);
-    const coImpl = coImplementerOf({ ...updatedState, projectId: pr?.id || updatedState.projectId }, nsLines);
+    const coImpl = coImplementerOf({ ...updatedState, projectId: pr?.id || updatedState.projectId,
+      coImplementer: orig?.coImplementer }, nsLines, allUsers);
 
     try {
       const oldItem = acceptancesRef.current.find((a: any) => a.id === id);
@@ -1056,7 +1058,7 @@ export const AcceptanceManager = React.memo(({
         blockName: khoiMgr ? khoiBlk!.blockName : (resolvedBlock.blockName || tm?.blockName || updatedState.blockName || oldItem?.blockName || ''),
         gdkdName: updatedState.gdkdName || tm?.name || oldItem?.gdkdName || '',
         implementerName: updatedState.implementerName || oldItem?.implementerName || '',
-        coImplementer: coImpl || oldItem?.coImplementer || '',
+        coImplementer: coImpl,
         implementerUid: updatedState.implementerManual ? '' : (updatedState.implementerUid || oldItem?.implementerUid || ''),
         ntMonth: updatedState.implementerManual ? (oldItem?.ntMonth || '') : (updatedState.implementerUid || oldItem?.implementerUid) ? (normalizeMonth(updatedState.month) || normalizeMonth(oldItem?.month) || '') : (oldItem?.ntMonth || ''),
         ntTeamId: khoiMgr ? '' : (tm?.id || updatedState.teamId || oldItem?.teamId || ''),
