@@ -37,6 +37,7 @@
     "motion": "^12.23.24",
     "next-themes": "^0.4.6",
     "papaparse": "^5.5.3",
+    "pdfjs-dist": "^5.7.284",
     "pptxgenjs": "^3.12.0",
     "react": "^19.0.0",
     "react-day-picker": "^9.14.0",
@@ -60,6 +61,7 @@
     "tsx": "^4.21.0",
     "typescript": "~5.8.2",
     "vite": "^6.2.0",
+    "vite-plugin-static-copy": "^3.4.0",
     "vitest": "^4.1.11"
   },
   "overrides": {

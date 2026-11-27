@@ -2,6 +2,8 @@ import { NoBudgetBadge } from '../components/acceptance/NoBudgetBadge';
 import { isSupplement, suppStatus, suppViewLabel } from '../../lib/vnext/ntSupplement';
 import { pastBlock } from './locks';
 import { useDirtyGuard } from '../lib/chunkReload';
+import { flushSync } from 'react-dom';
+import { useInvoicePages } from './invoicePages';
 import React, { useEffect, useMemo, useState } from 'react';
 import { collection, deleteDoc, doc, onSnapshot, query, setDoc, updateDoc, where, getDoc, Timestamp } from 'firebase/firestore';
 import { Shell, Card, Btn, Badge, Th, Td, Field, Select, Input, Tabs, Modal, Empty, Kpi, fmt, fmtM, vnTime, useToast , SearchSelect } from './ui';
@@ -14,8 +16,8 @@ import { NT_MANUAL_FEATURE, NT_MANUAL_LABEL, NT_MANUAL_VALUE, ntManualAllowed, i
 import { ManualAssigneeDialog } from '../components/acceptance/ManualAssigneeDialog';
 import { buildReport, buildReconcile, splitNoBudget, isNoBudgetRec, recordCostBeforeVat, normalizeMonth, isAccepted, GROUP_ORDER, GROUP_LABEL, GROUP_CHANNELS, groupCost, recordVat, channelValue, clampShareDays, newToken } from '../../lib/vnext/ntReport';
 import { periodLabel, getPeriodOf, addPeriods } from '../../lib/vnext/period';
-import { exportBaseName, printWithTitle, blockCodeOf, teamCodeOf } from '../../lib/vnext/exportName';
-import { Deck, exportPptx, type DeckData, type DeckImage } from './ntDeck';
+import { exportBaseName, blockCodeOf, teamCodeOf } from '../../lib/vnext/exportName';
+import { Deck, exportPptx, printDeck, type DeckData, type DeckImage } from './ntDeck';
 import { listenTeamScoped } from './teamScoped';
 import { PhotoViewer } from './PhotoViewer';
 import { loadXlsx } from '../lib/loadXlsx';
@@ -85,8 +87,10 @@ export default function NtReportPage({ c, fixedBlockIds, fixedTeamIds }: { c: VC
   const scopeLabel = level === 'user' && userKey ? `User: ${userKey}${teamId ? ' · ' + teamName(c, teamId) : ''}` : level !== 'khoi' && teamId ? `Phòng ${teamName(c, teamId)}` : blockId ? `Khối ${blockName(c, blockId)}` : allowedTeams ? 'Phạm vi được giao' : 'Toàn hệ thống';
   const nb = useMemo(() => splitNoBudget(rep.records).noBudget, [rep.records]);
   const invoices = useInvoices(c);
-  const deck = useMemo(() => toDeck(c, rep, images, 'Báo cáo Nghiệm thu', scopeLabel, month, invoices), [rep, images, scopeLabel, month, invoices]);
-  const resolve = (img: DeckImage) => storageFor(c.db, img.provider).url(img as any);
+  const baseDeck = useMemo(() => toDeck(c, rep, images, 'Báo cáo Nghiệm thu', scopeLabel, month, invoices), [rep, images, scopeLabel, month, invoices]);
+  const { images: deckImages, pending: renderingPdf, resolve } = useInvoicePages(baseDeck.images, c.db);
+  const preparingPdf = !invoices || renderingPdf;
+  const deck = { ...baseDeck, images: deckImages };
   const blkCodes = blockId ? [blockCodeOf(c.blocks.find((b) => b.id === blockId)) || blockId] : [...new Set(filtered.map((a) => a.blockId || blockOfTeam(c, a.teamId)).filter(Boolean))].map((b) => blockCodeOf(c.blocks.find((x) => x.id === b)) || b);
   const fname = exportBaseName({ blockCode: blkCodes, month, teamCode: level !== 'khoi' && teamId ? (teamCodeOf(c.teams.find((t) => t.id === teamId)) || teamName(c, teamId)) : '', projectName: projectId ? (rep.projects.find((p) => p.projectId === projectId)?.projectName || projectName(c, projectId)) : '' });
 
@@ -108,10 +112,13 @@ export default function NtReportPage({ c, fixedBlockIds, fixedTeamIds }: { c: VC
   return (
     <Shell title="Báo cáo Nghiệm thu" sub="Tự động từ bản ghi «Đã nghiệm thu» · Tổng → Nhóm → Dự án → bản ghi · Chi phí trước VAT, VAT và Tổng sau VAT (khớp mục Nghiệm thu MKT)"
       actions={<>
-        <Btn onClick={() => printWithTitle(fname, () => document.body.classList.add('nt-print'), () => document.body.classList.remove('nt-print'))}>⬇ PDF</Btn>
+        <Btn disabled={preparingPdf || !rep.records.length} onClick={async () => {
+          flushSync(() => setTab('report'));
+          try { await printDeck(fname); } catch (e: any) { toast(e.message, 'err'); }
+        }}>⬇ PDF</Btn>
         <Btn onClick={() => exportExcel()} data-testid="nt-report-xlsx">⬇ Excel</Btn>
-        <Btn onClick={async () => { toast('Đang tạo PPTX…'); try { await exportPptx(deck, resolve, fname + '.pptx'); } catch (e: any) { toast('Lỗi xuất PPTX: ' + e.message, 'err'); } }}>⬇ PPTX</Btn>
-        {mgr && vnCan(c, 'vn.share_links.manage') && <Btn primary onClick={() => setShareOpen(true)}>🔗 Link chia sẻ</Btn>}
+        <Btn disabled={preparingPdf} onClick={async () => { toast('Đang tạo PPTX…'); try { await exportPptx(deck, resolve, fname + '.pptx'); } catch (e: any) { toast('Lỗi xuất PPTX: ' + e.message, 'err'); } }}>⬇ PPTX</Btn>
+        {mgr && vnCan(c, 'vn.share_links.manage') && <Btn primary disabled={preparingPdf} onClick={() => setShareOpen(true)}>🔗 Link chia sẻ</Btn>}
       </>}>
       <div className="flex flex-wrap gap-2 items-end">
         <Field label="Tháng"><Select value={month} onChange={(v: string) => { setMonthTouched(true); setMonth(v); }} options={(months.length ? months : [month]).map((m) => ({ value: m, label: periodLabel(m) }))} /></Field>
@@ -130,8 +137,8 @@ export default function NtReportPage({ c, fixedBlockIds, fixedTeamIds }: { c: VC
         <Kpi label="Bản ghi chưa có ảnh" value={rep.records.filter((r: any) => !images.some((i) => i.acceptanceId === r.id)).length} />
       </div>
       <div className="nt-noprint"><Tabs tabs={[{ id: 'report', label: 'Báo cáo (slide)' }, { id: 'reconcile', label: 'Đối chiếu NS / NT' }, { id: 'invoices', label: 'Hóa đơn' }, { id: 'images', label: 'Ảnh Nghiệm thu', hidden: !mgr }, { id: 'assign', label: 'Gán người phụ trách', hidden: !vnCan(c, 'vn.nt_records.assign') }]} value={tab} onChange={setTab} /></div>
-      {tab === 'report' && (rep.records.length ? <><Deck d={deck} resolve={resolve} /><InvoiceSection c={c} records={rep.records} /></> : <Card><Empty>Không có bản ghi «Đã nghiệm thu» cho bộ lọc này</Empty></Card>)}
-      {tab === 'invoices' && <InvoiceSection c={c} records={rep.records} />}
+      {tab === 'report' && (rep.records.length ? <>{preparingPdf ? <Card><Empty>Đang chuẩn bị hóa đơn…</Empty></Card> : <Deck d={deck} resolve={resolve} />}<InvoiceSection c={c} records={rep.records} pdfPages={deckImages} /></> : <Card><Empty>Không có bản ghi «Đã nghiệm thu» cho bộ lọc này</Empty></Card>)}
+      {tab === 'invoices' && <InvoiceSection c={c} records={rep.records} pdfPages={deckImages} />}
       {tab === 'reconcile' && <NtReconcile c={c} month={month} filtered={filtered} teamId={teamId} blockId={blockId} projectId={projectId} allowedTeams={allowedTeams} />}
       {tab === 'images' && mgr && <ImageManager c={c} records={rep.records} images={images} store={store} month={month} />}
       {tab === 'assign' && vnCan(c, 'vn.nt_records.assign') && <NtAssign c={c} month={month} allowedTeams={allowedTeams} images={images} store={store} />}
@@ -337,7 +344,7 @@ function ShareDialog({ c, onClose, deck, month, scopeLabel, images }: any) {
       const d = clampShareDays(days, maxDays);
       const snap = JSON.stringify(deck);
       if (snap.length > 900_000) throw new Error('Báo cáo quá lớn để chia sẻ — hãy lọc hẹp hơn');
-      const refs = deck.images.map((i: DeckImage) => i.ref);
+      const refs = [...new Set(deck.images.map((i) => i.ref))];
       await setDoc(doc(c.db, 'shareLinks', token), { kind: 'nt-report', month, scopeLabel, snapshot: snap, imageRefs: refs, createdBy: c.uid, createdByName: c.name, createdAtIso: new Date().toISOString(), expiresAt: Timestamp.fromMillis(Date.now() + d * 86400e3), revokedAt: null });
       for (const img of deck.images.filter((i: DeckImage) => i.provider === 'firestore')) {
         const src = await getDoc(doc(c.db, 'acceptanceImageData', img.ref));
