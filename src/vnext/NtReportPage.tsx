@@ -95,7 +95,7 @@ export default function NtReportPage({ c, fixedBlockIds, fixedTeamIds }: { c: VC
   const invoices = useInvoices(c);
   const deckTitle = kind === 'supp' ? 'Báo cáo Nghiệm thu BỔ SUNG' : kind === 'main' ? 'Báo cáo Nghiệm thu HỒ SƠ CHÍNH' : 'Báo cáo Nghiệm thu';
   const extraLines = useMemo<[string, string][]>(() => kind === 'supp' ? [['Kỳ được bổ sung', periodLabel(month)], ...(suppInSel ? [['Kỳ nộp', periodLabel(suppInSel)] as [string, string]] : [])] : [], [kind, month, suppInSel]);
-  const baseDeck = useMemo(() => ({ ...toDeck(c, rep, images, deckTitle, scopeLabel, month, invoices), ...(extraLines.length ? { extraLines } : {}) }), [rep, images, scopeLabel, month, invoices, deckTitle, extraLines]);
+  const baseDeck = useMemo(() => ({ ...toDeck(c, rep, images, deckTitle, scopeLabel, month, invoices), ...(extraLines.length ? { extraLines } : {}), ...(kind === 'supp' ? { coverTag: 'BỔ SUNG' } : kind === 'main' ? { coverTag: 'HỒ SƠ CHÍNH' } : {}) }), [rep, images, scopeLabel, month, invoices, deckTitle, extraLines, kind]);
   const suppSum = useMemo(() => kind === 'supp' ? ntSuppSummary(rep.records) : null, [kind, rep.records]);
   const { images: deckImages, pending: renderingPdf, resolve } = useInvoicePages(baseDeck.images, c.db);
   const preparingPdf = !invoices || renderingPdf;
@@ -108,7 +108,7 @@ export default function NtReportPage({ c, fixedBlockIds, fixedTeamIds }: { c: VC
     try {
       const XLSX = await loadXlsx();
       const data = rep.records.map((r: any) => ({
-        'THÁNG': r.month || '', 'MÃ': shortCode(r.id), 'PHÒNG': r.teamName || teamName(c, r.teamId), 'NGƯỜI PHỤ TRÁCH': r.implementerName || '',
+        'THÁNG': ntReportMonth(r) || '', 'MÃ': shortCode(r.id), 'PHÒNG': r.teamName || teamName(c, r.teamId), 'NGƯỜI PHỤ TRÁCH': r.implementerName || '',
         'DỰ ÁN': projectName(c, r.projectId, r.projectName), 'CHI PHÍ (TRƯỚC VAT)': recordCostBeforeVat(r), 'VAT': recordVat(r),
         'NGOÀI ĐK NS': isNoBudgetRec(r) ? 'Có' : '—', 'LÝ DO NGOÀI ĐK NS': isNoBudgetRec(r) ? String(r.ntNoBudgetReason || '') : '',
         ...ntSuppExcelCols(r),

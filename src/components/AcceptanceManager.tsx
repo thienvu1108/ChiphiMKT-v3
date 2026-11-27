@@ -1480,7 +1480,7 @@ export const AcceptanceManager = React.memo(({
       const comp = getRowComputed(a);
       const blkInfo = resolveBlockForTeam(a, blocks, teams, teamLookup.findTeam);
       return {
-        'THÁNG': a.month || '',
+        'THÁNG': !suppView && ntKind === 'supp' ? (formatAcceptanceMonth(ntReportMonth(a)) || '') : (a.month || ''),
         'BỔ SUNG': isSupplement(a) ? `${suppBadge(a)} (${SUPP_STATUS_LABEL[suppStatus(a) as 'pending']})` : '',
         'NGOÀI ĐK NS': isNoBudgetRecord(a) ? 'Có' : '—',
         'LÝ DO NGOÀI ĐK NS': noBudgetReasonText(a),
@@ -1538,7 +1538,7 @@ export const AcceptanceManager = React.memo(({
       const codes = acceptanceBlockFilter !== 'all'
         ? [blockCodeOf(blocks.find((b: any) => b.id === acceptanceBlockFilter || b.blockCode === acceptanceBlockFilter)) || acceptanceBlockFilter]
         : [...new Set(exportRecs.map((a: any) => resolveBlockForTeam(a, blocks, teams, teamLookup.findTeam).blockCode || a.blockCode).filter(Boolean))];
-      const months = [...new Set(exportRecs.map((a: any) => formatAcceptanceMonth(a.month)).filter(Boolean))];
+      const months = [...new Set(exportRecs.map((a: any) => formatAcceptanceMonth(!suppView && ntKind === 'supp' ? ntReportMonth(a) : a.month)).filter(Boolean))];
       const tm = acceptanceTeamFilter !== 'all' ? (teamLookup.byId.get(acceptanceTeamFilter) || teams.find((t: any) => t.id === acceptanceTeamFilter)) : null;
       const pj = acceptanceProjectFilter !== 'all' ? (projectLookup.findProject?.(acceptanceProjectFilter) || projects.find((p: any) => p.id === acceptanceProjectFilter)) : null;
       XLSX.writeFile(workbook, exportFileName({ blockCode: codes, month: acceptanceMonthFilter !== 'all' ? formatAcceptanceMonth(acceptanceMonthFilter) : months.length === 1 ? String(months[0]) : 'all', teamCode: tm ? teamCodeOf(tm) : '', projectName: pj ? (pj.name || '') : '', prefix: suppView ? undefined : ntExportPrefix(ntKind) }, 'xlsx'));
