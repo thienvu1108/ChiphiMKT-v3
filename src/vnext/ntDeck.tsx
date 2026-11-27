@@ -9,9 +9,11 @@ import { fitContain, jpegOrientation } from '../../lib/vnext/fitImage';
 export type DeckRecord = { id: string; code: string; user: string; team: string; block: string; project: string; projectId: string; cost: number; vat?: number; leads: number; groups: { label: string; cost: number; channels: { label: string; v: number }[] }[] };
 export type { DeckImage } from '../../lib/vnext/invoiceDeck';
 export type DeckData = {
-  title: string; scopeLabel: string; periodLabel: string; createdAt?: string;
+  title: string; scopeLabel: string; periodLabel: string; createdAt?: string; extraLines?: [string, string][];
   /** Tên tệp xuất (exportBaseName) — có từ 26/10/2026. */
   fileName?: string;
+  /** Nhãn nổi bật dưới tiêu đề bìa (vd 'BỔ SUNG'); link cũ không có → bìa như cũ. */
+  coverTag?: string;
   groups: { label: string; cost: number; vat?: number; leads: number; channels: string[]; projects: { projectId: string; projectName: string; cost: number; leads: number; rows: { id: string; user: string; team: string; code: string; cost: number; leads: number | null; channels: Record<string, number> }[] }[] }[];
   projects: { projectId: string; projectName: string; cost: number; vat?: number; leads: number }[];
   /** vat / withVat: có từ 26/10/2026 (link chia sẻ cũ không có → chỉ hiện trước VAT). */
@@ -29,7 +31,7 @@ export function coverInfo(d: DeckData) {
   const r = d.records || [];
   const list = (a: string[], n = 8) => (a.length ? (a.length > n ? `${a.slice(0, n).join(', ')} +${a.length - n}` : a.join(', ')) : '—');
   const blocks = uniq(r.map((x) => x.block)), teams = uniq(r.map((x) => x.team)), users = uniq(r.map((x) => x.user)), projects = uniq(r.map((x) => x.project));
-  return { blocks, teams, users, projects, lines: [['Khối', list(blocks)], ['Phòng', list(teams)], ['Người triển khai', list(users)], [`Dự án triển khai (${projects.length})`, list(projects, 12)]] as [string, string][] };
+  return { blocks, teams, users, projects, lines: [['Khối', list(blocks)], ['Phòng', list(teams)], ['Người triển khai', list(users)], [`Dự án triển khai (${projects.length})`, list(projects, 12)], ...(d.extraLines || [])] as [string, string][] };
 }
 
 const chLabel = (k: string) => Object.values(GROUP_CHANNELS).flat().find((c) => c.key === k)?.label || k;
@@ -90,6 +92,7 @@ export function Deck({ d, resolve }: { d: DeckData; resolve: (img: DeckImage) =>
             <div className="flex-1 flex flex-col justify-center">
               <div className="text-[clamp(10px,1.4vw,16px)] text-white/70 tracking-[0.2em]">BÁO CÁO</div>
               <div className="text-[clamp(18px,4vw,48px)] font-extrabold leading-tight">NGHIỆM THU MARKETING</div>
+              {d.coverTag && <div className="mt-[1%] text-[clamp(12px,2.2vw,26px)] font-extrabold tracking-wide text-[#F26B21]" data-testid="vn-deck-cover-tag">{d.coverTag === 'BỔ SUNG' ? 'HỒ SƠ BỔ SUNG' : d.coverTag}</div>}
               <div className="mt-[2%] h-1 w-[12%] bg-[var(--mh-accent)]" />
               <div className="mt-[2%] text-[clamp(11px,1.8vw,22px)] font-semibold">{d.periodLabel}</div>
               <div className="text-[clamp(10px,1.5vw,18px)] text-white/80">{d.scopeLabel}</div>
@@ -197,11 +200,13 @@ export async function exportPptx(d: DeckData, resolve: (img: DeckImage) => Promi
       if (sl.kind === 'cover') {
         s.addText('BÁO CÁO', { x: 0.6, y: 1.2, w: 8, h: 0.4, fontFace: font, fontSize: 14, color: 'C9D6F0', charSpacing: 6 });
         s.addText('NGHIỆM THU MARKETING', { x: 0.6, y: 1.6, w: 9, h: 0.8, fontFace: font, fontSize: 36, bold: true, color: 'FFFFFF' });
-        s.addShape('rect', { x: 0.6, y: 2.5, w: 1.2, h: 0.08, fill: { color: OR } });
-        s.addText(d.periodLabel, { x: 0.6, y: 2.7, w: 9, h: 0.5, fontFace: font, fontSize: 18, bold: true, color: 'FFFFFF' });
-        s.addText(d.scopeLabel, { x: 0.6, y: 3.15, w: 9, h: 0.4, fontFace: font, fontSize: 14, color: 'DDE6F7' });
-        s.addText(coverInfo(d).lines.map(([k, v], i, a) => ({ text: `${k}: ${v}`, options: { breakLine: i < a.length - 1 } })), { x: 0.6, y: 3.55, w: 8.8, h: 0.85, fontFace: font, fontSize: 10, color: 'FFFFFF', valign: 'top', fit: 'shrink' });
-        s.addText(`Chi phí (trước VAT): ${fmt(d.total.cost)} đ${hasVat(d) ? `   ·   VAT: ${fmt(d.total.vat!)} đ   ·   Tổng sau VAT: ${fmt(withVat(d))} đ` : ''}   ·   Lead: ${fmt(d.total.leads)}   ·   Giá/lead: ${cpl2(d.total.cost, d.total.leads)}`, { x: 0.6, y: 4.6, w: 9, h: 0.4, fontFace: font, fontSize: 13, color: 'FFFFFF' });
+        if (d.coverTag) s.addText(d.coverTag === 'BỔ SUNG' ? 'HỒ SƠ BỔ SUNG' : d.coverTag, { x: 0.6, y: 2.4, w: 9, h: 0.4, fontFace: font, fontSize: 18, bold: true, color: 'F26B21', valign: 'top' });
+        const dy = d.coverTag ? 0.35 : 0;
+        s.addShape('rect', { x: 0.6, y: 2.6 + dy, w: 1.2, h: 0.08, fill: { color: OR } });
+        s.addText(d.periodLabel, { x: 0.6, y: 2.75 + dy, w: 9, h: 0.5, fontFace: font, fontSize: 18, bold: true, color: 'FFFFFF' });
+        s.addText(d.scopeLabel, { x: 0.6, y: 3.15 + dy, w: 9, h: 0.4, fontFace: font, fontSize: 14, color: 'DDE6F7' });
+        s.addText(coverInfo(d).lines.map(([k, v], i, a) => ({ text: `${k}: ${v}`, options: { breakLine: i < a.length - 1 } })), { x: 0.6, y: 3.55 + dy, w: 8.8, h: 0.85, fontFace: font, fontSize: 10, color: 'FFFFFF', valign: 'top', fit: 'shrink' });
+        s.addText(`Chi phí (trước VAT): ${fmt(d.total.cost)} đ${hasVat(d) ? `   ·   VAT: ${fmt(d.total.vat!)} đ   ·   Tổng sau VAT: ${fmt(withVat(d))} đ` : ''}   ·   Lead: ${fmt(d.total.leads)}   ·   Giá/lead: ${cpl2(d.total.cost, d.total.leads)}`, { x: 0.6, y: 4.6 + dy, w: 9, h: d.coverTag ? 0.25 : 0.4, fontFace: font, fontSize: 13, color: 'FFFFFF' });
       } else {
         s.addText([{ text: 'MAY', options: { color: 'FFFFFF' } }, { text: 'HOMES', options: { color: OR } }], { x: 0, y: 2, w: 10, h: 1, fontFace: font, fontSize: 48, bold: true, align: 'center' });
         s.addText('Cảm ơn!', { x: 0, y: 3, w: 10, h: 0.5, fontFace: font, fontSize: 18, color: 'DDE6F7', align: 'center' });

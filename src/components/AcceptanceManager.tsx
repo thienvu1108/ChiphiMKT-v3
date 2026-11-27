@@ -59,6 +59,7 @@ import { NT_MANUAL_FEATURE, ntManualAllowed, isManualImplementer, implementerLab
 import { vnCan } from '../vnext/ctx';
 import { ManualAssigneeDialog } from './acceptance/ManualAssigneeDialog';
 import { normalizeMonth } from '../../lib/vnext/ntReport';
+import { ntKindMatch, ntReportMonth, ntExportPrefix, ntSuppExcelCols, type NtKind } from '../../lib/vnext/ntSuppFilter';
 import { ntKey as ntKeyStr } from '../../lib/vnext/onboarding';
 import { isSupplement, suppIn, suppMonths, ntDeniedMsg, suppStatus, suppBadge, suppCounts, suppDecisionPatch, ntCountsInTotals, SUPP_STATUS_LABEL, suppMissingFiles, suppMissingBadge } from '../../lib/vnext/ntSupplement';
 import { format } from 'date-fns';
@@ -108,6 +109,7 @@ export const AcceptanceManager = React.memo(({
   /** Client thấy kỳ của tháng này đang mở (không bị khoá/quá hạn) → lỗi permission-denied không phải do khoá kỳ. */
   const kyLooksOpen = (m: any) => { const mm = normalizeMonth(m); return !!mm && !lockBlock(isSuperAdmin ? 'super_admin' : 'x', 'nt', mm, vnLocksNow) && !pastBlock(isSuperAdmin ? 'super_admin' : 'x', 'nt', mm, vnLocksNow); };
   const [suppView, setSuppView] = useState(false);
+  const [ntKind, setNtKind] = useState<NtKind>('all');
   /** Kỳ NT đang MỞ (không phải Super Admin): ưu tiên tháng hiện tại (giờ VN) — vd 25/10 → kỳ 2026-10. */
   const openNtKy = useMemo(() => {
     const d = new Date(Date.now() + 7 * 3600e3); const idx = d.getUTCFullYear() * 12 + d.getUTCMonth();
@@ -602,10 +604,12 @@ export const AcceptanceManager = React.memo(({
       } else if (isSupplement(a) && !ntCountsInTotals(a)) {
         // Bảng chính: bản bổ sung chờ duyệt / từ chối / yêu cầu sửa chỉ hiện ở mục «Nghiệm thu bổ sung».
         return false;
+      } else if (ntKind !== 'all' && !ntKindMatch(a, ntKind)) {
+        return false; // MC-11: lọc «Loại hồ sơ»
       }
       // Month match
       if (acceptanceMonthFilter !== 'all') {
-        const m = String((suppView ? suppIn(a) : a.month) || '').trim();
+        const m = String((suppView ? suppIn(a) : (!suppView && ntKind === 'supp' ? ntReportMonth(a) : a.month)) || '').trim();
         const f = acceptanceMonthFilter.trim();
         if (m !== f && !isAcceptanceMonthMatch(m, f)) {
           return false;
@@ -701,7 +705,7 @@ export const AcceptanceManager = React.memo(({
         ? String(valA).localeCompare(String(valB))
         : String(valB).localeCompare(String(valA));
     });
-  }, [suppView, suppStatusFilter, acceptances, acceptanceMonthFilter, acceptanceBlockFilter, acceptanceTeamFilter, acceptanceProjectFilter, debouncedAcceptanceSearch, sortConfig, teams, blocks, teamLookup, projectLookup, isGDKorAssistant, activeTargetBlock]);
+  }, [suppView, ntKind, suppStatusFilter, acceptances, acceptanceMonthFilter, acceptanceBlockFilter, acceptanceTeamFilter, acceptanceProjectFilter, debouncedAcceptanceSearch, sortConfig, teams, blocks, teamLookup, projectLookup, isGDKorAssistant, activeTargetBlock]);
 
   const displayedRecords = filteredAcceptances;
 
@@ -1476,7 +1480,7 @@ export const AcceptanceManager = React.memo(({
       const comp = getRowComputed(a);
       const blkInfo = resolveBlockForTeam(a, blocks, teams, teamLookup.findTeam);
       return {
-        'THÁNG': a.month || '',
+        'THÁNG': !suppView && ntKind === 'supp' ? (formatAcceptanceMonth(ntReportMonth(a)) || '') : (a.month || ''),
         'BỔ SUNG': isSupplement(a) ? `${suppBadge(a)} (${SUPP_STATUS_LABEL[suppStatus(a) as 'pending']})` : '',
         'NGOÀI ĐK NS': isNoBudgetRecord(a) ? 'Có' : '—',
         'LÝ DO NGOÀI ĐK NS': noBudgetReasonText(a),
@@ -1515,7 +1519,8 @@ export const AcceptanceManager = React.memo(({
         'TỔNG CỘNG': comp.grandTotal,
         'SỐ LEAD': comp.cnNopTien,
         'TRẠNG THÁI': a.status || 'Đã nghiệm thu',
-        'GHI CHÚ': a.notes || ''
+        'GHI CHÚ': a.notes || '',
+        ...ntSuppExcelCols(a),
       };
     });
 
@@ -1533,10 +1538,10 @@ export const AcceptanceManager = React.memo(({
       const codes = acceptanceBlockFilter !== 'all'
         ? [blockCodeOf(blocks.find((b: any) => b.id === acceptanceBlockFilter || b.blockCode === acceptanceBlockFilter)) || acceptanceBlockFilter]
         : [...new Set(exportRecs.map((a: any) => resolveBlockForTeam(a, blocks, teams, teamLookup.findTeam).blockCode || a.blockCode).filter(Boolean))];
-      const months = [...new Set(exportRecs.map((a: any) => formatAcceptanceMonth(a.month)).filter(Boolean))];
+      const months = [...new Set(exportRecs.map((a: any) => formatAcceptanceMonth(!suppView && ntKind === 'supp' ? ntReportMonth(a) : a.month)).filter(Boolean))];
       const tm = acceptanceTeamFilter !== 'all' ? (teamLookup.byId.get(acceptanceTeamFilter) || teams.find((t: any) => t.id === acceptanceTeamFilter)) : null;
       const pj = acceptanceProjectFilter !== 'all' ? (projectLookup.findProject?.(acceptanceProjectFilter) || projects.find((p: any) => p.id === acceptanceProjectFilter)) : null;
-      XLSX.writeFile(workbook, exportFileName({ blockCode: codes, month: acceptanceMonthFilter !== 'all' ? formatAcceptanceMonth(acceptanceMonthFilter) : months.length === 1 ? String(months[0]) : 'all', teamCode: tm ? teamCodeOf(tm) : '', projectName: pj ? (pj.name || '') : '' }, 'xlsx'));
+      XLSX.writeFile(workbook, exportFileName({ blockCode: codes, month: acceptanceMonthFilter !== 'all' ? formatAcceptanceMonth(acceptanceMonthFilter) : months.length === 1 ? String(months[0]) : 'all', teamCode: tm ? teamCodeOf(tm) : '', projectName: pj ? (pj.name || '') : '', prefix: suppView ? undefined : ntExportPrefix(ntKind) }, 'xlsx'));
     }
     toast.success('Đã xuất file Excel thành công');
   };
@@ -1805,6 +1810,20 @@ export const AcceptanceManager = React.memo(({
             Nghiệm thu bổ sung
             {suppPendingTotal > 0 && <span className={`rounded-full px-1.5 text-[10px] ${suppView ? 'bg-[var(--mh-surface)] text-orange-700' : 'bg-orange-600 text-white'}`}>{suppPendingTotal}</span>}
           </Button>
+
+          {!suppView && (
+            <select
+              data-testid="nt-mgr-kind"
+              aria-label="Loại hồ sơ"
+              value={ntKind}
+              onChange={(e) => { setNtKind(e.target.value as NtKind); setCurrentPage(1); }}
+              className="h-9 px-2 rounded-2xl border border-[var(--mh-border)] bg-[var(--mh-surface)] text-xs font-bold"
+            >
+              <option value="all">Loại hồ sơ: Tất cả</option>
+              <option value="main">Chỉ hồ sơ chính</option>
+              <option value="supp">Chỉ bổ sung đã duyệt</option>
+            </select>
+          )}
 
           <Button
             variant="outline"

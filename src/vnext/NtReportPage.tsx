@@ -16,6 +16,7 @@ import { NT_MANUAL_FEATURE, NT_MANUAL_LABEL, NT_MANUAL_VALUE, ntManualAllowed, i
 import { ManualAssigneeDialog } from '../components/acceptance/ManualAssigneeDialog';
 import { buildReport, buildReconcile, splitNoBudget, isNoBudgetRec, recordCostBeforeVat, normalizeMonth, isAccepted, GROUP_ORDER, GROUP_LABEL, GROUP_CHANNELS, groupCost, recordVat, channelValue, clampShareDays, newToken } from '../../lib/vnext/ntReport';
 import { periodLabel, getPeriodOf, addPeriods } from '../../lib/vnext/period';
+import { ntReportMonth, ntSuppInMonth, ntKindMatch, ntExportPrefix, ntSuppExcelCols, ntSuppSummary, type NtKind } from '../../lib/vnext/ntSuppFilter';
 import { exportBaseName, blockCodeOf, teamCodeOf } from '../../lib/vnext/exportName';
 import { Deck, exportPptx, printDeck, type DeckData, type DeckImage } from './ntDeck';
 import { listenTeamScoped } from './teamScoped';
@@ -53,7 +54,7 @@ export function ntNaming(c: VCtx, r: any, month: string, order: number) {
 
 export default function NtReportPage({ c, fixedBlockIds, fixedTeamIds }: { c: VCtx; fixedBlockIds?: string[]; fixedTeamIds?: string[] }) {
   const { toast, node } = useToast();
-  const months = useMemo(() => [...new Set(c.acceptances.filter((a) => isAccepted(a)).map((a) => normalizeMonth(a.month)).filter((m) => /^\d{4}-\d{2}$/.test(m)))].sort().reverse(), [c.acceptances]);
+  const months = useMemo(() => [...new Set(c.acceptances.filter((a) => isAccepted(a)).map((a) => ntReportMonth(a)).filter((m) => /^\d{4}-\d{2}$/.test(m)))].sort().reverse(), [c.acceptances]);
   const [month, setMonth] = useState(months[0] || addPeriods(getPeriodOf(), -1));
   const [monthTouched, setMonthTouched] = useState(false);
   // Dữ liệu nghiệm thu tải sau lần render đầu: tự chọn tháng mới nhất có dữ liệu cho tới khi người dùng tự đổi.
@@ -72,13 +73,18 @@ export default function NtReportPage({ c, fixedBlockIds, fixedTeamIds }: { c: VC
   const [userKey, setUserKey] = useState('');
   const [projectId, setProjectId] = useState('');
   const [tab, setTab] = useState('report');
+  const [kind, setKind] = useState<NtKind>('all');
+  const [suppInF, setSuppInF] = useState('');
   const [images, setImages] = useState<ImgMeta[]>([]);
   const [shareOpen, setShareOpen] = useState(false);
   const store = storageFor(c.db, c.settings?.ntStorageProvider);
 
   useEffect(() => listenTeamScoped(c, 'acceptanceImages', [], setImages), [c.db, c.role, gdkdTeams(c).join(',')]);
 
-  const base = c.acceptances.filter((a) => normalizeMonth(a.month) === month && (!allowedTeams || allowedTeams.includes(a.teamId)));
+  const kindBase = c.acceptances.filter((a) => ntReportMonth(a) === month && ntKindMatch(a, kind) && (!allowedTeams || allowedTeams.includes(a.teamId)));
+  const suppInOpts = useMemo(() => kind === 'supp' ? [...new Set(kindBase.map((a) => ntSuppInMonth(a)).filter(Boolean))].sort().reverse() : [], [kindBase, kind]);
+  const suppInSel = kind === 'supp' && suppInF && suppInOpts.includes(suppInF) ? suppInF : '';
+  const base = suppInSel ? kindBase.filter((a) => ntSuppInMonth(a) === suppInSel) : kindBase;
   const blockOpts = [...new Set(base.map((a) => a.blockId || blockOfTeam(c, a.teamId)).filter(Boolean))];
   const teamOpts = [...new Set(base.filter((a) => !blockId || (a.blockId || blockOfTeam(c, a.teamId)) === blockId).map((a) => a.teamId).filter(Boolean))];
   const userOpts = [...new Set(base.filter((a) => !teamId || a.teamId === teamId).map((a) => a.implementerName).filter(Boolean))].sort();
@@ -87,24 +93,33 @@ export default function NtReportPage({ c, fixedBlockIds, fixedTeamIds }: { c: VC
   const scopeLabel = level === 'user' && userKey ? `User: ${userKey}${teamId ? ' · ' + teamName(c, teamId) : ''}` : level !== 'khoi' && teamId ? `Phòng ${teamName(c, teamId)}` : blockId ? `Khối ${blockName(c, blockId)}` : allowedTeams ? 'Phạm vi được giao' : 'Toàn hệ thống';
   const nb = useMemo(() => splitNoBudget(rep.records).noBudget, [rep.records]);
   const invoices = useInvoices(c);
-  const baseDeck = useMemo(() => toDeck(c, rep, images, 'Báo cáo Nghiệm thu', scopeLabel, month, invoices), [rep, images, scopeLabel, month, invoices]);
+  const deckTitle = kind === 'supp' ? 'Báo cáo Nghiệm thu BỔ SUNG' : kind === 'main' ? 'Báo cáo Nghiệm thu HỒ SƠ CHÍNH' : 'Báo cáo Nghiệm thu';
+  const extraLines = useMemo<[string, string][]>(() => kind === 'supp' ? [['Kỳ được bổ sung', periodLabel(month)], ...(suppInSel ? [['Kỳ nộp', periodLabel(suppInSel)] as [string, string]] : [])] : [], [kind, month, suppInSel]);
+  const baseDeck = useMemo(() => ({ ...toDeck(c, rep, images, deckTitle, scopeLabel, month, invoices), ...(extraLines.length ? { extraLines } : {}), ...(kind === 'supp' ? { coverTag: 'BỔ SUNG' } : kind === 'main' ? { coverTag: 'HỒ SƠ CHÍNH' } : {}) }), [rep, images, scopeLabel, month, invoices, deckTitle, extraLines, kind]);
+  const suppSum = useMemo(() => kind === 'supp' ? ntSuppSummary(rep.records) : null, [kind, rep.records]);
   const { images: deckImages, pending: renderingPdf, resolve } = useInvoicePages(baseDeck.images, c.db);
   const preparingPdf = !invoices || renderingPdf;
   const deck = { ...baseDeck, images: deckImages };
   const blkCodes = blockId ? [blockCodeOf(c.blocks.find((b) => b.id === blockId)) || blockId] : [...new Set(filtered.map((a) => a.blockId || blockOfTeam(c, a.teamId)).filter(Boolean))].map((b) => blockCodeOf(c.blocks.find((x) => x.id === b)) || b);
-  const fname = exportBaseName({ blockCode: blkCodes, month, teamCode: level !== 'khoi' && teamId ? (teamCodeOf(c.teams.find((t) => t.id === teamId)) || teamName(c, teamId)) : '', projectName: projectId ? (rep.projects.find((p) => p.projectId === projectId)?.projectName || projectName(c, projectId)) : '' });
+  const fname = exportBaseName({ blockCode: blkCodes, month, teamCode: level !== 'khoi' && teamId ? (teamCodeOf(c.teams.find((t) => t.id === teamId)) || teamName(c, teamId)) : '', projectName: projectId ? (rep.projects.find((p) => p.projectId === projectId)?.projectName || projectName(c, projectId)) : '', prefix: ntExportPrefix(kind) });
 
   // Excel: mỗi bản ghi «Đã nghiệm thu» (đã lọc); cột «NGOÀI ĐK NS» (Có/—) + lý do cho bản bổ sung không có đăng ký NS.
   const exportExcel = async () => {
     try {
       const XLSX = await loadXlsx();
       const data = rep.records.map((r: any) => ({
-        'THÁNG': r.month || '', 'MÃ': shortCode(r.id), 'PHÒNG': r.teamName || teamName(c, r.teamId), 'NGƯỜI PHỤ TRÁCH': r.implementerName || '',
+        'THÁNG': ntReportMonth(r) || '', 'MÃ': shortCode(r.id), 'PHÒNG': r.teamName || teamName(c, r.teamId), 'NGƯỜI PHỤ TRÁCH': r.implementerName || '',
         'DỰ ÁN': projectName(c, r.projectId, r.projectName), 'CHI PHÍ (TRƯỚC VAT)': recordCostBeforeVat(r), 'VAT': recordVat(r),
         'NGOÀI ĐK NS': isNoBudgetRec(r) ? 'Có' : '—', 'LÝ DO NGOÀI ĐK NS': isNoBudgetRec(r) ? String(r.ntNoBudgetReason || '') : '',
+        ...ntSuppExcelCols(r),
       }));
       const ws = XLSX.utils.json_to_sheet(data); const wb = XLSX.utils.book_new();
       XLSX.utils.book_append_sheet(wb, ws, 'Báo cáo Nghiệm thu');
+      if (suppSum) {
+        const rows = suppSum.byTarget.map((t) => ({ 'BỔ SUNG CHO KỲ': periodLabel(t.month), 'SỐ HỒ SƠ': t.count, 'CHI PHÍ (TRƯỚC VAT)': t.total }));
+        rows.push({ 'BỔ SUNG CHO KỲ': 'TỔNG', 'SỐ HỒ SƠ': suppSum.count, 'CHI PHÍ (TRƯỚC VAT)': suppSum.total });
+        XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(rows), 'Tóm tắt bổ sung');
+      }
       XLSX.writeFile(wb, fname + '.xlsx');
     } catch (e: any) { toast('Lỗi xuất Excel: ' + (e?.message || e), 'err'); }
   };
@@ -121,13 +136,19 @@ export default function NtReportPage({ c, fixedBlockIds, fixedTeamIds }: { c: VC
         {mgr && vnCan(c, 'vn.share_links.manage') && <Btn primary disabled={preparingPdf} onClick={() => setShareOpen(true)}>🔗 Link chia sẻ</Btn>}
       </>}>
       <div className="flex flex-wrap gap-2 items-end">
-        <Field label="Tháng"><Select value={month} onChange={(v: string) => { setMonthTouched(true); setMonth(v); }} options={(months.length ? months : [month]).map((m) => ({ value: m, label: periodLabel(m) }))} /></Field>
+        <Field label={kind === 'supp' ? 'Kỳ được bổ sung' : 'Tháng'}><Select value={month} onChange={(v: string) => { setMonthTouched(true); setMonth(v); }} options={(months.length ? months : [month]).map((m) => ({ value: m, label: periodLabel(m) }))} /></Field>
+        <Field label="Loại hồ sơ"><div className="flex rounded-lg border border-[var(--mh-border)] overflow-hidden h-9">{([['all', 'Tất cả'], ['main', 'Chỉ hồ sơ chính'], ['supp', 'Chỉ bổ sung']] as const).map(([k, l]) => <button key={k} data-testid={`nt-kind-${k}`} onClick={() => { setKind(k); setSuppInF(''); }} className={`px-3 text-[13px] ${kind === k ? 'bg-[var(--mh-navy)] text-white' : 'bg-[var(--mh-surface)]'}`}>{l}</button>)}</div></Field>
+        {kind === 'supp' && <Field label="Kỳ nộp bổ sung"><Select data-testid="nt-supp-in" value={suppInSel} onChange={(v: string) => setSuppInF(v)} options={[{ value: '', label: 'Tất cả' }, ...suppInOpts.map((m) => ({ value: m, label: periodLabel(m) }))]} /></Field>}
         <Field label="Cấp báo cáo"><div className="flex rounded-lg border border-[var(--mh-border)] overflow-hidden h-9">{(['khoi', 'phong', 'user'] as const).map((l) => <button key={l} onClick={() => setLevel(l)} className={`px-3 text-[13px] ${level === l ? 'bg-[var(--mh-navy)] text-white' : 'bg-[var(--mh-surface)]'}`}>{l === 'khoi' ? 'Khối' : l === 'phong' ? 'Phòng' : 'User'}</button>)}</div></Field>
         {blockOpts.length > 1 && <Field label="Khối"><SearchSelect value={blockId} onChange={(v: string) => { setBlockId(v); setTeamId(''); setUserKey(''); }} options={[{ value: '', label: 'Tất cả' }, ...blockOpts.map((b) => ({ value: b, label: blockName(c, b) }))]} /></Field>}
         {level !== 'khoi' && <Field label="Phòng"><SearchSelect value={teamId} onChange={(v: string) => { setTeamId(v); setUserKey(''); }} options={[{ value: '', label: 'Tất cả' }, ...teamOpts.map((t) => ({ value: t, label: teamName(c, t) }))]} /></Field>}
         {level === 'user' && <Field label="User"><SearchSelect value={userKey} onChange={setUserKey} options={[{ value: '', label: 'Tất cả' }, ...userOpts.map((u) => ({ value: u, label: u }))]} /></Field>}
         <Field label="Dự án"><SearchSelect value={projectId} onChange={setProjectId} options={[{ value: '', label: 'Tất cả' }, ...rep.projects.map((p) => ({ value: p.projectId, label: p.projectName }))]} /></Field>
       </div>
+      {suppSum && <div className="nt-noprint rounded-lg border border-[var(--mh-border)] bg-[var(--mh-surface)] px-3 py-2 text-[13px]" data-testid="nt-supp-banner">
+        <b>Hồ sơ bổ sung đã duyệt:</b> {suppSum.count} hồ sơ · {fmtM(suppSum.total)} (trước VAT)
+        {suppSum.byTarget.length > 0 && <span className="text-[var(--mh-text-2)]"> — theo kỳ được bổ sung: {suppSum.byTarget.map((t) => `${periodLabel(t.month)}: ${t.count} hồ sơ · ${fmtM(t.total)}`).join(' | ')}</span>}
+      </div>}
       <div className="grid grid-cols-2 lg:grid-cols-5 gap-3 nt-noprint">
         {nb.records > 0 && <div className="col-span-2 lg:col-span-5 text-[12px] text-[var(--mh-err)] font-semibold" data-testid="nt-report-nobudget">Trong đó NT ngoài đăng ký NS: {nb.records} bản ghi · {fmtM(nb.cost)} (trước VAT) — đã tính vào tổng, NS = 0</div>}
         <Kpi label="Bản ghi Đã nghiệm thu" value={rep.records.length} />
