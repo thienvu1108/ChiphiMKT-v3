@@ -18,7 +18,7 @@ export type NsHistory = {
   byUid: string;
   byName: string;
   byRole: string;
-  action: 'create' | 'update' | 'delete';
+  action: 'create' | 'update' | 'delete' | 'restore';
   from: number;
   to: number;
   reason?: string;
@@ -47,6 +47,11 @@ export type NsLine = {
   payAccount?: { id: string; bankName: string; tail: string };
   /** Người cùng triển khai (Họ và tên) — khai khi Đăng ký MKT từ kỳ Tháng 12/2026, tối đa 1 người, không bắt buộc. */
   coImplementer?: string;
+  /** Dòng do Super Admin tạo thay user (MC-6). */
+  createdByRole?: string;
+  /** Cờ chi tiền theo dòng (chưa có trong hệ thống; helper isNsLinePaid đọc nếu có). */
+  paid?: boolean;
+  paidAt?: string;
 };
 
 export function nsLineId(kind: NsKind, period: string, scopeId: string, projectId: string, uid?: string): string {
@@ -54,6 +59,13 @@ export function nsLineId(kind: NsKind, period: string, scopeId: string, projectI
   if (kind === 'gdkd') return `p_${period}_${scopeId}_${projectId}`;
   if (kind === 'khoi') return `g_${period}_${scopeId}_${projectId}_${uid}`;
   return `k_${period}_${scopeId}_${projectId}`;
+}
+
+/** Dòng đã chi tiền → không xoá (mềm/cứng). Hệ thống chưa có cờ riêng: đọc line.paid/paidAt hoặc support.paid/paidAt/payoutStatus. */
+export function isNsLinePaid(line: Partial<NsLine> | null | undefined, support?: any): boolean {
+  const l: any = line || {};
+  const s: any = support || {};
+  return l.paid === true || !!l.paidAt || s.paid === true || !!s.paidAt || s.payoutStatus === 'paid';
 }
 
 const live = (l: NsLine) => !l.deleted && Number(l.amount) > 0;
