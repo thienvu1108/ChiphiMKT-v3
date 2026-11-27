@@ -200,12 +200,13 @@ export async function exportPptx(d: DeckData, resolve: (img: DeckImage) => Promi
       if (sl.kind === 'cover') {
         s.addText('BÁO CÁO', { x: 0.6, y: 1.2, w: 8, h: 0.4, fontFace: font, fontSize: 14, color: 'C9D6F0', charSpacing: 6 });
         s.addText('NGHIỆM THU MARKETING', { x: 0.6, y: 1.6, w: 9, h: 0.8, fontFace: font, fontSize: 36, bold: true, color: 'FFFFFF' });
-        if (d.coverTag) s.addText(d.coverTag === 'BỔ SUNG' ? 'HỒ SƠ BỔ SUNG' : d.coverTag, { x: 0.6, y: 2.15, w: 9, h: 0.4, fontFace: font, fontSize: 18, bold: true, color: 'F26B21' });
-        s.addShape('rect', { x: 0.6, y: 2.6, w: 1.2, h: 0.08, fill: { color: OR } });
-        s.addText(d.periodLabel, { x: 0.6, y: 2.75, w: 9, h: 0.5, fontFace: font, fontSize: 18, bold: true, color: 'FFFFFF' });
-        s.addText(d.scopeLabel, { x: 0.6, y: 3.15, w: 9, h: 0.4, fontFace: font, fontSize: 14, color: 'DDE6F7' });
-        s.addText(coverInfo(d).lines.map(([k, v], i, a) => ({ text: `${k}: ${v}`, options: { breakLine: i < a.length - 1 } })), { x: 0.6, y: 3.55, w: 8.8, h: 0.85, fontFace: font, fontSize: 10, color: 'FFFFFF', valign: 'top', fit: 'shrink' });
-        s.addText(`Chi phí (trước VAT): ${fmt(d.total.cost)} đ${hasVat(d) ? `   ·   VAT: ${fmt(d.total.vat!)} đ   ·   Tổng sau VAT: ${fmt(withVat(d))} đ` : ''}   ·   Lead: ${fmt(d.total.leads)}   ·   Giá/lead: ${cpl2(d.total.cost, d.total.leads)}`, { x: 0.6, y: 4.6, w: 9, h: 0.4, fontFace: font, fontSize: 13, color: 'FFFFFF' });
+        if (d.coverTag) s.addText(d.coverTag === 'BỔ SUNG' ? 'HỒ SƠ BỔ SUNG' : d.coverTag, { x: 0.6, y: 2.4, w: 9, h: 0.4, fontFace: font, fontSize: 18, bold: true, color: 'F26B21', valign: 'top' });
+        const dy = d.coverTag ? 0.35 : 0;
+        s.addShape('rect', { x: 0.6, y: 2.6 + dy, w: 1.2, h: 0.08, fill: { color: OR } });
+        s.addText(d.periodLabel, { x: 0.6, y: 2.75 + dy, w: 9, h: 0.5, fontFace: font, fontSize: 18, bold: true, color: 'FFFFFF' });
+        s.addText(d.scopeLabel, { x: 0.6, y: 3.15 + dy, w: 9, h: 0.4, fontFace: font, fontSize: 14, color: 'DDE6F7' });
+        s.addText(coverInfo(d).lines.map(([k, v], i, a) => ({ text: `${k}: ${v}`, options: { breakLine: i < a.length - 1 } })), { x: 0.6, y: 3.55 + dy, w: 8.8, h: 0.85, fontFace: font, fontSize: 10, color: 'FFFFFF', valign: 'top', fit: 'shrink' });
+        s.addText(`Chi phí (trước VAT): ${fmt(d.total.cost)} đ${hasVat(d) ? `   ·   VAT: ${fmt(d.total.vat!)} đ   ·   Tổng sau VAT: ${fmt(withVat(d))} đ` : ''}   ·   Lead: ${fmt(d.total.leads)}   ·   Giá/lead: ${cpl2(d.total.cost, d.total.leads)}`, { x: 0.6, y: 4.6 + dy, w: 9, h: d.coverTag ? 0.25 : 0.4, fontFace: font, fontSize: 13, color: 'FFFFFF' });
       } else {
         s.addText([{ text: 'MAY', options: { color: 'FFFFFF' } }, { text: 'HOMES', options: { color: OR } }], { x: 0, y: 2, w: 10, h: 1, fontFace: font, fontSize: 48, bold: true, align: 'center' });
         s.addText('Cảm ơn!', { x: 0, y: 3, w: 10, h: 0.5, fontFace: font, fontSize: 18, color: 'DDE6F7', align: 'center' });
