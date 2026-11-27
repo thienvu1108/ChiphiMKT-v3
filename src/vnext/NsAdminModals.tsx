@@ -6,14 +6,15 @@ import { nsLineId, isNsLinePaid, type NsLine } from '../../lib/vnext/budget';
 import { periodLabel } from '../../lib/vnext/period';
 import { SUPPORT_LABEL } from '../../lib/vnext/support';
 import { reasonOk, deleteConfirmOk, planProjectChange, willNeedReapproval, type WeeklySnapItem } from '../../lib/vnext/nsAdmin';
-import { saCreateNsLine, saUpdateNsLine, saDeleteNsLine, previewWeeklyForNsLine, previewNtForNsLine } from './nsActions';
+import { saCreateNsLine, saUpdateNsLine, saDeleteNsLine, previewWeeklyForNsLine, previewNtForNsLine, syncNsAmount } from './nsActions';
+import type { NsSyncRequest } from '../../lib/vnext/nsSync';
 import { pushNotif, khoiManagers } from './notify';
 
 type Toast = (m: string, kind?: 'ok' | 'err' | string, retry?: () => void) => void;
 type Opts = { value: string; label: string }[];
 
-const Notify = ({ v, set }: { v: boolean; set: (b: boolean) => void }) => (
-  <label className="flex items-center gap-2 text-[13px]"><input type="checkbox" checked={v} onChange={(e) => set(e.target.checked)} data-testid="vn-sa-ns-notify" /> Gửi thông báo cho user</label>
+const Notify = ({ v, set, disabled }: { v: boolean; set: (b: boolean) => void; disabled?: boolean }) => (
+  <label className="flex items-center gap-2 text-[13px]"><input type="checkbox" checked={v} disabled={disabled} onChange={(e) => set(e.target.checked)} data-testid="vn-sa-ns-notify" /> Gửi thông báo cho user</label>
 );
 
 export function SaAddModal({ c, teamId, period, lines, projectOpts, onClose, toast }: { c: VCtx; teamId: string; period: string; lines: NsLine[]; projectOpts: Opts; onClose: () => void; toast: Toast }) {
@@ -54,29 +55,79 @@ export function SaAddModal({ c, teamId, period, lines, projectOpts, onClose, toa
   );
 }
 
-export function SaEditModal({ c, line, lines, status, projectOpts, onClose, toast }: { c: VCtx; line: NsLine; lines: NsLine[]; status: string; projectOpts: Opts; onClose: () => void; toast: Toast }) {
+export function SaEditModal({ c, line, lines, status, paid, projectOpts, onClose, toast }: { c: VCtx; line: NsLine; lines: NsLine[]; status: string; paid: boolean; projectOpts: Opts; onClose: () => void; toast: Toast }) {
   const [pid, setPid] = useState(line.projectId);
   const [amt, setAmt] = useState(Number(line.amount || 0));
   const [reason, setReason] = useState('');
   const [notify, setNotify] = useState(true);
   const [busy, setBusy] = useState(false);
+  const [confirmation, setConfirmation] = useState<{ request: NsSyncRequest; preview: Awaited<ReturnType<typeof syncNsAmount>> } | null>(null);
+  const [error, setError] = useState('');
   const reappr = willNeedReapproval(status, { amount: Number(line.amount || 0), projectId: line.projectId }, { amount: amt, projectId: pid });
+  const notifyManagers = (lineId: string) => {
+    if (reappr) for (const u of khoiManagers(c, line.blockId)) void pushNotif(c, u, { type: 'reapproval', title: `Cần duyệt lại: ${line.ownerName || userName(c, line.ownerUid)} · ${projectName(c, pid)}`, body: `NS đã duyệt bị Super Admin điều chỉnh → ${fmt(amt)} đ`, link: '/quan-ly-khoi', refId: lineId });
+  };
   const submit = async () => {
+    if (busy || paid) return;
     if (!pid) return toast('Chọn dự án', 'err');
     if (!(amt > 0)) return toast('Số tiền phải > 0', 'err');
+    if (pid === line.projectId && amt === Number(line.amount)) return onClose();
     if (!reasonOk(reason)) return toast('Bắt buộc nhập lý do (≥ 3 ký tự)', 'err');
     const plan = planProjectChange(line, pid);
     const exNew = plan.changed ? lines.find((l) => l.id === plan.newId) || null : null;
     if (exNew && !exNew.deleted) return toast('User đã có đăng ký ở dự án đó — hãy sửa dòng kia', 'err');
     setBusy(true);
     try {
+      if (!plan.changed) {
+        const request = {
+          lineId: line.id, amount: amt, expectedAmount: Number(line.amount), expectedUpdatedAt: line.updatedAt ?? null,
+          operationId: crypto.randomUUID(), reason: reason.trim(), notify,
+        };
+        const preview = await syncNsAmount('preview', request);
+        setError('');
+        setConfirmation({ request, preview });
+        return;
+      }
       await saUpdateNsLine(c, { line, amount: amt, projectId: pid, reason: reason.trim(), notify, existingNew: exNew, supportStatus: status });
-      if (reappr) for (const u of khoiManagers(c, line.blockId)) pushNotif(c, u, { type: 'reapproval', title: `Cần duyệt lại: ${line.ownerName || userName(c, line.ownerUid)} · ${projectName(c, pid)}`, body: `NS đã duyệt bị Super Admin điều chỉnh → ${fmt(amt)} đ`, link: '/quan-ly-khoi', refId: plan.newId });
+      notifyManagers(plan.newId);
       toast('Đã cập nhật'); onClose();
     } catch (e: any) { toast('Không lưu được: ' + (e?.code || e?.message), 'err'); } finally { setBusy(false); }
   };
+  const confirm = async () => {
+    if (!confirmation || busy || paid) return;
+    setBusy(true);
+    setError('');
+    try {
+      const result = await syncNsAmount('commit', { ...confirmation.request, version: confirmation.preview.version });
+      if (!result.replayed) notifyManagers(result.lineId);
+      toast(result.notificationFailed ? 'Đã cập nhật. Gửi thông báo cho user thất bại.' : 'Đã cập nhật');
+      onClose();
+    } catch (e: any) { setError(e.message); } finally { setBusy(false); }
+  };
+  if (confirmation) {
+    const { preview, request } = confirmation;
+    const back = () => { if (!busy) setConfirmation(null); };
+    return (
+      <Modal open onClose={back} title="Xác nhận đồng bộ số tiền NS" footer={<><Btn onClick={back} disabled={busy}>Quay lại</Btn><Btn primary onClick={confirm} disabled={busy || paid} data-testid="vn-sa-ns-sync-confirm">Xác nhận lưu</Btn></>}>
+        <div className="space-y-3 text-[13px]" data-testid="vn-sa-ns-sync-modal">
+          <div>{line.ownerName || userName(c, line.ownerUid)} · {projectName(c, line.projectId)} · {periodLabel(line.period)}</div>
+          <div className="text-base font-semibold">{fmt(preview.before.amount)} → {fmt(preview.after.amount)} đ</div>
+          {preview.locked && <div className="font-semibold text-[var(--mh-warn)]">Kỳ đã khoá — Super Admin sửa kèm lý do, sẽ ghi audit</div>}
+          <div><b>Sẽ tự cập nhật</b><p>Tổng NS Phòng/Khối, đối chiếu NS–NT, Dashboard/Tổng quan, KPI Báo cáo tuần và tổng đã duyệt đều dùng số mới.</p></div>
+          <div><b>Ghi chú</b><p>Khoản đã duyệt có thể hiện «Đã sửa sau duyệt» hoặc «Cần duyệt lại». Tổng đã duyệt vẫn tính số mới.</p></div>
+          <div><b>Giữ nguyên</b><p>Bản NT đã lưu (tiền NT, hoá đơn, ảnh), snapshot nsAtSubmit của báo cáo tuần đã nộp và ntKeys cùng user, dự án, kỳ.</p></div>
+          <Field label="Lý do"><div className="whitespace-pre-wrap break-words">{request.reason}</div></Field>
+          <Notify v={request.notify} set={(value) => {
+            if (!busy && !error) setConfirmation({ preview, request: { ...request, notify: value } });
+          }} disabled={busy || !!error} />
+          {paid && <div role="alert">Dòng NS đã chi tiền.</div>}
+          {error && <div role="alert" className="text-[var(--mh-err)]">{error}</div>}
+        </div>
+      </Modal>
+    );
+  }
   return (
-    <Modal open onClose={onClose} title="Sửa đăng ký NS (Super Admin)" footer={<><Btn onClick={onClose}>Huỷ</Btn><Btn primary onClick={submit} disabled={busy} data-testid="vn-sa-ns-edit-save">Lưu</Btn></>}>
+    <Modal open onClose={() => { if (!busy) onClose(); }} title="Sửa đăng ký NS (Super Admin)" footer={<><Btn onClick={onClose} disabled={busy}>Huỷ</Btn><Btn primary onClick={submit} disabled={busy || paid} data-testid="vn-sa-ns-edit-save">Lưu</Btn></>}>
       <div className="space-y-3" data-testid="vn-sa-ns-edit-modal">
         <div className="text-[13px]"><b>{line.ownerName || userName(c, line.ownerUid)}</b> · {periodLabel(line.period)}</div>
         <Field label="Dự án"><SearchSelect value={pid} onChange={setPid} options={projectOpts} className="w-full" /></Field>

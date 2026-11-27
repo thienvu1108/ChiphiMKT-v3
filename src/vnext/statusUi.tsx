@@ -9,7 +9,7 @@ export function StatusBadge({ status, title, small, label }: { status: St5 | 'lo
     className={`inline-flex items-center rounded-full border font-semibold whitespace-nowrap ${small ? 'px-1.5 py-0 text-[10.5px]' : 'px-2 py-0.5 text-[11.5px]'}`}
     style={{ color: m.fg, background: m.bg, borderColor: m.border }}>{label || m.label}</span>;
 }
-type Split = { total: number } & Partial<Record<St5, { n: number; amount: number }>>;
+type Split = { total: number; approvedTotal?: number } & Partial<Record<St5, { n: number; amount: number }>>;
 /** Ô tổng DÙNG CHUNG mọi màn: Tổng + 5 trạng thái (số khoản + tiền); bấm để lọc. */
 export function SummaryBox({ split, onPick, active, testId }: { split: Split; onPick?: (s: St5 | '') => void; active?: string; testId?: string }) {
   const n = ST5_ORDER.reduce((a, k) => a + (split[k]?.n || 0), 0);
@@ -25,6 +25,7 @@ export function SummaryBox({ split, onPick, active, testId }: { split: Split; on
       {...Object.fromEntries(ST5_ORDER.map((k) => [`data-${k.replace('_', '')}`, split[k]?.amount || 0]))}>
       {cell('', 'Tổng đăng ký', n, split.total)}
       {ST5_ORDER.map((k) => cell(k, ST_META[k].label, split[k]?.n || 0, split[k]?.amount || 0, ST_META[k]))}
+      {split.approvedTotal !== undefined && !!split.reapproval?.n && <div className="col-span-full text-[12px]" data-testid="vn-approved-total">Tổng đã duyệt (gồm khoản đã sửa sau duyệt) · <b>{fmtVnd(split.approvedTotal)} đ</b></div>}
     </div>);
 }
 

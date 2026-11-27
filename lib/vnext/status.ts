@@ -4,7 +4,7 @@
  * Nguồn dữ liệu: ns_lines (từ 11/2026) + NS kỳ cũ (budgets / block_budgets ≤ 10/2026, chuẩn hoá về cùng dạng; kỳ cũ không có luồng duyệt → «Đã duyệt»).
  */
 import type { NsLine } from './budget';
-import { effectiveStatus, supportable, payOf, type Support, type PayMap } from './support';
+import { countsTowardApproved, effectiveStatus, supportable, payOf, type Support, type PayMap } from './support';
 
 export type St5 = 'approved' | 'pending' | 'reapproval' | 'need_pay' | 'rejected';
 /** Thứ tự hiển thị trong ô tổng. */
@@ -63,11 +63,14 @@ export function adaptLegacy(budgets: any[], blockBudgets: any[], projects: any[]
   return [...budgets.map((r) => one(r, 'legacy_user')), ...blockBudgets.map((r) => one(r, 'legacy_khoi'))].filter(Boolean) as URow[];
 }
 
-export type Summary = { total: number; n: number; by: Record<St5, { n: number; amount: number }> };
-export const emptySummary = (): Summary => ({ total: 0, n: 0, by: Object.fromEntries(ST5_ORDER.map((k) => [k, { n: 0, amount: 0 }])) as any });
+export type Summary = { total: number; n: number; approvedTotal: number; by: Record<St5, { n: number; amount: number }> };
+export const emptySummary = (): Summary => ({ total: 0, n: 0, approvedTotal: 0, by: Object.fromEntries(ST5_ORDER.map((k) => [k, { n: 0, amount: 0 }])) as any });
 export function summarize(rows: URow[]): Summary {
   const o = emptySummary();
-  for (const r of rows) { o.total += r.amount; o.n++; o.by[r.status].n++; o.by[r.status].amount += r.amount; }
+  for (const r of rows) {
+    o.total += r.amount; o.n++; o.by[r.status].n++; o.by[r.status].amount += r.amount;
+    if (countsTowardApproved(r.status)) o.approvedTotal += r.amount;
+  }
   return o;
 }
 export type GroupBy = 'blockId' | 'banKdId' | 'teamId' | 'projectId' | 'ownerUid' | 'period';

@@ -5,7 +5,7 @@
 import type { NsLine } from './budget';
 import type { Support } from './support';
 import { ST_META, type St5 } from './status';
-import { effectiveBanStatus } from './banSupport';
+import { banApprovedAwaitingKhoi, effectiveBanStatus } from './banSupport';
 
 export type StageKey = St5 | 'ban_pending' | 'ban_reapproval' | 'ban_rejected';
 
@@ -38,10 +38,16 @@ export type Bucket = 'approved' | 'khoi_ok' | 'pending' | 'reapproval' | 'need_p
 export const BUCKET_ORDER: Bucket[] = ['approved', 'khoi_ok', 'pending', 'reapproval', 'need_pay', 'rejected'];
 export const BUCKET_LABEL: Record<Bucket, string> = { approved: 'Ban KD đã duyệt', khoi_ok: 'Khối đã duyệt', pending: 'Chờ GĐK duyệt', reapproval: 'Chờ GĐK duyệt lại', need_pay: ST_META.need_pay.label, rejected: ST_META.rejected.label };
 export const bucketOf = (k: StageKey): Bucket => (k === 'ban_pending' || k === 'ban_reapproval' ? 'khoi_ok' : k === 'ban_rejected' ? 'rejected' : k);
-export type BucketSplit = { total: number; n: number } & Record<Bucket, { n: number; amount: number }>;
+export type BucketSplit = { total: number; n: number; banApprovedTotal: number; khoiApprovedTotal: number } & Record<Bucket, { n: number; amount: number }>;
 export function splitByBucket(rows: { line: NsLine; s?: Partial<Support> | null; status: string }[]): BucketSplit {
-  const o: any = { total: 0, n: 0 };
+  const o: any = { total: 0, n: 0, banApprovedTotal: 0, khoiApprovedTotal: 0 };
   for (const b of BUCKET_ORDER) o[b] = { n: 0, amount: 0 };
-  for (const r of rows) { const b = bucketOf(stageOf(r.status as St5, r.line, r.s)); const a = Number(r.line.amount) || 0; o[b].n++; o[b].amount += a; o.total += a; o.n++; }
+  for (const r of rows) {
+    const b = bucketOf(stageOf(r.status as St5, r.line, r.s));
+    const a = Number(r.line.amount) || 0;
+    o[b].n++; o[b].amount += a; o.total += a; o.n++;
+    if (b === 'approved' || (b === 'reapproval' && banApprovedAwaitingKhoi(r.line, r.s))) o.banApprovedTotal += a;
+    else if (b === 'khoi_ok' || b === 'reapproval') o.khoiApprovedTotal += a;
+  }
   return o;
 }

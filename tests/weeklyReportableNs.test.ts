@@ -1,7 +1,8 @@
 import { describe, it, expect, beforeAll } from 'vitest';
-import { userNsByProject, type NsLine } from '../lib/vnext/budget';
-import { lineStatus, isNsReportableStatus } from '../lib/vnext/status';
-import { setKhoiManagers, isNsReportableLine, reportableNsAmount, type Support } from '../lib/vnext/support';
+import { summarizeBlock, summarizeTeam, userNsByProject, type NsLine } from '../lib/vnext/budget';
+import { adaptNs, lineStatus, isNsReportableStatus, summarize } from '../lib/vnext/status';
+import { setKhoiManagers, isNsReportableLine, reportableNsAmount, splitByStatus, type Support } from '../lib/vnext/support';
+import { splitByBucket } from '../lib/vnext/stageLabel';
 import '../lib/vnext/weekly'; // Ban gate
 import { formProjects, rollup, projectRows, sumProjectRowKpis, countHiddenNonReportableItems, type WeeklyReport } from '../lib/vnext/weekly';
 
@@ -74,12 +75,19 @@ describe('Báo cáo tuần: mọi NS trừ Từ chối (GĐK/Ban)', () => {
     expect(countHiddenNonReportableItems(reports, nsByUser)).toEqual({ items: 1, docs: 1 });
   });
 
-  it('Cần duyệt lại: reportable + amount lấy đã duyệt gần nhất', () => {
+  it('Cần duyệt lại: Báo cáo tuần và tổng đã duyệt lấy số hiện hành', () => {
     const edited = { ...lines[0], amount: 99, history: [{ at: '2026-11-05T00:00:00Z', action: 'update', byUid: 'u1', byName: 'U', from: 10, to: 99 }] } as any;
-    const s = { status: 'approved' as const, amount: 10, decidedAt: '2026-10-22' };
+    const s = { status: 'approved' as const, amount: 10, decidedAt: '2026-11-01', banStatus: 'approved' as const };
     expect(lineStatus(edited, s, { has: true })).toBe('reapproval');
     expect(isNsReportableLine(edited, s, { has: true })).toBe(true);
-    expect(reportableNsAmount(edited, s)).toBe(10);
+    expect(reportableNsAmount(edited, s)).toBe(99);
     expect(reportableNsAmount(lines[2], undefined)).toBe(30); // pending → current
+    const split = splitByStatus([edited], { a: s });
+    expect(split).toMatchObject({ total: 99, approvedTotal: 99, reapproval: { n: 1, amount: 99 } });
+    expect(summarize(adaptNs([edited], { a: s }, undefined)).approvedTotal).toBe(99);
+    expect(splitByBucket([{ line: edited, s, status: 'reapproval' }])).toMatchObject({ banApprovedTotal: 99, khoiApprovedTotal: 0 });
+    expect(summarizeTeam([edited], '2026-11', 'T1').total).toBe(99);
+    expect(summarizeBlock([edited], '2026-11', 'B1', ['T1']).total).toBe(99);
+    expect(userNsByProject([edited], '2026-11', 'u1', { amountOf: (line) => reportableNsAmount(line, s) }).get('P1')).toBe(99);
   });
 });

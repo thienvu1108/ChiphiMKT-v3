@@ -7,6 +7,7 @@ import session from 'express-session';
 import { exec, execFile } from 'child_process';
 import { promisify } from 'util';
 import { handleBackupRequest, type BackupContext } from './api/backup/github/[action].js';
+import { handleNsSync } from './api/ns-sync/[action].js';
 
 const execAsync = promisify(exec);
 const execFileAsync = promisify(execFile);
@@ -101,6 +102,7 @@ async function startServer() {
   const PORT = 3000;
 
   app.use(express.json({ limit: '50mb' }));
+  app.post('/api/ns-sync/:action', (req, res) => handleNsSync(req.params.action, req, res));
   app.use(session({
     secret: process.env.SESSION_SECRET || 'mayhomes-secret',
     resave: false,
