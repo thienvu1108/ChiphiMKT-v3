@@ -4,6 +4,7 @@ import { Btn, Field, Input, Modal, MoneyInput, SearchSelect, fmt } from './ui';
 import { type VCtx, projectName, userName, uidOf } from './ctx';
 import { nsLineId, isNsLinePaid, type NsLine } from '../../lib/vnext/budget';
 import { periodLabel } from '../../lib/vnext/period';
+import { SUPPORT_LABEL } from '../../lib/vnext/support';
 import { reasonOk, deleteConfirmOk, planProjectChange, willNeedReapproval, type WeeklySnapItem } from '../../lib/vnext/nsAdmin';
 import { saCreateNsLine, saUpdateNsLine, saDeleteNsLine, previewWeeklyForNsLine, previewNtForNsLine } from './nsActions';
 import { pushNotif, khoiManagers } from './notify';
@@ -119,9 +120,11 @@ export function SaDeleteModal({ c, line, support, status, onClose, toast }: { c:
         <div className="text-[13px]"><b>{line.ownerName || userName(c, line.ownerUid)}</b> · {projectName(c, line.projectId)} · {periodLabel(line.period)} · <b>{fmt(line.amount)} đ</b></div>
         <div className="rounded-lg border border-[var(--mh-border)] bg-[var(--mh-surface-2)] p-3 text-[12px] space-y-1" data-testid="vn-sa-ns-impact">
           <div className="font-semibold">Ảnh hưởng</div>
-          <div>Hỗ trợ MKT: <b>{status || '—'}</b></div>
+          <div>Hỗ trợ MKT: <b>{status ? ((SUPPORT_LABEL as Record<string, string>)[status] || status) : 'Chưa có'}</b></div>
           <div>Nghiệm thu đang gắn: <b>{nt === undefined ? 'đang tải…' : nt === null ? 'không đọc được' : nt}</b></div>
+          {typeof nt === 'number' && nt > 0 && <div className="text-[11px] text-[var(--mh-text-3)]">Bản Nghiệm thu giữ nguyên, sẽ hiện cờ «Không còn đăng ký NS».</div>}
           <div>Mục Báo cáo tuần sẽ bị gỡ: <b>{weekly === undefined ? 'đang tải…' : weekly === null ? 'không đọc được' : `${weekly.count} (${weekly.docs.length} báo cáo)`}</b></div>
+          {weekly && weekly.count > 0 && <div className="text-[11px] text-[var(--mh-text-3)]">Các mục này được lưu trong Nhật ký để khôi phục khi Khôi phục dòng (chỉ với xoá mềm).</div>}
           {paid && <div className="text-[var(--mh-err)] font-semibold">Đã chi tiền — không xoá được</div>}
         </div>
         <div className="space-y-1 text-[13px]">
