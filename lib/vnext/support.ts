@@ -156,8 +156,8 @@ export function filterRows<T extends { line: NsLine; status: SupportStatus }>(ro
 // Lịch sử từng bản đăng ký — nsLineHistory/{autoId}: chỉ ghi thêm (rules: create-only, không sửa/xoá).
 // ---------------------------------------------------------------
 export const HISTORY_COLLECTION = 'nsLineHistory';
-export type HistAction = 'create' | 'update' | 'delete' | 'approved' | 'rejected' | 'pending';
-export const HIST_LABEL: Record<HistAction, string> = { create: 'Đăng ký', update: 'Sửa', delete: 'Xoá', approved: 'Duyệt', rejected: 'Từ chối', pending: 'Đặt lại chưa duyệt' };
+export type HistAction = 'create' | 'update' | 'delete' | 'approved' | 'rejected' | 'pending' | 'restore';
+export const HIST_LABEL: Record<HistAction, string> = { create: 'Đăng ký', update: 'Sửa', delete: 'Xoá', restore: 'Khôi phục', approved: 'Duyệt', rejected: 'Từ chối', pending: 'Đặt lại chưa duyệt' };
 export type HistChange = { field: string; from: string; to: string };
 export type LineHist = {
   lineId: string; period: string; kind: string; ownerUid: string; teamId: string; blockId: string; projectId: string;

@@ -5,14 +5,16 @@ import React, { useMemo, useState } from 'react';
 import { Card, Btn, Badge, Th, Td, Field, Select, MoneyInput, Input, Modal, Kpi, Empty, fmt, fmtM, vnTime, useToast, SearchSelect, StickyFormBar } from './ui';
 import { type VCtx, isAdm, gdkdTeams, projectName, teamName, blockName, userName, teamsOfBlock, blockOfTeam } from './ctx';
 import { asArr } from './ctx';
-import { summarizeTeam, summarizeBlock, blockTeamIds, checkEdit, canRegisterAsUser, canRegisterUserNs, canRegisterAsKhoi, type NsLine, type ProjectRow, legacyOf } from '../../lib/vnext/budget';
+import { summarizeTeam, summarizeBlock, blockTeamIds, checkEdit, isNsLinePaid, canRegisterAsUser, canRegisterUserNs, canRegisterAsKhoi, type NsLine, type ProjectRow, legacyOf } from '../../lib/vnext/budget';
 import { projectLabelWithPct, baseSupportPctAtPeriod, fmtPct } from '../../lib/vnext/supportPct';
 import { periodLabel } from '../../lib/vnext/period';
 import { activeLock, lockUntilText } from '../../lib/vnext/platform';
 
 /** Dòng Đăng ký được chuyển từ NS bổ sung GĐKD/GĐK cũ (script convert-supplements-20261021). */
 const convTag = (l: any) => (Array.isArray(l?.convertedFrom) && l.convertedFrom.length ? <span className="ml-1 rounded bg-[#EEF2FF] px-1 text-[10px] text-[#4F46E5]" title={l.convertedFrom.map((x: any) => x.srcId).join(', ')}>chuyển từ bổ sung {l.convertedFrom.some((x: any) => x.srcKind === 'gdk') ? 'GĐK' : 'GĐKD'}</span> : null);
-import { saveNsLine, deleteNsLine } from './nsActions';
+import { saveNsLine, deleteNsLine, saRestoreNsLine } from './nsActions';
+import { SaAddModal, SaEditModal, SaDeleteModal } from './NsAdminModals';
+import { canSaManageNs, isSaCreated, amountBeforeDelete } from '../../lib/vnext/nsAdmin';
 import { useSupport, SupportBadge, LineHistoryModal, StatusSplitKpis } from './SupportViews';
 import { effectiveStatus, splitByStatus, payOf } from '../../lib/vnext/support';
 import { BAN_STATUS_LABEL, effectiveBanStatus, banReasonText } from '../../lib/vnext/banSupport';
@@ -253,7 +255,13 @@ export function TeamBudget({ c, teamId, period, lines, readOnly }: { c: VCtx; te
   const [editing, setEditing] = useState<{ line: NsLine; amount: number; reason: string } | null>(null);
   const [supp, setSupp] = useState<{ projectId: string; amount: number; line?: NsLine } | null>(null);
   const [hist, setHist] = useState(false);
+  const isSa = !readOnly && canSaManageNs(c.role);
+  const [saAdd, setSaAdd] = useState(false);
+  const [saEdit, setSaEdit] = useState<NsLine | null>(null);
+  const [saDel, setSaDel] = useState<NsLine | null>(null);
+  const [showDeleted, setShowDeleted] = useState(false);
   const teamLines = lines.filter((l) => l.period === period && l.teamId === teamId);
+  const deletedUser = isSa && showDeleted ? teamLines.filter((l) => l.kind === 'user' && l.deleted) : [];
   const userLines = teamLines.filter((l) => l.kind === 'user' && !l.deleted && Number(l.amount) > 0);
   const gdkdNames = (c.teams.find((t) => t.id === teamId)?.gdkdUids || []).map((u: string) => userName(c, u));
   // Cùng nguồn trạng thái với Ngân sách Khối / Duyệt hỗ trợ MKT, chỉ lấy dòng của Phòng (khớp theo teamId).
@@ -272,6 +280,13 @@ export function TeamBudget({ c, teamId, period, lines, readOnly }: { c: VCtx; te
       setEditing(null); toast(ck.notifyOwner ? 'Đã lưu và thông báo cho user' : 'Đã lưu');
     } catch (e: any) { toast('Không lưu được: ' + (e?.code || e?.message), 'err'); }
   };
+  const restore = async (l: NsLine) => {
+    if (!window.confirm('Khôi phục đăng ký NS này?')) return;
+    try {
+      const r = await saRestoreNsLine(c, l);
+      toast(r.weekly === false ? 'Đã khôi phục NS; Báo cáo tuần chưa khôi phục được' : 'Đã khôi phục');
+    } catch (e: any) { toast('Không khôi phục được: ' + (e?.code || e?.message), 'err'); }
+  };
   const saveSupp = async () => {
     if (!supp || !supp.projectId) return toast('Chọn dự án', 'err');
     try {
@@ -280,6 +295,10 @@ export function TeamBudget({ c, teamId, period, lines, readOnly }: { c: VCtx; te
       setSupp(null); toast('Đã lưu NS bổ sung GĐKD');
     } catch (e: any) { toast('Không lưu được: ' + (e?.code || e?.message), 'err'); }
   };
+
+  const delRow = (l: NsLine) => (
+    <tr key={l.id} className="opacity-50" data-testid="vn-sa-ns-deleted-row"><Td className="pl-8">{l.ownerName || userName(c, l.ownerUid)} <Badge c="mute">Đã xoá (SA)</Badge></Td><PctTd c={c} pid={l.projectId} period={period} /><Td /><Td r className="line-through">{fmt(amountBeforeDelete(l))}</Td><Td /><Td r><Btn small onClick={() => restore(l)} data-testid="vn-sa-ns-restore">Khôi phục</Btn></Td></tr>
+  );
 
   return (
     <div className="space-y-3">
@@ -297,10 +316,12 @@ export function TeamBudget({ c, teamId, period, lines, readOnly }: { c: VCtx; te
           <div className="font-semibold text-[14px] flex-1">Ngân sách Phòng {teamName(c, teamId)} theo dự án</div>
           {readOnly && <Badge c="mute">Chỉ xem</Badge>}
           {canEditSupp && <Btn small primary onClick={() => setSupp({ projectId: '', amount: 0 })}>+ NS bổ sung GĐKD</Btn>}
+          {isSa && <label className="flex items-center gap-1.5 text-[12px]"><input type="checkbox" checked={showDeleted} onChange={(e) => setShowDeleted(e.target.checked)} data-testid="vn-sa-ns-show-deleted" /> Hiện dòng đã xoá</label>}
+          {isSa && <Btn small primary onClick={() => setSaAdd(true)} data-testid="vn-sa-ns-add">+ Thêm đăng ký cho user</Btn>}
           <Btn small onClick={() => setHist(true)}>Lịch sử</Btn>
         </div>
         <LegacyFlag amount={sum.gdkd} what="NS bổ sung GĐKD cũ" />
-        {!sum.rows.length ? <Empty>Chưa có đăng ký trong kỳ</Empty> : (
+        {!sum.rows.length && !deletedUser.length ? <Empty>Chưa có đăng ký trong kỳ</Empty> : (
           <div className="overflow-x-auto"><table data-mh-responsive className="w-full"><thead><tr><Th>Dự án / User</Th><PctTh /><Th>Trạng thái</Th><Th r>NS user</Th><Th r>Tổng</Th><Th></Th></tr></thead><tbody>
             {sum.rows.map((r) => {
               const ul = userLines.filter((l) => l.projectId === r.projectId);
@@ -316,12 +337,22 @@ export function TeamBudget({ c, teamId, period, lines, readOnly }: { c: VCtx; te
                   {expanded[r.projectId] && ul.map((l) => {
                     const last = (l.history || []).slice(-1)[0];
                     return (
-                      <tr key={l.id}><Td className="pl-8">{l.ownerName || userName(c, l.ownerUid)}{convTag(l)}{last?.reason && <div className="text-[11px] text-[var(--mh-warn)]">Sửa bởi {last.byName}: {last.reason}</div>}</Td><PctTd c={c} pid={l.projectId} period={period} /><Td data-testid="vn-team-line-st"><SupportBadge status={stOf(l)} />{supT[l.id]?.status === 'rejected' && supT[l.id]?.reason && <div className="text-[11px] text-[var(--mh-err)] max-w-[200px]">{supT[l.id]?.reason}</div>}{(() => { const b = effectiveBanStatus(l, supT[l.id]); return (b === 'pending' || b === 'rejected') ? <div className={`text-[11px] max-w-[200px] ${b === 'rejected' ? 'text-[var(--mh-err,var(--mh-err))]' : 'text-[var(--mh-pending,#7C3AED)]'}`} data-testid="vn-team-ban">{b === 'pending' ? 'Chờ Ban' : 'Ban từ chối'}{banReasonText(supT[l.id]) ? ` — ${banReasonText(supT[l.id])}` : ''}</div> : null; })()}</Td><Td r>{fmt(l.amount)}</Td><Td /><Td r>{canEditUsers && <Btn small onClick={() => setEditing({ line: l, amount: Number(l.amount), reason: '' })}>Sửa</Btn>}</Td></tr>
+                      <tr key={l.id}><Td className="pl-8">{l.ownerName || userName(c, l.ownerUid)}{convTag(l)}{isSa && isSaCreated(l) && <span className="ml-1 rounded bg-[#FEF3C7] px-1 text-[10px] text-[#92400E]" data-testid="vn-sa-ns-tag">SA tạo</span>}{last?.reason && <div className="text-[11px] text-[var(--mh-warn)]">Sửa bởi {last.byName}: {last.reason}</div>}</Td><PctTd c={c} pid={l.projectId} period={period} /><Td data-testid="vn-team-line-st"><SupportBadge status={stOf(l)} />{supT[l.id]?.status === 'rejected' && supT[l.id]?.reason && <div className="text-[11px] text-[var(--mh-err)] max-w-[200px]">{supT[l.id]?.reason}</div>}{(() => { const b = effectiveBanStatus(l, supT[l.id]); return (b === 'pending' || b === 'rejected') ? <div className={`text-[11px] max-w-[200px] ${b === 'rejected' ? 'text-[var(--mh-err,var(--mh-err))]' : 'text-[var(--mh-pending,#7C3AED)]'}`} data-testid="vn-team-ban">{b === 'pending' ? 'Chờ Ban' : 'Ban từ chối'}{banReasonText(supT[l.id]) ? ` — ${banReasonText(supT[l.id])}` : ''}</div> : null; })()}</Td><Td r>{fmt(l.amount)}</Td><Td /><Td r className="whitespace-nowrap">{isSa ? <>
+                        <Btn small onClick={() => setSaEdit(l)} data-testid="vn-sa-ns-edit">Sửa</Btn>{' '}
+                        <Btn small danger onClick={() => setSaDel(l)} disabled={isNsLinePaid(l, supT[l.id])} title={isNsLinePaid(l, supT[l.id]) ? 'Đã chi tiền — không xoá được' : undefined} data-testid="vn-sa-ns-delete">Xoá</Btn>
+                      </> : canEditUsers && <Btn small onClick={() => setEditing({ line: l, amount: Number(l.amount), reason: '' })}>Sửa</Btn>}</Td></tr>
                     );
                   })}
+                  {expanded[r.projectId] && deletedUser.filter((l) => l.projectId === r.projectId).map(delRow)}
                 </React.Fragment>
               );
             })}
+            {[...new Set(deletedUser.map((l) => l.projectId))].filter((pid) => !sum.rows.some((r) => r.projectId === pid)).map((pid) => (
+              <React.Fragment key={'del_' + pid}>
+                <tr className="bg-[#FAFBFD] opacity-60"><Td className="font-semibold">{projectName(c, pid)}</Td><Td /><Td /><Td /><Td /><Td /></tr>
+                {deletedUser.filter((l) => l.projectId === pid).map(delRow)}
+              </React.Fragment>
+            ))}
             <tr className="bg-[var(--mh-bg)] font-semibold"><Td>TỔNG PHÒNG</Td><Td /><Td /><Td r>{fmt(sum.users)}</Td><Td r>{fmt(sum.total)}</Td><Td /></tr>
           </tbody></table></div>
         )}
@@ -343,6 +374,9 @@ export function TeamBudget({ c, teamId, period, lines, readOnly }: { c: VCtx; te
         </div>}
       </Modal>
       <HistoryModal open={hist} onClose={() => setHist(false)} lines={teamLines} c={c} />
+      {isSa && saAdd && <SaAddModal c={c} teamId={teamId} period={period} lines={lines} projectOpts={projectOptions(c)} onClose={() => setSaAdd(false)} toast={toast} />}
+      {isSa && saEdit && <SaEditModal c={c} line={saEdit} lines={lines} status={stOf(saEdit)} projectOpts={projectOptions(c)} onClose={() => setSaEdit(null)} toast={toast} />}
+      {isSa && saDel && <SaDeleteModal c={c} line={saDel} support={supT[saDel.id]} status={stOf(saDel)} onClose={() => setSaDel(null)} toast={toast} />}
       {node}
     </div>
   );

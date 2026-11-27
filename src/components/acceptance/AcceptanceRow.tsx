@@ -63,6 +63,8 @@ interface RowProps {
   /** Tự nhập Người phụ trách (chỉ Tháng 10/2026; undefined = không có quyền). */
   onAssignManual?: (item: any, name: string) => Promise<void> | void;
   nsLines?: NtBudgetLine[];
+  /** Bản ghi này không còn đăng ký NS (chỉ hiển thị cờ). */
+  noNsFlag?: boolean;
   nsSupport?: Record<string, Partial<Support> | undefined>;
   /** Bố cục cột từ T11/2026. */
   newLayout?: boolean;
@@ -106,6 +108,7 @@ export const AcceptanceRow: React.FC<RowProps> = React.memo(({
   onAssignTeam,
   onAssignManual,
   nsLines = [],
+  noNsFlag = false,
   nsSupport,
   newLayout = false,
 }) => {
@@ -197,14 +200,8 @@ export const AcceptanceRow: React.FC<RowProps> = React.memo(({
   // Kỳ ≥ 2026-11: lọc Người phụ trách theo đăng ký NS của Phòng + kỳ.
   const assigneeUids = useMemo(() => acceptanceAssigneeUids({ month: localEditState?.month ?? item.month, teamId: localEditState?.teamId ?? item.teamId, lines: nsLines, support: nsSupport }), [localEditState?.month, localEditState?.teamId, item.month, item.teamId, nsLines, nsSupport]);
 
-  useEffect(() => {
-    if (!isEditing) return;
-    setLocalEditState((prev: any) => {
-      if (!prev) return prev;
-      const next = clearStaleProject(prev, acceptanceChoicesFor(prev, nsLines, nsSupport, allUsers));
-      return next.projectId === prev.projectId ? prev : next;
-    });
-  }, [isEditing, nsLines, nsSupport, allUsers]);
+  // Bản ghi đã có: KHÔNG tự xoá trống dự án cũ khi mở sửa (dòng NS có thể đã bị xoá → hiện cờ «Không còn đăng ký NS»).
+  // clearStaleProject chỉ chạy khi người dùng đổi Tháng / Phòng / Người phụ trách (các handler bên dưới).
 
   const projectItems = useMemo(() => {
     if (budgetChoices) {
@@ -690,6 +687,7 @@ export const AcceptanceRow: React.FC<RowProps> = React.memo(({
         <Badge variant="outline" className="bg-[var(--mh-surface-2)]/80 text-[var(--mh-text)] border-[var(--mh-border)] font-bold text-[11px] px-1.5 py-0.5">
           {formatAcceptanceMonth(item.month) || item.month || '-'}
         </Badge>
+        {noNsFlag && <div className="mt-0.5"><Badge variant="outline" className="bg-red-50 text-red-600 border-red-200 font-bold text-[10px] px-1.5 py-0 whitespace-nowrap" data-testid="nt-no-ns-flag" title="Dự án của bản ghi không còn nằm trong đăng ký NS của người phụ trách">Không còn đăng ký NS</Badge></div>}
         {suppBadge(item) && (
           <div className="mt-0.5 flex flex-col items-start gap-0.5" data-testid="nt-supp-badge">
             <Badge variant="outline" className="bg-orange-50 text-orange-700 border-orange-300 font-black text-[10px] px-1.5 py-0">{suppBadge(item)}</Badge>

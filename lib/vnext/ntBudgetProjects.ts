@@ -117,6 +117,14 @@ export function projectAllowedForAcceptance(choices: NtProjectChoice[] | null, p
   return !!projectId && choices.some((c) => c.projectId === projectId);
 }
 
+/** Bản ghi NT (không nháp, kỳ ≥ T11, có người phụ trách) mà dự án không còn nằm trong đăng ký NS → cờ «Không còn đăng ký NS». Chỉ hiển thị. */
+export function ntNoNsRegistration(row: { month?: unknown; isDraft?: boolean; implementerUid?: string; implementerManual?: boolean; projectId?: string; teamId?: string; blockId?: string }, choices: NtProjectChoice[] | null, nsReady: boolean): boolean {
+  if (!nsReady || row.isDraft || !ntUsesBudgetProjects(row.month)) return false;
+  if (!row.implementerUid || row.implementerManual) return false;
+  if (choices === null) return false;
+  return !projectAllowedForAcceptance(choices, row.projectId);
+}
+
 /** Bỏ dự án đang chọn nếu không còn trong tập mới. Kỳ cũ không xoá. */
 export function clearStaleProject<T extends { projectId?: string; projectName?: string; projectCode?: string }>(row: T, choices: NtProjectChoice[] | null): T {
   if (choices === null || !row.projectId) return row;

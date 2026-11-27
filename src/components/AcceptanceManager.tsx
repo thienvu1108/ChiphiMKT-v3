@@ -85,7 +85,7 @@ import {
 } from './acceptance/acceptanceUtils';
 import { exportFileName, blockCodeOf, teamCodeOf } from '../../lib/vnext/exportName';
 import { getPeriodOf } from '../../lib/vnext/period';
-import { acceptanceChoicesFor, acceptanceKhoiAssignees, khoiManagerBlockId, ntUsesBudgetProjects, projectAllowedForAcceptance } from '../../lib/vnext/ntBudgetProjects';
+import { acceptanceChoicesFor, acceptanceKhoiAssignees, khoiManagerBlockId, ntUsesBudgetProjects, projectAllowedForAcceptance, ntNoNsRegistration, ntPeriodKey } from '../../lib/vnext/ntBudgetProjects';
 
 import { showNtImageUpload, showNtInvoiceUpload } from '../lib/ntUploadGate';
 export const AcceptanceManager = React.memo(({ 
@@ -295,6 +295,12 @@ export const AcceptanceManager = React.memo(({
     if (!projectAllowedForAcceptance(choices, row?.projectId)) return 'Dự án không nằm trong đăng ký NS của người phụ trách tại Phòng và kỳ này.';
     return '';
   }, [ntCtx, nsReady, nsLines, nsSupport, allUsers]);
+  // Cờ «Không còn đăng ký NS»: chỉ khi đã tải NS đúng kỳ của bản ghi (nsPeriods) — tránh cờ sai ở kỳ chưa tải.
+  const noNsFlagOf = useCallback((row: any) => {
+    const per = ntPeriodKey(row?.ntMonth || row?.month);
+    if (!per || !nsPeriods.includes(per)) return false;
+    return ntNoNsRegistration(row, acceptanceChoicesFor(row, nsLines, nsSupport, allUsers), nsReady);
+  }, [nsReady, nsLines, nsSupport, allUsers, nsPeriods]);
   // Khối chuẩn nếu Người phụ trách là GĐ/TL Khối (đăng ký 'khoi'); '' nếu không phải. Nguồn: dòng NS khoi.
   const khoiBlockIdOf = useCallback((row: any) => khoiManagerBlockId({
     month: row?.month,
@@ -978,7 +984,11 @@ export const AcceptanceManager = React.memo(({
       return;
     }
     if (!id || !updatedState) return;
-    const scopeErr = unregisteredProjectReason(updatedState);
+    // Bản ghi đã có, giữ nguyên dự án / người phụ trách / Phòng / kỳ → không chặn lưu (NS có thể đã bị xoá; chỉ hiện cờ «Không còn đăng ký NS»).
+    const orig = (acceptancesRef.current || acceptances || []).find((r: any) => r.id === id);
+    const keepsScope = !!orig && (orig.projectId || '') === (updatedState.projectId || '') && (orig.implementerUid || '') === (updatedState.implementerUid || '')
+      && (orig.teamId || '') === (updatedState.teamId || '') && normalizeMonth(orig.month) === normalizeMonth(updatedState.month);
+    const scopeErr = keepsScope ? '' : unregisteredProjectReason(updatedState);
     if (scopeErr) { toast.error(scopeErr); return; }
     const comp = getRowComputed(updatedState);
     const tm = (teamLookup.findTeam 
@@ -2290,6 +2300,7 @@ export const AcceptanceManager = React.memo(({
                         teamItems={baseTeamItems}
                         projectItems={baseProjectItems}
                         nsLines={nsLines}
+                        noNsFlag={noNsFlagOf(item)}
                         nsSupport={nsSupport}
                         teamIdSet={teamIdSet}
                         projectIdSet={projectIdSet}
