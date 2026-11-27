@@ -7,7 +7,7 @@ import { matchesMoveNt, moveNtKeys, planMoveNt, planMoveWeek, validateMoveChoice
 import { NsSyncError, versionConflict, type NsAmountEdit, type NsSyncPlan, type syncOptions } from '../../lib/vnext/nsSync.js';
 import { buildHist, diffLine, HISTORY_COLLECTION, SUPPORT_COLLECTION } from '../../lib/vnext/support.js';
 import { WEEKLY_COLLECTION, weeklyId, type WeeklyItem } from '../../lib/vnext/weekly.js';
-import { normalizeLegacyFieldValues } from '../../src/lib/legacyFieldValues.js';
+import { normalizeLegacyFieldValues } from '../../lib/legacyFieldValues.js';
 
 type Context = {
   db: Firestore; tx: Transaction; opRef: DocumentReference;
