@@ -7,7 +7,7 @@
  * Từ 10/2026: bỏ nút bổ sung GĐKD/GĐK, NS chỉ ghi nhận từ Đăng ký Ngân sách MKT (kể cả Admin: không tạo/sửa dòng gdkd/gdk; dòng cũ được chuyển thành đăng ký).
  * NS Phòng = Σ user + bổ sung GĐKD; NS Khối = Σ Phòng + bổ sung GĐK. Tự duyệt, không có bước phê duyệt.
  */
-import { normalizeRoleKey, type RoleKey } from '../../src/lib/rolePermissions';
+import { normalizeRoleKey, type RoleKey } from '../roleKey.js';
 
 export const NS_COLLECTION = 'ns_lines';
 

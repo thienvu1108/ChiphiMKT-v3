@@ -3,7 +3,7 @@
  * Logic thuần (không Firebase) — UI và test dùng chung; firestore.rules kiểm tra lại cùng các điều kiện.
  */
 import { isKycComplete } from './kyc';
-import { normalizeRoleKey, type RoleKey } from '../../src/lib/rolePermissions';
+import { normalizeRoleKey, type RoleKey } from '../roleKey.js';
 
 export const ACCESS_REQUESTS = 'accessRequests';
 export const GDKD_MAX_PER_TEAM = 4;

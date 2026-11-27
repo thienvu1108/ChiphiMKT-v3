@@ -5,12 +5,12 @@ import { appendHistory, NS_COLLECTION, type NsLine } from '../../lib/vnext/budge
 import { buildSaWriteAudit } from '../../lib/vnext/nsAdmin.js';
 import { activeLock, normLocks, pastLocked } from '../../lib/vnext/platform.js';
 import { buildHist, diffLine, HISTORY_COLLECTION, SUPPORT_COLLECTION } from '../../lib/vnext/support.js';
-import { normalizeLegacyFieldValues } from '../../src/lib/legacyFieldValues.js';
+import { normalizeLegacyFieldValues } from '../../lib/legacyFieldValues.js';
 import {
   amountEdit, isOperationId, NS_SYNC_IMPACTS, NsSyncError, planNsAmount, replayNsSync,
   requireSuperAdmin, syncOptions, syncRequestKey, versionConflict, type NsSyncPlan,
 } from '../../lib/vnext/nsSync.js';
-import { databaseId } from '../_lib/dbId.js';
+import { databaseId, databaseIdOrNull } from '../_lib/dbId.js';
 import { linkAdminApp } from '../_lib/linkOnLoginExec.js';
 import { moveNsProject, reverseNsProject, type MoveOperation } from '../_lib/nsProjectMove.js';
 
@@ -25,8 +25,12 @@ export default function handler(req: any, res: any) {
 
 export async function handleNsSync(action: string, req: any, res: any) {
   res.setHeader('cache-control', 'no-store');
-  if (req.method !== 'POST') return res.status(405).json({ error: 'Chỉ hỗ trợ POST.' });
-  if (action !== 'preview' && action !== 'commit' && action !== 'reverse') return res.status(404).json({ error: 'Không có action.' });
+  const reply = (status: number, body: object) => {
+    const id = databaseIdOrNull();
+    return res.status(status).json(id ? { ...body, databaseId: id } : body);
+  };
+  if (req.method !== 'POST') return reply(405, { error: 'Chỉ hỗ trợ POST.' });
+  if (action !== 'preview' && action !== 'commit' && action !== 'reverse') return reply(404, { error: 'Không có action.' });
   let db, auth;
   try {
     const id = databaseId();
@@ -35,14 +39,14 @@ export async function handleNsSync(action: string, req: any, res: any) {
     db = getFirestore(app, id);
     auth = getAuth(app);
   } catch {
-    return res.status(503).json({ code: 'unavailable', error: 'Máy chủ chưa cấu hình Firestore Admin.' });
+    return reply(503, { code: 'unavailable', error: 'Máy chủ chưa cấu hình Firestore Admin.' });
   }
 
   const token = /^Bearer (\S+)$/.exec(String(req.headers?.authorization || ''))?.[1];
-  if (!token) return res.status(401).json({ error: 'Thiếu ID token.' });
+  if (!token) return reply(401, { error: 'Thiếu ID token.' });
   let uid: string;
   try { ({ uid } = await auth.verifyIdToken(token, true)); }
-  catch { return res.status(401).json({ error: 'ID token không hợp lệ.' }); }
+  catch { return reply(401, { error: 'ID token không hợp lệ.' }); }
 
   try {
     const body = req.body;
@@ -141,12 +145,12 @@ export async function handleNsSync(action: string, req: any, res: any) {
 
     if (ret.notification) {
       try { await db.collection('teamNotifications').doc(options.operationId).create(ret.notification); }
-      catch { return res.status(200).json({ ...ret.response, notificationFailed: true }); }
+      catch { return reply(200, { ...ret.response, notificationFailed: true }); }
     }
-    return res.status(200).json(ret.response);
+    return reply(200, ret.response);
   } catch (err: unknown) {
-    if (err instanceof NsSyncError) return res.status(err.status).json({ code: err.code, error: err.message });
-    if ((err as { code?: number })?.code === 10) return res.status(409).json({ code: 'transaction_conflict', error: 'Dữ liệu đang được cập nhật. Vui lòng thử lại.' });
-    return res.status(500).json({ code: 'sync_failed', error: 'Không xử lý được yêu cầu đồng bộ NS.' });
+    if (err instanceof NsSyncError) return reply(err.status, { code: err.code, error: err.message });
+    if ((err as { code?: number })?.code === 10) return reply(409, { code: 'transaction_conflict', error: 'Dữ liệu đang được cập nhật. Vui lòng thử lại.' });
+    return reply(500, { code: 'sync_failed', error: 'Không xử lý được yêu cầu đồng bộ NS.' });
   }
 }
