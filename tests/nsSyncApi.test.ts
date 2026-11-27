@@ -79,7 +79,7 @@ describe('API đồng bộ số tiền NS', () => {
 
   it('preview không ghi; commit ghi audit và lịch sử; replay không ghi hoặc gửi lại; reverse có preview riêng', async () => {
     const preview = await call('preview', edit);
-    expect(preview).toMatchObject({ status: 200, data: { locked: true, version: '2:0/' } });
+    expect(preview).toMatchObject({ status: 200, data: { locked: true, version: '2:0/', databaseId: 'chiphi-mkt-staging' } });
     expect(mock.docs.size).toBe(3);
     const body = { ...edit, version: preview.data.version };
     const committed = await call('commit', body);
@@ -134,7 +134,8 @@ describe('API đồng bộ số tiền NS', () => {
     mock.docs.get('users/sa')!.data.role = 'admin';
     expect(await call('preview', edit)).toMatchObject({ status: 403 });
     vi.stubEnv('FIRESTORE_DATABASE_ID', 'wrong-id');
-    expect(await call('preview', edit)).toMatchObject({ status: 503 });
+    expect(await call('preview', edit)).toMatchObject({ status: 503, data: { code: 'unavailable' } });
+    expect((await call('preview', edit)).data.databaseId).toBeUndefined();
     vi.stubEnv('FIRESTORE_DATABASE_ID', 'chiphi-mkt-staging');
     firebase.adminApp.mockReturnValue(null);
     expect(await call('preview', edit)).toMatchObject({ status: 503 });
