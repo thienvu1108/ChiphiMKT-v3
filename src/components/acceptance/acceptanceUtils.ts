@@ -1,19 +1,26 @@
 import { ComputedRowValues, ParsedFormulaResult } from './acceptanceTypes';
 import { normalizeMonth } from '../../../lib/vnext/ntReport';
+import { personAccountIds, ntUsesBudgetProjects } from '../../../lib/vnext/ntBudgetProjects';
 
 /**
  * Người cùng triển khai — đồng bộ với Đăng ký MKT.
  * Tra dòng Đăng ký NS (ns_lines) khớp Người phụ trách (ownerUid) + Dự án + kỳ (period),
- * trả về trường coImplementer đã khai khi đăng ký (có từ kỳ Tháng 12/2026). '' nếu không có.
+ * Ưu tiên NS còn hiệu lực khi xác định được duy nhất một dòng. Bản cũ có thể dùng snapshot đã lưu.
  */
-export const coImplementerOf = (row: any, nsLines: any[] = []): string => {
-  if (!row || row.implementerManual) return '';
+export const coImplementerOf = (row: any, nsLines: any[] = [], users: Parameters<typeof personAccountIds>[0][] = []): string => {
+  if (!row || row.implementerManual || row.ntNoBudget === true) return '';
   const uid = row.implementerUid;
   const pid = row.projectId;
-  const m = normalizeMonth(row.month);
-  if (!uid || !pid || !m) return '';
-  const line = (nsLines || []).find((l: any) => l && !l.deleted && l.ownerUid === uid && l.projectId === pid && normalizeMonth(l.period) === m);
-  return String(line?.coImplementer || '');
+  const m = normalizeMonth(row.supplementFor || row.ntMonth || row.month);
+  const stored = String(row.coImplementer || '');
+  if (!uid || !pid || !ntUsesBudgetProjects(m)) return stored;
+  const user = users.find((u) => personAccountIds(u).includes(uid));
+  const accounts = new Set(personAccountIds(user, uid));
+  const matches = nsLines.filter((l) => l && !l.deleted && accounts.has(l.ownerUid) && l.projectId === pid && l.period === m
+    && (row.nsLineId ? l.id === row.nsLineId : l.kind === 'khoi'
+      ? !row.blockId || l.blockId === row.blockId
+      : (!l.kind || l.kind === 'user') && (!row.teamId || l.teamId === row.teamId)));
+  return matches.length === 1 ? String(matches[0].coImplementer || '') : stored;
 };
 
 // Fast cache for formula parsing strings

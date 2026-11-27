@@ -2,8 +2,8 @@
  * Duyệt NS tầng Ban KD — sau khi GĐK/Trợ lý (hoặc tự duyệt Khối) đã duyệt.
  * banStatus lưu trên nsSupport; thiếu banStatus trước BAN_APPROVAL_CUTOVER_ISO = grandfather «Đã Ban duyệt».
  */
-import type { NsLine } from './budget';
-import { baseStatusForBan, isAutoNow, setWeeklyBanGate, type Support } from './support';
+import type { NsLine } from './budget.js';
+import { baseStatusForBan, isAutoNow, setWeeklyBanGate, type Support } from './support.js';
 
 /**
  * false (3/11/2026): Báo cáo tuần không bắt Ban đã duyệt — Chờ Ban vẫn báo cáo được.

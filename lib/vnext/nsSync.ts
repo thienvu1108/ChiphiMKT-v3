@@ -24,13 +24,26 @@ export type NsAmountEdit = {
   amount: number;
   expectedAmount: number;
   expectedUpdatedAt: string | null;
+  projectId?: string;
+  ntChoices?: Record<string, 'move' | 'keep'>;
 };
+export type NsProjectNt = {
+  id: string; ntNo: string; date: string; project: string; status: string;
+  hasInvoice: boolean; hasImages: boolean; supplement: boolean;
+  key: string; targetKey: string; canMove: boolean; blockReason?: string;
+};
+export type NsProjectWeek = { id: string; dot: number; count: number; conflict: boolean; blockReason?: string };
 export type NsSyncRequest = NsAmountEdit & { operationId: string; reason: string; notify: boolean };
 export type NsSyncPlan = {
   lineId: string;
-  before: { amount: number; projectId: string };
-  after: { amount: number; projectId: string };
+  before: { amount: number; projectId: string; lineId?: string };
+  after: { amount: number; projectId: string; lineId?: string };
   locked: boolean;
+  newLineId?: string;
+  nts?: NsProjectNt[];
+  weekly?: NsProjectWeek[];
+  movedNtCount?: number;
+  keptNtCount?: number;
 };
 export const NS_SYNC_IMPACTS = {
   updated: ['teamBudget', 'blockBudget', 'nsNtReconciliation', 'dashboard', 'weeklyKpi', 'approvedTotals'],
@@ -52,14 +65,40 @@ export function amountEdit(body: Record<string, unknown>): NsAmountEdit {
     || (expectedUpdatedAt !== null && (typeof expectedUpdatedAt !== 'string' || expectedUpdatedAt.length > 100))) {
     throw new NsSyncError(400, 'invalid_edit', 'Dòng, phiên bản hoặc số tiền không hợp lệ. Số tiền phải lớn hơn 0 và nhỏ hơn 100 tỷ.');
   }
-  return { lineId, amount, expectedAmount, expectedUpdatedAt: typeof expectedUpdatedAt === 'string' ? expectedUpdatedAt : null };
+  const { projectId, ntChoices } = body;
+  if (projectId !== undefined && (typeof projectId !== 'string' || !/^[a-zA-Z0-9_-]{1,128}$/.test(projectId))) {
+    throw new NsSyncError(400, 'invalid_project', 'Mã dự án không hợp lệ.');
+  }
+  return { lineId, amount, expectedAmount, expectedUpdatedAt: typeof expectedUpdatedAt === 'string' ? expectedUpdatedAt : null,
+    ...(typeof projectId === 'string' ? { projectId } : {}),
+    ...(ntChoices !== undefined ? { ntChoices: parseNtChoices(ntChoices) } : {}) };
+}
+
+function parseNtChoices(value: unknown): NonNullable<NsAmountEdit['ntChoices']> {
+  const invalid = () => new NsSyncError(400, 'invalid_nt_choices', 'Lựa chọn Nghiệm thu không hợp lệ.');
+  if (!value || typeof value !== 'object') throw invalid();
+  const pairs = Array.isArray(value) ? value.map((item): [unknown, unknown] => {
+    if (!item || typeof item !== 'object' || Array.isArray(item)) throw invalid();
+    const pairs = Object.entries(item);
+    if (pairs.length === 2 && Object.hasOwn(item, 'acceptanceId') && Object.hasOwn(item, 'choice')) {
+      return [item.acceptanceId, item.choice];
+    }
+    if (pairs.length !== 1) throw invalid();
+    return pairs[0];
+  }) : Object.entries(value);
+  const parsed = new Map<string, 'move' | 'keep'>();
+  for (const [id, choice] of pairs) {
+    if (!isId(id) || (choice !== 'move' && choice !== 'keep') || parsed.has(id)) throw invalid();
+    parsed.set(id, choice);
+  }
+  return Object.fromEntries(parsed);
 }
 
 export function planNsAmount(role: unknown, edit: NsAmountEdit, line: NsLine | null, support: unknown, locked: boolean): NsSyncPlan {
   requireSuperAdmin(role);
   if (!line || line.deleted) throw new NsSyncError(404, 'line_not_found', 'Không tìm thấy dòng đăng ký NS còn hiệu lực.');
   if (typeof line.period !== 'string' || !/^\d{4}-(0[1-9]|1[0-2])$/.test(line.period) || line.period < '2026-11') {
-    throw new NsSyncError(422, 'unsupported_period', 'Chỉ hỗ trợ kỳ từ tháng 11/2026.');
+    throw new NsSyncError(edit.projectId && edit.projectId !== line.projectId ? 409 : 422, 'unsupported_period', 'Chỉ hỗ trợ kỳ từ tháng 11/2026.');
   }
   if (line.kind !== 'user' || !isId(line.teamId) || !isId(line.ownerUid)
     || typeof line.projectId !== 'string' || !/^[a-zA-Z0-9_-]{1,128}$/.test(line.projectId)
@@ -71,11 +110,11 @@ export function planNsAmount(role: unknown, edit: NsAmountEdit, line: NsLine | n
   }
   if (isNsLinePaid(line, support)) throw new NsSyncError(409, 'paid_line', 'Dòng NS đã chi tiền.');
   if (line.amount !== edit.expectedAmount || (line.updatedAt ?? null) !== edit.expectedUpdatedAt) throw versionConflict();
-  if (edit.amount === line.amount) throw new NsSyncError(422, 'unchanged_amount', 'Số tiền chưa thay đổi.');
+  if (edit.amount === line.amount && (!edit.projectId || edit.projectId === line.projectId)) throw new NsSyncError(422, 'unchanged_amount', 'Số tiền chưa thay đổi.');
   return {
     lineId: line.id, locked,
     before: { amount: line.amount, projectId: line.projectId },
-    after: { amount: edit.amount, projectId: line.projectId },
+    after: { amount: edit.amount, projectId: edit.projectId ?? line.projectId },
   };
 }
 
@@ -84,6 +123,9 @@ export const versionConflict = () => new NsSyncError(409, 'version_conflict', 'D
 /** Dữ liệu đã chuẩn hoá theo thứ tự cố định trước khi băm trên máy chủ. */
 export function syncRequestKey(actorUid: string, request: NsSyncRequest | ReturnType<typeof syncOptions>, version: string, reverseOf?: string) {
   const edit = 'lineId' in request ? [request.lineId, request.amount, request.expectedAmount, request.expectedUpdatedAt] : [];
+  if ('lineId' in request && (request.projectId !== undefined || request.ntChoices !== undefined)) {
+    edit.push(request.projectId ?? null, JSON.stringify(Object.entries(request.ntChoices ?? {}).sort()));
+  }
   return JSON.stringify([actorUid, request.operationId, request.reason, request.notify, version, reverseOf ?? null, ...edit]);
 }
 

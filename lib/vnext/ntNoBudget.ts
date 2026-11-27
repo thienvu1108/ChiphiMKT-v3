@@ -3,10 +3,10 @@
  * Bỏ kiểm tra «dự án phải nằm trong đăng ký NS của người phụ trách»; người phụ trách chọn từ Phòng/toàn hệ thống
  * hoặc tự nhập; bắt buộc ghi lý do. Duyệt như bản bổ sung thường (Super Admin, cần ảnh + hoá đơn).
  */
-import { normalizeMonth } from './ntReport';
-import { VNEXT_PERIOD_CUTOVER } from './period';
-import { manualKey, isManualImplementer } from './ntManual';
-import { isSupplement, prevMonth } from './ntSupplement';
+import { normalizeMonth } from './ntReport.js';
+import { VNEXT_PERIOD_CUTOVER } from './period.js';
+import { manualKey, isManualImplementer } from './ntManual.js';
+import { isSupplement, prevMonth } from './ntSupplement.js';
 
 export const NT_NOBUDGET_REASON_MIN = 3;
 export const NT_NOBUDGET_REASON_MAX = 500;

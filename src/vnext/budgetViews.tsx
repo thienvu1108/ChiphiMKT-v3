@@ -13,7 +13,7 @@ import { activeLock, lockUntilText } from '../../lib/vnext/platform';
 /** Dòng Đăng ký được chuyển từ NS bổ sung GĐKD/GĐK cũ (script convert-supplements-20261021). */
 const convTag = (l: any) => (Array.isArray(l?.convertedFrom) && l.convertedFrom.length ? <span className="ml-1 rounded bg-[#EEF2FF] px-1 text-[10px] text-[#4F46E5]" title={l.convertedFrom.map((x: any) => x.srcId).join(', ')}>chuyển từ bổ sung {l.convertedFrom.some((x: any) => x.srcKind === 'gdk') ? 'GĐK' : 'GĐKD'}</span> : null);
 import { saveNsLine, deleteNsLine, saRestoreNsLine } from './nsActions';
-import { SaAddModal, SaEditModal, SaDeleteModal } from './NsAdminModals';
+import { SaAddModal, SaEditModal, SaDeleteModal, SaReverseMoveModal } from './NsAdminModals';
 import { canSaManageNs, isSaCreated, amountBeforeDelete } from '../../lib/vnext/nsAdmin';
 import { useSupport, SupportBadge, LineHistoryModal, StatusSplitKpis } from './SupportViews';
 import { effectiveStatus, splitByStatus, payOf } from '../../lib/vnext/support';
@@ -259,6 +259,7 @@ export function TeamBudget({ c, teamId, period, lines, readOnly }: { c: VCtx; te
   const [saAdd, setSaAdd] = useState(false);
   const [saEdit, setSaEdit] = useState<NsLine | null>(null);
   const [saDel, setSaDel] = useState<NsLine | null>(null);
+  const [saReverse, setSaReverse] = useState<NsLine | null>(null);
   const [showDeleted, setShowDeleted] = useState(false);
   const teamLines = lines.filter((l) => l.period === period && l.teamId === teamId);
   const deletedUser = isSa && showDeleted ? teamLines.filter((l) => l.kind === 'user' && l.deleted) : [];
@@ -281,6 +282,7 @@ export function TeamBudget({ c, teamId, period, lines, readOnly }: { c: VCtx; te
     } catch (e: any) { toast('Không lưu được: ' + (e?.code || e?.message), 'err'); }
   };
   const restore = async (l: NsLine) => {
+    if (l.successorOperationId) { setSaReverse(l); return; }
     if (!window.confirm('Khôi phục đăng ký NS này?')) return;
     try {
       const r = await saRestoreNsLine(c, l);
@@ -297,7 +299,7 @@ export function TeamBudget({ c, teamId, period, lines, readOnly }: { c: VCtx; te
   };
 
   const delRow = (l: NsLine) => (
-    <tr key={l.id} className="opacity-50" data-testid="vn-sa-ns-deleted-row"><Td className="pl-8">{l.ownerName || userName(c, l.ownerUid)} <Badge c="mute">Đã xoá (SA)</Badge></Td><PctTd c={c} pid={l.projectId} period={period} /><Td /><Td r className="line-through">{fmt(amountBeforeDelete(l))}</Td><Td /><Td r><Btn small onClick={() => restore(l)} data-testid="vn-sa-ns-restore">Khôi phục</Btn></Td></tr>
+    <tr key={l.id} className="opacity-50" data-testid="vn-sa-ns-deleted-row"><Td className="pl-8">{l.ownerName || userName(c, l.ownerUid)} <Badge c="mute">{l.successorLineId ? 'Đã đổi dự án' : 'Đã xoá (SA)'}</Badge></Td><PctTd c={c} pid={l.projectId} period={period} /><Td /><Td r className="line-through">{fmt(amountBeforeDelete(l))}</Td><Td /><Td r><Btn small onClick={() => restore(l)} data-testid="vn-sa-ns-restore">{l.successorOperationId ? 'Đảo giao dịch' : 'Khôi phục'}</Btn></Td></tr>
   );
 
   return (
@@ -375,7 +377,8 @@ export function TeamBudget({ c, teamId, period, lines, readOnly }: { c: VCtx; te
       </Modal>
       <HistoryModal open={hist} onClose={() => setHist(false)} lines={teamLines} c={c} />
       {isSa && saAdd && <SaAddModal c={c} teamId={teamId} period={period} lines={lines} projectOpts={projectOptions(c)} onClose={() => setSaAdd(false)} toast={toast} />}
-      {isSa && saEdit && <SaEditModal c={c} line={saEdit} lines={lines} status={stOf(saEdit)} paid={isNsLinePaid(lines.find((l) => l.id === saEdit.id) || saEdit, supT[saEdit.id])} projectOpts={projectOptions(c)} onClose={() => setSaEdit(null)} toast={toast} />}
+      {isSa && saEdit && <SaEditModal c={c} line={saEdit} status={stOf(saEdit)} paid={isNsLinePaid(lines.find((l) => l.id === saEdit.id) || saEdit, supT[saEdit.id])} projectOpts={projectOptions(c)} onClose={() => setSaEdit(null)} toast={toast} />}
+      {isSa && saReverse && <SaReverseMoveModal c={c} line={saReverse} onClose={() => setSaReverse(null)} toast={toast} />}
       {isSa && saDel && <SaDeleteModal c={c} line={saDel} support={supT[saDel.id]} status={stOf(saDel)} onClose={() => setSaDel(null)} toast={toast} />}
       {node}
     </div>

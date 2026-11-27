@@ -2,7 +2,7 @@
  * Báo cáo tuần v-next + liên kết Ngân sách.
  * Doc weekly_reports/{period}_{dot}_{uid}. Chi phí nhập là LUỸ KẾ cả kỳ.
  */
-import './banSupport'; // WEEKLY_REQUIRES_BAN_APPROVAL gate
+import './banSupport.js'; // WEEKLY_REQUIRES_BAN_APPROVAL gate
 
 export const WEEKLY_COLLECTION = 'weekly_reports';
 

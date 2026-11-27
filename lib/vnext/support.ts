@@ -24,6 +24,10 @@ export type Support = {
   /** Tầng Ban KD — sau GĐK duyệt. Thiếu + trước cutover = grandfather (xem banSupport.ts). */
   banStatus?: 'pending' | 'approved' | 'rejected';
   banReason?: string; banDecidedBy?: string; banDecidedByName?: string; banDecidedAt?: string; banDecidedRole?: string;
+  currentAmount?: number;
+  currentDeleted?: boolean;
+  currentProjectId?: string;
+  currentRevision?: string;
 };
 
 export const statusOf = (s?: Partial<Support> | null): StoredStatus => (s?.status === 'approved' || s?.status === 'rejected' ? s.status : 'pending');
@@ -45,7 +49,7 @@ export function setKhoiManagers(blocks: { id: string; directorUid?: string; assi
 }
 /** Người đăng ký là GĐ Khối / Trợ lý của chính Khối ghi trên dòng (kể cả khi kiêm GĐKD và đăng ký như user của Phòng). */
 export const ownerIsKhoiManager = (l: Pick<NsLine, 'blockId' | 'ownerUid'>) => !!l.blockId && !!l.ownerUid && !!khoiMgrIdx.get(l.blockId)?.has(l.ownerUid);
-export const isAutoApproved = (l: NsLine) => l.kind === 'khoi' || (l.kind === 'user' && ownerIsKhoiManager(l));
+export const isAutoApproved = (l: NsLine) => l.kind === 'khoi' || (l.kind === 'user' && !l.predecessorLineId && ownerIsKhoiManager(l));
 /** NS Khối chưa có quyết định tay (nsSupport) → đang ở trạng thái tự duyệt. Có quyết định (Từ chối / Đặt lại / Duyệt) → theo quyết định. */
 export const isAutoNow = (l: NsLine, s?: Partial<Support> | null) => isAutoApproved(l) && !s;
 export const AUTO_APPROVED_NOTE = 'Tự động duyệt (GĐK/Trợ lý đăng ký)';

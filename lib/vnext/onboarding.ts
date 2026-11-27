@@ -2,7 +2,7 @@
  * v-next: Đăng ký tài khoản lần đầu, duyệt chức vụ/Phòng, xin chuyển Phòng/Khối.
  * Logic thuần (không Firebase) — UI và test dùng chung; firestore.rules kiểm tra lại cùng các điều kiện.
  */
-import { isKycComplete } from './kyc';
+import { isKycComplete } from './kyc.js';
 import { normalizeRoleKey, type RoleKey } from '../roleKey.js';
 
 export const ACCESS_REQUESTS = 'accessRequests';

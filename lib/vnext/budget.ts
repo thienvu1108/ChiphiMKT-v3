@@ -49,6 +49,9 @@ export type NsLine = {
   coImplementer?: string;
   /** Dòng do Super Admin tạo thay user (MC-6). */
   createdByRole?: string;
+  predecessorLineId?: string;
+  successorLineId?: string;
+  successorOperationId?: string;
   /** Cờ chi tiền theo dòng (chưa có trong hệ thống; helper isNsLinePaid đọc nếu có). */
   paid?: boolean;
   paidAt?: string;

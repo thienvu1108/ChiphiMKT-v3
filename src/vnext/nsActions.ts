@@ -7,12 +7,19 @@ import { WEEKLY_COLLECTION, weeklyId, stripItemsForProject } from '../../lib/vne
 import { type VCtx, notifyUser, projectName, isAdm } from './ctx';
 import { periodLabel } from '../../lib/vnext/period';
 import { personAccountIds, ntPeriodKey } from '../../lib/vnext/ntBudgetProjects';
-import { buildDeleteAudit, buildSaWriteAudit, buildRestoreAudit, stripUndefined, weeklyRemoval, mergeWeeklyItems, amountBeforeDelete, latestSoftDeleteAudit, planProjectChange, type WeeklySnapItem, type NsImpact } from '../../lib/vnext/nsAdmin';
+import { buildDeleteAudit, buildSaWriteAudit, buildRestoreAudit, stripUndefined, weeklyRemoval, mergeWeeklyItems, amountBeforeDelete, latestSoftDeleteAudit, type WeeklySnapItem, type NsImpact } from '../../lib/vnext/nsAdmin';
 import type { NsSyncPlan, NsSyncRequest } from '../../lib/vnext/nsSync';
 import { auth } from '../firebase';
 
 type NsSyncResponse = NsSyncPlan & { version: string; replayed?: boolean; notificationFailed?: boolean };
-export async function syncNsAmount(action: 'preview' | 'commit', request: NsSyncRequest & { version?: string }): Promise<NsSyncResponse> {
+type ReverseRequest = Pick<NsSyncRequest, 'operationId' | 'reason' | 'notify'> & { reverseOf: string; dryRun: boolean; version?: string };
+export function syncNsAmount(action: 'preview' | 'commit', request: NsSyncRequest & { version?: string }) {
+  return requestNsSync(action, request);
+}
+export function reverseNsSync(request: ReverseRequest) {
+  return requestNsSync('reverse', request);
+}
+async function requestNsSync(action: 'preview' | 'commit' | 'reverse', request: (NsSyncRequest & { version?: string }) | ReverseRequest): Promise<NsSyncResponse> {
   const token = await auth.currentUser?.getIdToken();
   if (!token) throw new Error('Cần đăng nhập lại.');
   const response = await fetch(`/api/ns-sync/${action}`, {
@@ -32,6 +39,7 @@ export async function saveNsLine(c: VCtx, opts: {
   payAccount?: { id: string; bankName: string; tail: string } | null;
   coImplementer?: string; createdByRole?: string;
 }) {
+  if (opts.existing?.successorLineId) throw new Error('Dòng đã chuyển dự án. Hãy đảo giao dịch để khôi phục.');
   { const lk = lockBlock(c.role, opts.existing && !opts.existing.deleted ? 'nsEdit' : 'nsCreate', opts.period); if (lk) throw new Error(lk); }
   const scope = opts.kind === 'gdk' || opts.kind === 'khoi' ? opts.blockId! : opts.teamId!;
   const id = opts.existing?.id || nsLineId(opts.kind, opts.period, scope, opts.projectId, opts.owner?.uid);
@@ -178,26 +186,10 @@ export async function saCreateNsLine(c: VCtx, o: { period: string; teamId: strin
   return id;
 }
 
-/** Sửa bởi SA. Đổi dự án = tạo dòng mới (id mới) + xoá mềm dòng cũ. existingNew = dòng cùng id mới (đã xoá) nếu có. */
-export async function saUpdateNsLine(c: VCtx, o: { line: NsLine; amount: number; projectId: string; reason: string; notify: boolean; existingNew?: NsLine | null; supportStatus?: string }) {
-  assertSa(c);
-  const { line } = o;
-  const plan = planProjectChange(line, o.projectId);
-  const before = { amount: Number(line.amount || 0), projectId: line.projectId };
-  if (!plan.changed) throw new Error('Dùng xác nhận đồng bộ để sửa số tiền.');
-  const newId = await saveNsLine(c, { kind: 'user', period: line.period, teamId: line.teamId, blockId: line.blockId, projectId: o.projectId, owner: { uid: line.ownerUid || '', name: line.ownerName, email: line.ownerEmail }, existing: o.existingNew || null, amount: o.amount, reason: `${o.reason} (chuyển từ dự án ${projectName(c, line.projectId)})` });
-  const { docs } = await previewWeeklyForNsLine(c, line);
-  const why = `Chuyển sang dự án ${projectName(c, o.projectId)}: ${o.reason}`;
-  await saDeleteNsLine(c, line, false, why, { ntCount: null, supportStatus: o.supportStatus || '' }, docs);
-  try { await writeAudit(c, buildSaWriteAudit({ create: false, lineId: newId, reason: o.reason, actor: actorOf(c), before, after: { amount: o.amount, projectId: o.projectId }, extra: { movedFrom: line.id } })); }
-  catch (e: any) { console.warn('[saUpdate audit]', e?.code || e?.message); }
-  if (o.notify && line.ownerEmail && line.ownerUid !== c.uid) await notifyUser(c, { email: line.ownerEmail, uid: line.ownerUid }, 'Super Admin đã điều chỉnh Ngân sách MKT của bạn', `${c.name} sửa NS ${periodLabel(line.period)}: ${projectName(c, line.projectId)} ${before.amount.toLocaleString('vi-VN')} đ → ${projectName(c, o.projectId)} ${o.amount.toLocaleString('vi-VN')} đ. Lý do: ${o.reason}`, { projectId: o.projectId, teamId: line.teamId, period: line.period, lineId: newId });
-  return newId;
-}
-
 /** Khôi phục dòng xoá mềm + best-effort khôi phục Báo cáo tuần. weekly: true = đã khôi phục, false = lỗi, null = không có gì để khôi phục. */
 export async function saRestoreNsLine(c: VCtx, line: NsLine): Promise<{ amount: number; weekly: boolean | null }> {
   assertSa(c);
+  if (line.successorLineId) throw new Error('Dòng đã chuyển dự án. Hãy đảo giao dịch để khôi phục.');
   const amount = amountBeforeDelete(line);
   const now = new Date().toISOString();
   const { id, ...rest } = line as any;
