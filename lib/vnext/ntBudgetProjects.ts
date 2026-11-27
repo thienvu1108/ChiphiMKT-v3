@@ -8,6 +8,7 @@ import { normalizeMonth } from './ntReport';
 import type { NsLine } from './budget';
 import { isNsReportableLine, type Support } from './support';
 import './banSupport';
+import { rowNoBudget } from './ntNoBudget';
 
 export const NT_BUDGET_PROJECTS_FROM = VNEXT_PERIOD_CUTOVER;
 
@@ -98,7 +99,9 @@ export function acceptanceBudgetProjects(args: {
   return [...byProject.values()].sort((a, b) => a.projectId.localeCompare(b.projectId));
 }
 
-export function acceptanceChoicesFor(row: { month?: unknown; teamId?: string; blockId?: string; implementerUid?: string; implementerManual?: boolean }, lines: NtBudgetLine[] | null | undefined, support: Record<string, Partial<Support> | undefined> | undefined, users: { uid?: string; id?: string; migratedFromUid?: string; aliasUids?: string[] }[] = []) {
+export function acceptanceChoicesFor(row: { month?: unknown; teamId?: string; blockId?: string; implementerUid?: string; implementerManual?: boolean; ntNoBudget?: boolean; supplement?: unknown; supplementFor?: string }, lines: NtBudgetLine[] | null | undefined, support: Record<string, Partial<Support> | undefined> | undefined, users: { uid?: string; id?: string; migratedFromUid?: string; aliasUids?: string[] }[] = []) {
+  // Nghiệm thu bổ sung «Không có đăng ký NS»: không lọc dự án theo đăng ký (null = giữ danh mục đầy đủ).
+  if (rowNoBudget(row)) return null;
   const personUid = row.implementerManual ? '' : String(row.implementerUid || '');
   const user = users.find((u) => (u.uid || u.id) === personUid);
   return acceptanceBudgetProjects({

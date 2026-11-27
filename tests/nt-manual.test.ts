@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { ntManualAllowed, cleanManualName, validateManualName, isManualImplementer, implementerLabel, manualAttributionPatch } from '../lib/vnext/ntManual';
+import { ntManualAllowed, cleanManualName, validateManualName, isManualImplementer, implementerLabel, manualAttributionPatch, hasImplementer, implementerKey } from '../lib/vnext/ntManual';
 import { buildReconcile } from '../lib/vnext/ntReport';
 import { extractImageFiles, pastedName, readClipboardImages, pasteSummary, clipboardReadSupported, PASTE_MAX_BYTES } from '../lib/vnext/pasteImages';
 
@@ -10,6 +10,15 @@ describe('ntManual', () => {
     expect(ntManualAllowed('11.2026')).toBe(false);
     expect(ntManualAllowed('09.2026')).toBe(false);
     expect(ntManualAllowed('')).toBe(false);
+  });
+  it('hasImplementer / implementerKey cover uid and manual', () => {
+    expect(hasImplementer({})).toBe(false);
+    expect(hasImplementer({ implementerUid: 'u1' })).toBe(true);
+    expect(hasImplementer({ implementerManual: true, implementerName: 'An' })).toBe(true);
+    expect(hasImplementer({ implementerManual: true, implementerName: '' })).toBe(false);
+    expect(implementerKey({ implementerUid: 'u1' })).toBe('u1');
+    expect(implementerKey({ implementerManual: true, implementerName: 'An' })).toBe('manual:an');
+    expect(implementerKey({})).toBe('');
   });
   it('clean/validate name', () => {
     expect(cleanManualName('  Nguyễn\tVăn   A \n')).toBe('Nguyễn Văn A');
