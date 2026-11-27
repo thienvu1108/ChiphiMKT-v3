@@ -4,7 +4,11 @@ import { describe, expect, it } from 'vitest';
 
 const root = join(__dirname, '..');
 const entry = join(root, 'api/ns-sync/[action].ts');
-const IMPORT_RE = /from\s+['"]([^'"]+)['"]/g;
+const SPEC_RE = /(?:from\s+['"]([^'"]+)['"]|import\s+['"]([^'"]+)['"])/g;
+
+function specs(text: string): string[] {
+  return [...text.matchAll(SPEC_RE)].map((m) => m[1] || m[2]);
+}
 
 function resolveImport(fromFile: string, spec: string): string | null {
   if (!spec.startsWith('.')) return null;
@@ -23,6 +27,7 @@ function collect(start: string) {
   const files: string[] = [];
   const missing: string[] = [];
   const srcImports: { file: string; spec: string }[] = [];
+  const extless: { file: string; spec: string }[] = [];
   const queue = [start];
   const seen = new Set<string>();
   while (queue.length) {
@@ -35,10 +40,13 @@ function collect(start: string) {
     }
     files.push(file);
     const text = readFileSync(file, 'utf8');
-    for (const match of text.matchAll(IMPORT_RE)) {
-      const spec = match[1];
+    for (const spec of specs(text)) {
+      const rel = file.slice(root.length + 1).replaceAll('\\', '/');
       if (spec.includes('/src/') || spec.includes('\\src\\') || /(^|\/)src\//.test(spec)) {
-        srcImports.push({ file: file.slice(root.length + 1).replaceAll('\\', '/'), spec });
+        srcImports.push({ file: rel, spec });
+      }
+      if (spec.startsWith('.') && !/\.(?:js|ts|tsx|json|mjs|cjs)$/.test(spec)) {
+        extless.push({ file: rel, spec });
       }
       const resolved = resolveImport(file, spec);
       if (!resolved) continue;
@@ -46,14 +54,15 @@ function collect(start: string) {
       queue.push(resolved);
     }
   }
-  return { files, missing, srcImports };
+  return { files, missing, srcImports, extless };
 }
 
 describe('ns-sync API module graph', () => {
-  it('does not import from src/ (Vercel serverless cannot bundle those paths)', () => {
-    const { files, missing, srcImports } = collect(entry);
+  it('does not import from src/ and uses explicit .js extensions (Vercel ESM)', () => {
+    const { files, missing, srcImports, extless } = collect(entry);
     expect(missing, `unresolved local imports:\n${missing.join('\n')}`).toEqual([]);
     expect(files.length).toBeGreaterThan(5);
     expect(srcImports, `src imports in API graph:\n${srcImports.map((x) => `${x.file} -> ${x.spec}`).join('\n')}`).toEqual([]);
+    expect(extless, `extensionless relative imports:\n${extless.map((x) => `${x.file} -> ${x.spec}`).join('\n')}`).toEqual([]);
   });
 });

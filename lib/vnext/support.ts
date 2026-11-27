@@ -3,7 +3,7 @@
  * nsSupport/{lineId} (cùng id với ns_lines). Không có doc = «Chưa được duyệt».
  * Người duyệt: GĐ Khối / Trợ lý Khối của Khối ghi trên dòng NS (blockId), Admin.
  */
-import type { NsLine } from './budget';
+import type { NsLine } from './budget.js';
 
 export const SUPPORT_COLLECTION = 'nsSupport';
 /** 'reapproval' = «Cần duyệt lại»: suy ra trong code (đã duyệt rồi người đăng ký sửa), KHÔNG ghi vào nsSupport. */
