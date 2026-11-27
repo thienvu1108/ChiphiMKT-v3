@@ -87,7 +87,7 @@ export function FilterSheet({ label = 'Bộ lọc', children, activeCount = 0 }:
         <>
           <div className="fixed inset-0 z-[1190] bg-black/40" onClick={() => setOpen(false)} />
           <div role="dialog" aria-modal="true" aria-label={label} data-testid="vn-filter-sheet"
-            className="fixed inset-x-0 bottom-0 z-[1200] max-h-[min(75dvh,100%)] overflow-y-auto overscroll-contain rounded-t-2xl bg-[var(--mh-surface,#fff)] p-4 pb-[max(1rem,env(safe-area-inset-bottom))] shadow-2xl">
+            className="mh-landscape-sheet fixed inset-x-0 bottom-0 z-[1200] max-h-[min(75dvh,100%)] overflow-y-auto overscroll-contain rounded-t-2xl bg-[var(--mh-surface,#fff)] p-4 pb-[max(1rem,env(safe-area-inset-bottom))] shadow-2xl">
             <div className="mx-auto mb-3 h-1 w-10 rounded-full bg-[var(--mh-border-strong,#C9D4E5)]" />
             <div className="mb-3 flex items-center justify-between gap-2">
               <div className="text-[15px] font-bold">{label}</div>
@@ -106,7 +106,7 @@ export function FilterSheet({ label = 'Bộ lọc', children, activeCount = 0 }:
 /** Sticky bottom CTA bar for forms on mobile (above bottom nav). */
 export function StickyFormBar({ children }: { children: React.ReactNode }) {
   return (
-    <div className="md:static sticky bottom-[calc(64px+env(safe-area-inset-bottom))] z-20 -mx-1 mt-3 border-t border-[var(--mh-border,var(--mh-border))] bg-[var(--mh-surface,#fff)]/95 px-2 py-2 backdrop-blur md:border-0 md:bg-transparent md:p-0 md:backdrop-blur-none">
+    <div className="md:static sticky bottom-[var(--bottom-nav-offset)] z-20 -mx-1 mt-3 border-t border-[var(--mh-border,var(--mh-border))] bg-[var(--mh-surface,#fff)]/95 px-2 py-2 backdrop-blur md:border-0 md:bg-transparent md:p-0 md:backdrop-blur-none">
       <div className="flex flex-col gap-2 md:flex-row md:flex-wrap md:items-center">{children}</div>
     </div>
   );
@@ -154,7 +154,7 @@ export function SearchSelect({ value, onChange, options, className = '', disable
     else if (e.key === 'Escape') setOpen(false);
   };
   const panel = (
-    <div data-vn-ss-sheet className={mobile ? 'fixed inset-x-0 bottom-0 z-[1200] bg-[var(--mh-surface)] rounded-t-2xl shadow-2xl p-3 pb-[max(1.5rem,env(safe-area-inset-bottom))] max-h-[min(75dvh,100%)] flex flex-col' : 'absolute left-0 top-full mt-1 z-[1150] w-full min-w-[240px] bg-[var(--mh-surface)] border border-[var(--mh-border)] rounded-lg shadow-xl p-2 flex flex-col max-h-80'} role="dialog" aria-label="Chọn">
+    <div data-vn-ss-sheet className={mobile ? 'mh-landscape-sheet fixed inset-x-0 bottom-0 z-[1200] bg-[var(--mh-surface)] rounded-t-2xl shadow-2xl p-3 pb-[max(1.5rem,env(safe-area-inset-bottom))] max-h-[min(75dvh,100%)] flex flex-col' : 'absolute left-0 top-full mt-1 z-[1150] w-full min-w-[240px] bg-[var(--mh-surface)] border border-[var(--mh-border)] rounded-lg shadow-xl p-2 flex flex-col max-h-80'} role="dialog" aria-label="Chọn">
       {mobile && <div className="flex items-center justify-between mb-2"><span className="text-[14px] font-semibold">{rest['aria-label'] || 'Chọn'}</span><button type="button" className="text-[13px] text-[var(--mh-navy)] px-2 py-1" onClick={() => setOpen(false)}>Đóng</button></div>}
       <input ref={inp} data-testid="vn-ss-search" value={q} onChange={(e) => { setQ(e.target.value); setHi(0); }} onKeyDown={onKey} placeholder={searchPlaceholder} className={`${mobile ? 'h-11 text-[15px]' : 'h-9 text-[13px]'} px-2.5 rounded-lg border border-[var(--mh-border)] w-full focus:outline-none focus:ring-2 focus:ring-[var(--mh-navy)]/30`} />
       <ul role="listbox" className="mt-1 overflow-y-auto flex-1">
@@ -192,7 +192,7 @@ export function Shell({ title, sub, actions, children, banner }: any) {
   return (
     <div className="space-y-4 font-['Be_Vietnam_Pro',sans-serif] text-[var(--mh-text)]">
       {banner}
-      <div className="flex flex-col md:flex-row md:items-end gap-3">
+      <div className="mh-vn-page-header flex flex-col md:flex-row md:items-end gap-3">
         <div className="flex-1 min-w-0">
           <h1 className="text-xl md:text-2xl font-bold">{title}</h1>
           {sub && <div className="text-[13px] text-[var(--mh-text-2)] mt-0.5">{sub}</div>}
@@ -254,7 +254,7 @@ export function Modal({ open, onClose, title, children, footer, wide }: any) {
   // Mobile: portal + bottom sheet (100vw, ≤ 92dvh), internal scroll, sticky footer with safe-area — above bottom-nav.
   return (
     <Overlay
-      className="bg-black/40 flex items-end md:items-center justify-center p-0 md:p-6 overflow-hidden"
+      className="mh-landscape-overlay bg-black/40 flex items-end md:items-center justify-center p-0 md:p-6 overflow-hidden"
       onBackdrop={onClose}
       testId="vn-modal-backdrop"
       zClass="z-[1200]"
@@ -267,14 +267,14 @@ export function Modal({ open, onClose, title, children, footer, wide }: any) {
         aria-label={title}
         data-testid="vn-modal"
       >
-        <div className="h-14 shrink-0 px-5 flex items-center border-b border-[var(--mh-border)]">
+        <div className="mh-modal-header h-14 shrink-0 px-5 flex items-center border-b border-[var(--mh-border)]">
           <div className="flex-1 min-w-0 truncate font-semibold">{title}</div>
           <button type="button" onClick={onClose} className="text-[var(--mh-text-2)] text-xl shrink-0" aria-label="Đóng">×</button>
         </div>
-        <div className="p-5 overflow-y-auto overflow-x-auto flex-1 min-h-0 overscroll-contain">{children}</div>
+        <div className="mh-modal-body p-5 overflow-y-auto overflow-x-auto flex-1 min-h-0 overscroll-contain">{children}</div>
         {footer && (
           <div
-            className="shrink-0 bg-[var(--mh-surface)] rounded-b-none md:rounded-b-2xl px-5 pt-3 pb-[max(0.75rem,env(safe-area-inset-bottom))] border-t border-[var(--mh-border)] flex flex-wrap justify-end gap-2"
+            className="mh-modal-footer shrink-0 bg-[var(--mh-surface)] rounded-b-none md:rounded-b-2xl px-5 pt-3 pb-[max(0.75rem,env(safe-area-inset-bottom))] border-t border-[var(--mh-border)] flex flex-wrap justify-end gap-2"
             data-testid="vn-modal-footer"
           >
             {footer}

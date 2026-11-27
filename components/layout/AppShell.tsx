@@ -304,7 +304,7 @@ export function AppShell({
       {/* Main column */}
       <div
         className={cn(
-          'min-h-screen min-w-0 flex flex-col transition-[margin] duration-200',
+          'mh-shell-body min-h-screen min-w-0 flex flex-col transition-[margin] duration-200',
           collapsed ? 'lg:ml-[72px]' : 'lg:ml-[248px]',
         )}
       >
@@ -390,7 +390,7 @@ export function AppShell({
         </header>
 
         {/* Mobile top bar */}
-        <header className="mh-mtop lg:hidden sticky top-0 z-30 flex items-center gap-2.5 h-[52px] px-3.5 bg-[var(--mh-surface)] border-b border-[var(--mh-border)]">
+        <header className="mh-mtop lg:hidden sticky top-0 z-30 flex items-center gap-2.5 h-[var(--header-height-mobile)] px-3.5 bg-[var(--mh-surface)] border-b border-[var(--mh-border)]">
           <div className="w-[30px] h-[30px] rounded-lg bg-[var(--mh-navy)] grid place-items-center shrink-0">
             <svg viewBox="0 0 24 24" width="18" height="18">
               <path
@@ -431,14 +431,14 @@ export function AppShell({
 
         {/* Fill the full content width next to the sidebar (no max-width cap: a left-aligned
             1440px cap used to leave an empty gray column on wide/zoomed-out windows). */}
-        <main className="mh-content flex-1 w-full min-w-0 px-3.5 py-3.5 md:px-6 md:py-6 pb-24 lg:pb-6">
+        <main className="mh-content flex-1 w-full min-w-0 px-3.5 py-3.5 md:px-6 md:py-6 pb-[calc(var(--bottom-nav-height)+32px)] lg:pb-6">
           {children}
         </main>
       </div>
 
       {/* Mobile bottom nav */}
       <nav
-        className="mh-bnav lg:hidden fixed left-0 right-0 bottom-0 z-40 grid min-h-16 h-[calc(64px+env(safe-area-inset-bottom))] bg-[var(--mh-surface,#fff)] border-t border-[var(--mh-border,var(--mh-border))] pb-[env(safe-area-inset-bottom)]"
+        className="mh-bnav lg:hidden fixed left-0 right-0 bottom-0 z-40 grid min-h-[var(--bottom-nav-height)] h-[var(--bottom-nav-offset)] bg-[var(--mh-surface,#fff)] border-t border-[var(--mh-border,var(--mh-border))] pb-[env(safe-area-inset-bottom)]"
         style={{ gridTemplateColumns: `repeat(${bottomCols}, minmax(0, 1fr))` }}
       >
         {bottomPrimary.slice(0, 4).map((item) => {
@@ -458,7 +458,7 @@ export function AppShell({
                 <span className="absolute top-0 w-7 h-[3px] rounded-b bg-[var(--mh-navy)]" />
               )}
               <Icon className="w-[22px] h-[22px]" />
-              <span>{item.label}</span>
+              <span className="mh-bnav-label">{item.label}</span>
               {item.badge !== undefined && item.badge > 0 && (
                 <span className="absolute top-2 left-[52%] text-[9.5px] bg-[var(--mh-accent)] text-white rounded-full px-1 leading-tight">
                   {item.badge}
@@ -476,7 +476,7 @@ export function AppShell({
           )}
         >
           <Menu className="w-[22px] h-[22px]" />
-          <span>Thêm</span>
+          <span className="mh-bnav-label">Thêm</span>
         </button>
       </nav>
 
@@ -484,7 +484,7 @@ export function AppShell({
       {moreOpen && (
         <div className="lg:hidden fixed inset-0 z-50 flex">
           <div className="absolute inset-0 bg-[var(--mh-text)]/50" onClick={() => setMoreOpen(false)} />
-          <div className="relative mt-auto w-full max-h-[min(75dvh,80vh)] bg-[var(--mh-surface,#fff)] rounded-t-2xl shadow-2xl animate-in slide-in-from-bottom duration-200 overflow-hidden flex flex-col overscroll-contain pb-[env(safe-area-inset-bottom)]">
+          <div className="mh-landscape-sheet relative mt-auto w-full max-h-[min(75dvh,80vh)] bg-[var(--mh-surface,#fff)] rounded-t-2xl shadow-2xl animate-in slide-in-from-bottom duration-200 overflow-hidden flex flex-col overscroll-contain pb-[env(safe-area-inset-bottom)]">
             <div className="flex items-center justify-between px-4 py-3 border-b border-[var(--mh-border)]">
               <div className="font-bold text-[15px]">Menu thêm</div>
               <button

@@ -30,7 +30,7 @@ export function SectionTabs({
   const cols = list.length <= 2 ? 2 : list.length === 3 ? 3 : list.length === 4 ? 2 : 3;
 
   return (
-    <div data-testid="vn-section-tabs" className={`${sticky ? 'sticky top-0 z-30' : ''} mb-3 ${className}`}>
+    <div data-testid="vn-section-tabs" className={`mh-section-tabs ${sticky ? 'sticky top-0 z-30' : ''} mb-3 ${className}`}>
       <div className="bg-[var(--mh-surface,#fff)]/95 backdrop-blur-md border border-[var(--mh-border,var(--mh-border))] rounded-2xl shadow-[0_4px_16px_-6px_rgba(15,27,45,0.18)]">
         {(title || aside) && (
           <div className="flex items-center justify-between gap-2 px-3 pt-2.5">
