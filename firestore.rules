@@ -1066,8 +1066,21 @@ service cloud.firestore {
       return incoming().get('implementerManual', false) == true
         && incoming().get('implementerUid', '') == ''
         && n is string && n.size() > 0 && n.size() <= 120
-        && incoming().get('ntMonth', '') == '2026-10'
-        && incoming().get('month', '') in ['10.2026', '2026-10'];
+        && ((incoming().get('ntMonth', '') == '2026-10'
+              && incoming().get('month', '') in ['10.2026', '2026-10'])
+            // Nghiệm thu bổ sung «Không có đăng ký NS» (kỳ gốc ≥ 2026-11): ntMonth = month (kỳ nộp), duyệt thì chuyển về kỳ gốc.
+            || (incoming().get('ntNoBudget', false) == true
+                && incoming().get('supplementFor', '') is string
+                && incoming().get('supplementFor', '') >= '2026-11'
+                && incoming().get('ntMonth', '') == incoming().get('month', '')));
+    }
+    // Cờ «Không có đăng ký NS» chỉ dùng cho Nghiệm thu bổ sung và bắt buộc có lý do 3–500 ký tự.
+    function ntNoBudgetOk() {
+      return incoming().get('ntNoBudget', false) != true
+        || (incoming().get('supplementFor', '') != ''
+            && incoming().get('ntNoBudgetReason', '') is string
+            && incoming().get('ntNoBudgetReason', '').size() >= 3
+            && incoming().get('ntNoBudgetReason', '').size() <= 500);
     }
     // Cờ tự nhập chỉ hợp lệ đúng hình dạng; cần quyền khi tạo / đổi tên tự nhập (sửa số liệu khác của bản ghi thì không).
     function ntManualFieldsOk(isUpdate) {
@@ -1120,8 +1133,8 @@ service cloud.firestore {
       // NVKD: chỉ đọc bản ghi mình phụ trách (tab Nghiệm thu MKT trong Quản lý Phòng KD).
       allow read: if (request.auth != null && resource.data.get('implementerUid', '') == request.auth.uid && vnPerm('vn.team_nt.view'))
         || ntReadScopeOk(resource.data);
-      allow create: if (isAdmin() || isMod()) && vnPastOpen('nt', incoming().get('month', '')) && (incoming().get('ntMonth', '') in ['', incoming().get('month', '')] || vnPastOpen('nt', incoming().get('ntMonth', ''))) && vnUnlocked('nt', incoming().get('month', '')) && ntKeyOk(acceptanceId) && ntCreateReqOk() && ntManualFieldsOk(false) && ntSuppCreateOk() && ntAdLinksOk();
-      allow update: if ('supplementFor' in existing() && incoming().get('supplementStatus', '') != existing().get('supplementStatus', '') && ntSuppDecisionOk() && ntSuppProofOk(acceptanceId)) || (isAdmin() || isMod()) && vnPastOpen('nt', existing().get('month', '')) && (existing().get('ntMonth', '') in ['', existing().get('month', '')] || vnPastOpen('nt', existing().get('ntMonth', ''))) && (incoming().get('ntMonth', '') in ['', existing().get('ntMonth', ''), existing().get('month', '')] || vnPastOpen('nt', incoming().get('ntMonth', ''))) && vnUnlocked('nt', existing().get('month', '')) && (incoming().get('month', '') == existing().get('month', '') || (vnUnlocked('nt', incoming().get('month', '')) && vnPastOpen('nt', incoming().get('month', '')))) && ntKeyOk(acceptanceId) && ntUpdateReqOk() && ntManualFieldsOk(true) && ntSuppEditOk() && ntSuppProofOk(acceptanceId) && ntAdLinksOk();
+      allow create: if (isAdmin() || isMod()) && vnPastOpen('nt', incoming().get('month', '')) && (incoming().get('ntMonth', '') in ['', incoming().get('month', '')] || vnPastOpen('nt', incoming().get('ntMonth', ''))) && vnUnlocked('nt', incoming().get('month', '')) && ntKeyOk(acceptanceId) && ntCreateReqOk() && ntManualFieldsOk(false) && ntSuppCreateOk() && ntNoBudgetOk() && ntAdLinksOk();
+      allow update: if ('supplementFor' in existing() && incoming().get('supplementStatus', '') != existing().get('supplementStatus', '') && ntSuppDecisionOk() && ntSuppProofOk(acceptanceId)) || (isAdmin() || isMod()) && vnPastOpen('nt', existing().get('month', '')) && (existing().get('ntMonth', '') in ['', existing().get('month', '')] || vnPastOpen('nt', existing().get('ntMonth', ''))) && (incoming().get('ntMonth', '') in ['', existing().get('ntMonth', ''), existing().get('month', '')] || vnPastOpen('nt', incoming().get('ntMonth', ''))) && vnUnlocked('nt', existing().get('month', '')) && (incoming().get('month', '') == existing().get('month', '') || (vnUnlocked('nt', incoming().get('month', '')) && vnPastOpen('nt', incoming().get('month', '')))) && ntKeyOk(acceptanceId) && ntUpdateReqOk() && ntManualFieldsOk(true) && ntSuppEditOk() && ntNoBudgetOk() && ntSuppProofOk(acceptanceId) && ntAdLinksOk();
       allow delete: if (isAdmin() || isMod()) && vnPastOpen('nt', resource.data.get('month', '')) && vnPastOpen('nt', resource.data.get('ntMonth', '')) && vnUnlocked('nt', resource.data.get('month', ''));
     }
 

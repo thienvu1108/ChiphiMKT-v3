@@ -13,9 +13,19 @@ export const NT_MANUAL_VALUE = '__manual__';
 export const NT_MANUAL_LABEL = '✎ Khác – tự nhập tên…';
 export const NT_MANUAL_MAX = 120;
 
-/** Bản ghi / kỳ có được tự nhập Người phụ trách không (chỉ Tháng 10/2026). */
-export function ntManualAllowed(month: unknown): boolean {
-  return normalizeMonth(month) === NT_MANUAL_MONTH;
+export type NtManualOpts = { supplementFor?: string; noBudget?: boolean };
+/** Nghiệm thu bổ sung «Không có đăng ký NS» cho kỳ gốc ≥ 2026-11 cũng được tự nhập (xem ntManualAllowed). */
+export const NT_MANUAL_NOBUDGET_FROM = '2026-11';
+function noBudgetManualOk(opts?: NtManualOpts): boolean {
+  return !!opts?.noBudget && normalizeMonth(opts?.supplementFor) >= NT_MANUAL_NOBUDGET_FROM && /^\d{4}-\d{2}$/.test(normalizeMonth(opts?.supplementFor));
+}
+
+/**
+ * Bản ghi / kỳ có được tự nhập Người phụ trách không: Tháng 10/2026,
+ * hoặc Nghiệm thu bổ sung «Không có đăng ký NS» cho kỳ gốc ≥ 2026-11.
+ */
+export function ntManualAllowed(month: unknown, opts?: NtManualOpts): boolean {
+  return normalizeMonth(month) === NT_MANUAL_MONTH || noBudgetManualOk(opts);
 }
 
 export function cleanManualName(s: unknown): string {
@@ -41,12 +51,12 @@ export function implementerLabel(r: any, withTag = true): string {
 }
 
 /** Patch ghi vào acceptances/{id} cho tên tự nhập. Ném lỗi nếu tháng không cho phép hoặc tên không hợp lệ. */
-export function manualAttributionPatch(month: unknown, name: unknown, by?: { uid?: string; email?: string }) {
-  if (!ntManualAllowed(month)) throw Object.assign(new Error('Chỉ kỳ Tháng 10/2026 được tự nhập Người phụ trách'), { code: 'month' });
+export function manualAttributionPatch(month: unknown, name: unknown, by?: { uid?: string; email?: string }, opts?: NtManualOpts) {
+  if (!ntManualAllowed(month, opts)) throw Object.assign(new Error('Chỉ kỳ Tháng 10/2026 hoặc Nghiệm thu bổ sung «Không có đăng ký NS» được tự nhập Người phụ trách'), { code: 'month' });
   const err = validateManualName(name);
   if (err) throw Object.assign(new Error(err), { code: 'name' });
   return {
-    implementerUid: '', implementerName: cleanManualName(name), implementerManual: true, ntMonth: NT_MANUAL_MONTH,
+    implementerUid: '', implementerName: cleanManualName(name), implementerManual: true, ntMonth: normalizeMonth(month) === NT_MANUAL_MONTH ? NT_MANUAL_MONTH : normalizeMonth(month),
     ntAssignedAt: new Date().toISOString(), ntAssignedBy: by?.email || by?.uid || '',
   };
 }

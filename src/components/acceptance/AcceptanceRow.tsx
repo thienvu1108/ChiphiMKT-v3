@@ -18,6 +18,7 @@ import { AmountLinesEditor, AmountCellButton } from './AmountLinesEditor';
 import { implementerOptions } from '../../../lib/vnext/onboarding';
 import { AcceptanceSearchableSelect, SearchableItem } from './AcceptanceSearchableSelect';
 import { ManualAssigneeDialog } from './ManualAssigneeDialog';
+import { NoBudgetBadge } from './NoBudgetBadge';
 import { suppBadge, suppStatus, SUPP_STATUS_LABEL } from '../../../lib/vnext/ntSupplement';
 import { NT_MANUAL_LABEL, NT_MANUAL_VALUE, ntManualAllowed, isManualImplementer, implementerLabel } from '../../../lib/vnext/ntManual';
 import { acceptanceAssigneeUids, acceptanceChoicesFor, acceptanceKhoiAssignees, clearStaleProject, filterAssigneeOptions, type NtBudgetLine } from '../../../lib/vnext/ntBudgetProjects';
@@ -694,6 +695,7 @@ export const AcceptanceRow: React.FC<RowProps> = React.memo(({
           <div className="mt-0.5 flex flex-col items-start gap-0.5" data-testid="nt-supp-badge">
             <Badge variant="outline" className="bg-orange-50 text-orange-700 border-orange-300 font-black text-[10px] px-1.5 py-0">{suppBadge(item)}</Badge>
             <span className={`text-[9px] font-bold ${suppStatus(item) === 'approved' ? 'text-emerald-700' : suppStatus(item) === 'rejected' ? 'text-red-600' : 'text-amber-600'}`}>{SUPP_STATUS_LABEL[suppStatus(item) as 'pending']}</span>
+            <NoBudgetBadge rec={item} />
           </div>
         )}
       </TableCell>

@@ -53,6 +53,8 @@ import {
 } from 'firebase/firestore';
 import { toast } from 'sonner';
 import { assignImplementer, assignManualImplementer, ntAttributionOps, ntDuplicateOf, ntManualOps, ntDeleteOps, ntKeyOf, releaseOrphanNtKey } from '../vnext/ntAssign';
+import { NoBudgetBadge } from './acceptance/NoBudgetBadge';
+import { rowNoBudget, rowSupplementFor, noBudgetAvailable, noBudgetPatch, validateNoBudgetReason, noBudgetManualDuplicate, isNoBudgetRecord, noBudgetReasonText, NT_NOBUDGET_BADGE } from '../../lib/vnext/ntNoBudget';
 import { NT_MANUAL_FEATURE, ntManualAllowed, isManualImplementer, implementerLabel, manualAttributionPatch } from '../../lib/vnext/ntManual';
 import { vnCan } from '../vnext/ctx';
 import { ManualAssigneeDialog } from './acceptance/ManualAssigneeDialog';
@@ -290,6 +292,7 @@ export const AcceptanceManager = React.memo(({
   }, [canCreate, canEdit, nsKey]);
   const unregisteredProjectReason = useCallback((row: any) => {
     if (!ntUsesBudgetProjects(row?.month)) return '';
+    if (rowNoBudget(row)) return ''; // Nghiệm thu bổ sung «Không có đăng ký NS»: bỏ kiểm tra đăng ký
     if (!nsReady) return 'Đang tải đăng ký ngân sách của kỳ này.';
     const choices = acceptanceChoicesFor(row, nsLines, nsSupport, allUsers);
     if (!projectAllowedForAcceptance(choices, row?.projectId)) return 'Dự án không nằm trong đăng ký NS của người phụ trách tại Phòng và kỳ này.';
@@ -763,6 +766,12 @@ export const AcceptanceManager = React.memo(({
     }
     const scopeErr = unregisteredProjectReason(draftRow);
     if (scopeErr) { toast.error(scopeErr); return; }
+    const draftNoBudget = rowNoBudget(draftRow);
+    if (draftNoBudget) {
+      const reasonErr = validateNoBudgetReason(draftRow.ntNoBudgetReason);
+      if (reasonErr) { toast.error(reasonErr); return; }
+      if (draftRow.implementerManual && !draftRow.teamId && !draftRow.teamCode && !draftRow.teamName) { toast.error('Chọn Phòng KD trước khi tự nhập Người phụ trách'); return; }
+    }
 
     const comp = getRowComputed(draftRow);
     // Người cùng triển khai — đồng bộ từ Đăng ký MKT theo Người phụ trách + Dự án + kỳ.
@@ -916,9 +925,17 @@ export const AcceptanceManager = React.memo(({
         const at = new Date().toISOString();
         Object.assign(payload, { supplementFor: suppSel, supplementIn: M, supplementStatus: 'pending', supplementHistory: [{ from: '', to: 'pending', by: user?.email || user?.uid || '', at, note: 'Tạo bản bổ sung' }] });
       }
+      // «Không có đăng ký NS»: chỉ khi thật sự lưu thành bản bổ sung kỳ gốc ≥ 2026-11.
+      const saveNoBudget = draftNoBudget && !!payload.supplementFor && noBudgetAvailable(payload.supplementFor);
+      if (saveNoBudget) Object.assign(payload, noBudgetPatch(draftRow.ntNoBudgetReason, { uid: user?.uid, email: user?.email }));
       if (draftRow.implementerManual) {
-        if (!canManualAssignee || !ntManualAllowed(payload.month)) { toast.error('Chỉ kỳ Tháng 10/2026 được tự nhập Người phụ trách'); return; }
-        Object.assign(payload, manualAttributionPatch(payload.month, payload.implementerName, { uid: user?.uid, email: user?.email }));
+        const mOpts = { supplementFor: payload.supplementFor, noBudget: saveNoBudget };
+        if (!canManualAssignee || !ntManualAllowed(payload.month, mOpts)) { toast.error('Chỉ kỳ Tháng 10/2026 hoặc Nghiệm thu bổ sung «Không có đăng ký NS» được tự nhập Người phụ trách'); return; }
+        if (saveNoBudget) {
+          const dupM = noBudgetManualDuplicate(acceptancesRef.current || acceptances, '', { name: payload.implementerName, projectId: payload.projectId, supplementFor: payload.supplementFor });
+          if (dupM) { toast.error('Trùng người phụ trách tự nhập + dự án + kỳ'); return; }
+        }
+        Object.assign(payload, manualAttributionPatch(payload.month, payload.implementerName, { uid: user?.uid, email: user?.email }, mOpts));
       }
       // Không tin prop có thể chưa tải: nếu chưa thấy mốc bắt buộc thì đọc settings/global lúc lưu.
       const ntDec = await resolveNtRequired(ntRequiredFrom, async () => (await getDocFs(doc(db, 'settings', 'global'))).data()?.ntImplementerRequiredFrom ?? null);
@@ -1131,11 +1148,16 @@ export const AcceptanceManager = React.memo(({
       const nextUid = payload.implementerUid || '';
       if (updatedState.implementerManual) {
         // Tên tự nhập (Tháng 10/2026): giải phóng khoá ntKeys cũ nếu bản ghi đang gán uid.
-        if (!ntManualAllowed(payload.month)) { toast.error('Chỉ kỳ Tháng 10/2026 được tự nhập Người phụ trách — chọn từ danh sách'); return; }
+        const mOpts = { supplementFor: oldItem?.supplementFor, noBudget: isNoBudgetRecord(oldItem) };
+        if (!ntManualAllowed(payload.month, mOpts)) { toast.error('Chỉ kỳ Tháng 10/2026 hoặc Nghiệm thu bổ sung «Không có đăng ký NS» được tự nhập Người phụ trách — chọn từ danh sách'); return; }
+        if (mOpts.noBudget) {
+          const dupM = noBudgetManualDuplicate(acceptancesRef.current || acceptances, id, { name: payload.implementerName, projectId: payload.projectId, supplementFor: oldItem?.supplementFor });
+          if (dupM) { toast.error('Trùng người phụ trách tự nhập + dự án + kỳ'); return; }
+        }
         const changed = !isManualImplementer(oldItem) || oldItem?.implementerName !== payload.implementerName || normalizeMonth(oldItem?.month) !== normalizeMonth(payload.month);
         if (changed && !canManualAssignee) { toast.error('Không có quyền tự nhập Người phụ trách'); return; }
         const b = writeBatch(db);
-        const attr = ntManualOps(db, b, oldItem, payload.month, payload.implementerName, { uid: user?.uid, email: user?.email });
+        const attr = ntManualOps(db, b, oldItem, payload.month, payload.implementerName, { uid: user?.uid, email: user?.email }, mOpts);
         if (oldItem?.ntRequired === true) (payload as any).ntRequired = true;
         b.update(doc(db, 'acceptances', id), { ...payload, ...(changed ? attr : { implementerUid: '', implementerManual: true, ntMonth: attr.ntMonth, implementerName: attr.implementerName }) });
         await b.commit();
@@ -1202,10 +1224,10 @@ export const AcceptanceManager = React.memo(({
 
   const handleAssignManual = useLatestCallback(async (item: any, name: string) => {
     if (!canManualAssignee) throw new Error('Không có quyền tự nhập Người phụ trách');
-    if (!ntManualAllowed(item?.month)) throw new Error('Chỉ kỳ Tháng 10/2026 được tự nhập Người phụ trách');
+    if (!ntManualAllowed(item?.month, { supplementFor: item?.supplementFor, noBudget: isNoBudgetRecord(item) })) throw new Error('Chỉ kỳ Tháng 10/2026 hoặc Nghiệm thu bổ sung «Không có đăng ký NS» được tự nhập Người phụ trách');
     if (!item?.teamId && !item?.teamCode) throw new Error('Chọn Phòng KD trước');
     try {
-      await assignManualImplementer(db, item, name, { uid: user?.uid, email: user?.email });
+      await assignManualImplementer(db, item, name, { uid: user?.uid, email: user?.email }, { supplementFor: item?.supplementFor, noBudget: isNoBudgetRecord(item) });
       toast.success(`Đã ghi Người phụ trách (tự nhập): ${name}`);
     } catch (e: any) { console.error(e); throw new Error('Không lưu được: ' + (e?.code || e?.message || e)); }
   });
@@ -1431,6 +1453,8 @@ export const AcceptanceManager = React.memo(({
       return {
         'THÁNG': a.month || '',
         'BỔ SUNG': isSupplement(a) ? `${suppBadge(a)} (${SUPP_STATUS_LABEL[suppStatus(a) as 'pending']})` : '',
+        'NGOÀI ĐK NS': isNoBudgetRecord(a) ? 'Có' : '—',
+        'LÝ DO NGOÀI ĐK NS': noBudgetReasonText(a),
         'KHỐI': blkInfo.blockName || a.blockName || '',
         'MÃ TEAM': a.teamCode || '',
         'GĐKD': a.gdkdName || '',
@@ -1809,6 +1833,7 @@ export const AcceptanceManager = React.memo(({
                         <React.Fragment key={a.id}>
                           <tr className="border-t border-[var(--mh-border)]" data-testid="nt-supp-row">
                             <td className="p-2"><Badge variant="outline" className="bg-orange-50 text-orange-700 border-orange-300 font-black text-[10px]">{suppBadge(a)}</Badge>
+                              <NoBudgetBadge rec={a} />
                               {st === ('approved' as any) && a.supplementIn ? <div className="text-[10px] text-emerald-700">Đã ghi vào kỳ T{+String(a.supplementFor).slice(5)}</div> : null}</td>
                             <td className="p-2 font-bold">{suppIn(a)}</td>
                             <td className="p-2">{a.teamName || a.teamCode}</td>
@@ -2136,6 +2161,7 @@ export const AcceptanceManager = React.memo(({
                           <div className="text-[10.5px] text-[var(--mh-text-3)]">Tháng</div>
                           <div className="font-semibold tabular-nums text-[var(--mh-text)]">{item.month || '—'}</div>
                           {isSupplement(item) && <div className="text-[10px] font-black text-orange-700" data-testid="nt-supp-badge-m">{suppBadge(item)} · {SUPP_STATUS_LABEL[suppStatus(item) as 'pending']}</div>}
+                          <NoBudgetBadge rec={item} />
                         </div>
                         <div>
                           <div className="text-[10.5px] text-[var(--mh-text-3)]">Tổng NT</div>
